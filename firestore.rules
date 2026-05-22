@@ -1,0 +1,156 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function validAiReport() {
+      return request.resource.data.keys().hasOnly([
+          'userId',
+          'feature',
+          'contentId',
+          'contentPreview',
+          'reason',
+          'optionalComment',
+          'createdAt',
+          'status',
+          'platform',
+          'appVersion',
+        ])
+        && request.resource.data.keys().hasAll([
+          'userId',
+          'feature',
+          'contentId',
+          'contentPreview',
+          'reason',
+          'createdAt',
+          'status',
+          'platform',
+        ])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.feature in [
+          'chat',
+          'tarot',
+          'geomancy',
+          'match',
+          'horoscope',
+        ]
+        && request.resource.data.contentId is string
+        && request.resource.data.contentId.size() > 0
+        && request.resource.data.contentId.size() <= 160
+        && request.resource.data.contentPreview is string
+        && request.resource.data.contentPreview.size() > 0
+        && request.resource.data.contentPreview.size() <= 503
+        && request.resource.data.reason in [
+          'Offensive or hateful',
+          'Sexual content',
+          'Harassment or bullying',
+          'Self-harm or dangerous advice',
+          'False or misleading',
+          'Other',
+        ]
+        && request.resource.data.status == 'open'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.platform in [
+          'android',
+          'ios',
+          'macos',
+          'windows',
+          'linux',
+          'fuchsia',
+        ]
+        && (
+          !request.resource.data.keys().hasAny(['optionalComment'])
+          || (
+            request.resource.data.optionalComment is string
+            && request.resource.data.optionalComment.size() <= 300
+          )
+        )
+        && (
+          !request.resource.data.keys().hasAny(['appVersion'])
+          || (
+            request.resource.data.appVersion is string
+            && request.resource.data.appVersion.size() <= 80
+          )
+        );
+    }
+
+    match /users/{userId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/chat/{messageId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/horoscopes/{dateId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/rewards/{rewardId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/follow_up_contexts/{contextId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/tarot_readings/{readingId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/geomancy_readings/{readingId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/partner_matches/{matchId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/partner_match_readings/{readingId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/match_readings/{readingId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/compatibility_readings/{readingId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/usage/{usageId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    match /aiReports/{reportId} {
+      allow create: if signedIn() && validAiReport();
+      allow read, update, delete: if false;
+    }
+
+    match /book_knowledge/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /tarot_knowledge/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /compatibility_knowledge/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

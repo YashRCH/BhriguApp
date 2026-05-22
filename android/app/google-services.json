@@ -1,0 +1,90 @@
+{
+  "project_info": {
+    "project_number": "91676554553",
+    "project_id": "astrology-guru-app",
+    "storage_bucket": "astrology-guru-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:91676554553:android:2b97d0f2f3b8b1cb4024e8",
+        "android_client_info": {
+          "package_name": "com.bhr1gu.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "91676554553-0m97qthua44lcr05n3343ee97e6t35ru.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAgYByGw7likF5AQvJKV4yIjgrU1ffmo8M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "91676554553-0m97qthua44lcr05n3343ee97e6t35ru.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "91676554553-ronjnn2stfgvj657j28aog81h3t0j612.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.astrologyGuruApp"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:91676554553:android:9a6823222bdb2e9f4024e8",
+        "android_client_info": {
+          "package_name": "com.example.astrology_guru_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "91676554553-ffrgh30shjm268sqtm051083vv3piiq0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.astrology_guru_app",
+            "certificate_hash": "a1ccc4af3c793feaf4e32131b91c92063cf93d5b"
+          }
+        },
+        {
+          "client_id": "91676554553-0m97qthua44lcr05n3343ee97e6t35ru.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAgYByGw7likF5AQvJKV4yIjgrU1ffmo8M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "91676554553-0m97qthua44lcr05n3343ee97e6t35ru.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "91676554553-ronjnn2stfgvj657j28aog81h3t0j612.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.astrologyGuruApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
