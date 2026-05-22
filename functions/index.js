@@ -19,11 +19,15 @@ const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 const GEMINI_FLASH_LITE_MODEL = "gemini-2.5-flash-lite";
 const GROQ_PARTNER_MATCH_MODEL = "llama-3.3-70b-versatile";
 const GROQ_BHRIGU_CHAT_MODEL = "llama-3.1-8b-instant";
-const TAROT_READING_CONTENT_VERSION = "tarot_gemini25_lite_v2";
-const GEOMANCY_READING_CONTENT_VERSION = "geomancy_gemini25_lite_v2";
-const TAROT_MAX_OUTPUT_TOKENS = 850;
-const GEOMANCY_MAX_OUTPUT_TOKENS = 800;
+const TAROT_READING_CONTENT_VERSION = "tarot_gemini25_lite_v3";
+const GEOMANCY_READING_CONTENT_VERSION = "geomancy_gemini25_lite_v3";
+const TAROT_MAX_OUTPUT_TOKENS = 1400;
+const GEOMANCY_MAX_OUTPUT_TOKENS = 1200;
 const MYSTIC_READING_TEMPERATURE = 0.9;
+const TAROT_READING_TEMPERATURE = 0.55;
+const GEOMANCY_READING_TEMPERATURE = 0.55;
+const APP_CHECK_ENFORCEMENT_ENABLED = false;
+const KNOWLEDGE_CACHE_TTL_MS = 10 * 60 * 1000;
 
 const HORIZONS_API_URL = "https://ssd.jpl.nasa.gov/api/horizons.api";
 const HORIZONS_TIMEOUT_MS = 18000;
@@ -177,11 +181,94 @@ async function writeCachedReading(uid, cacheKey, contentVersion, text) {
   }
 }
 
+function callableRuntimeOptions(options = {}) {
+  return APP_CHECK_ENFORCEMENT_ENABLED
+    ? { ...options, enforceAppCheck: true }
+    : options;
+}
+
+function cleanMetricKey(value) {
+  return String(value || "unknown")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64) || "unknown";
+}
+
+async function recordUsageEvent(uid, {
+  feature,
+  provider,
+  model,
+  cached = false,
+} = {}) {
+  if (!uid) return;
+
+  const dateKey = new Date().toISOString().slice(0, 10);
+  const increment = admin.firestore.FieldValue.increment(1);
+  const payload = {
+    total: increment,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    features: {
+      [cleanMetricKey(feature)]: increment,
+    },
+    cache: {
+      [cached ? "hits" : "misses"]: increment,
+    },
+  };
+
+  if (provider) {
+    payload.providers = {
+      [cleanMetricKey(provider)]: increment,
+    };
+  }
+
+  if (model) {
+    payload.models = {
+      [cleanMetricKey(model)]: increment,
+    };
+  }
+
+  try {
+    await admin
+      .firestore()
+      .collection("users")
+      .doc(uid)
+      .collection("usage")
+      .doc(dateKey)
+      .set(payload, { merge: true });
+  } catch (error) {
+    console.error("Usage counter write error:", error.message);
+  }
+}
+
 function isTimeoutError(error) {
   return (
     error?.code === "ECONNABORTED" ||
     error?.code === "ETIMEDOUT" ||
     String(error?.message || "").toLowerCase().includes("timeout")
+  );
+}
+
+function isRetryableAiError(error) {
+  const status = Number(error?.response?.status || 0);
+  const details = error?.response?.data || {};
+  const code = String(details?.error?.code || details?.code || error?.code || "");
+  const type = String(details?.error?.type || details?.type || "");
+  const message = String(details?.error?.message || details?.message || error?.message || "");
+  const combined = `${code} ${type} ${message}`.toLowerCase();
+
+  return (
+    status === 429 ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    isTimeoutError(error) ||
+    combined.includes("rate") ||
+    combined.includes("quota") ||
+    combined.includes("capacity") ||
+    combined.includes("overload")
   );
 }
 
@@ -1158,11 +1245,11 @@ function dailyHoroscopePayload(data = {}) {
 }
 
 exports.calculateNatalChart = onCall(
-  {
+  callableRuntimeOptions({
     region: FUNCTION_REGION,
     timeoutSeconds: 180,
     memory: "512MiB",
-  },
+  }),
   async (request) => {
     const data = request.data || {};
     const idToken = data.idToken;
@@ -1209,6 +1296,13 @@ exports.calculateNatalChart = onCall(
         chartCalculationMeta: charts.calculationMeta,
       });
 
+      await recordUsageEvent(decodedToken.uid, {
+        feature: "natal_chart",
+        provider: "nasa_jpl",
+        model: "horizons",
+        cached: false,
+      });
+
       return {
         westernChart: charts.westernChart,
         vedicChart: charts.vedicChart,
@@ -1224,10 +1318,10 @@ exports.calculateNatalChart = onCall(
 );
 
 exports.generateBhriguChat = onCall(
-  {
+  callableRuntimeOptions({
     secrets: [GROQ_API_KEY, GEMINI_API_KEY],
     region: FUNCTION_REGION,
-  },
+  }),
   async (request) => {
     const idToken = request.data.idToken;
     if (!idToken || typeof idToken !== "string") {
@@ -1500,12 +1594,14 @@ User snapshot:
 ${safeJson(userSnapshot)}
 
 INSTRUCTIONS:
-Answer only the user's follow-up question.
+Answer only the user's selected follow-up question, while keeping the original user question as the anchor.
+If the follow-up is broad, interpret it through the original question and the cards already drawn.
 Use the Past, Present, and Future cards if available.
 Mention the specific card names when useful.
 Explain what the cards imply for the user's situation.
 Give one practical next step based on the Tarot reading.
 Do not make the response about Vedic or Western astrology.
+Do not drift into a new life area that was not part of the original question or selected follow-up.
 `;
       }
 
@@ -1705,8 +1801,12 @@ Give one practical next step for today.
       },
     ];
 
-    let text;
     const isDeepFollowUp = Boolean(followUpContext);
+    let text;
+    let providerUsed = isDeepFollowUp ? "gemini" : "groq";
+    let modelUsed = isDeepFollowUp
+      ? GEMINI_FLASH_LITE_MODEL
+      : GROQ_BHRIGU_CHAT_MODEL;
 
     try {
       if (isDeepFollowUp) {
@@ -1725,6 +1825,31 @@ Give one practical next step for today.
         });
       }
     } catch (error) {
+      if (!isDeepFollowUp && isRetryableAiError(error)) {
+        try {
+          text = await generateGeminiReadingText({
+            systemInstruction: activeSystemPrompt,
+            prompt: messageListToPrompt(chatMessages.slice(1)),
+            temperature: 0.55,
+            maxTokens: 512,
+          });
+          providerUsed = "gemini";
+          modelUsed = GEMINI_FLASH_LITE_MODEL;
+        } catch (fallbackError) {
+          const fallbackAiError = fallbackError.response?.data || {};
+          console.error("Bhrigu Gemini fallback error:", {
+            status: fallbackError.response?.status || null,
+            code: fallbackAiError.error?.code || fallbackAiError.code || null,
+            type: fallbackAiError.error?.type || fallbackAiError.type || null,
+            message:
+              fallbackAiError.error?.message ||
+              fallbackAiError.message ||
+              fallbackError.message,
+          });
+        }
+      }
+
+      if (!text) {
       const aiError = error.response?.data || {};
       const aiDetails = {
         status: error.response?.status || null,
@@ -1742,7 +1867,15 @@ Give one practical next step for today.
         "Bhrigu connection failed. Please try again.",
         aiDetails
       );
+      }
     }
+
+    await recordUsageEvent(uid, {
+      feature: isDeepFollowUp ? "chat_follow_up" : "bhrigu_chat",
+      provider: providerUsed,
+      model: modelUsed,
+      cached: false,
+    });
 
     return {
       text: text.trim(),
@@ -1751,12 +1884,12 @@ Give one practical next step for today.
 );
 
 exports.generateDailyHoroscope = onCall(
-  {
+  callableRuntimeOptions({
     secrets: [GEMINI_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 180,
     memory: "512MiB",
-  },
+  }),
   async (request) => {
     const idToken = request.data.idToken;
 
@@ -1807,6 +1940,13 @@ exports.generateDailyHoroscope = onCall(
         cached.contentVersion === contentVersion &&
         (cached.todayLine || cached.morning || cached.evening)
       ) {
+        await recordUsageEvent(decodedToken.uid, {
+          feature: "daily_horoscope",
+          provider: "firestore_cache",
+          model: "cached",
+          cached: true,
+        });
+
         return {
           ...dailyHoroscopePayload(cached),
           cached: true,
@@ -1892,6 +2032,13 @@ If you cannot use a real transit or aspect, say the lunar context plainly instea
 
       await horoscopeRef.set(storedHoroscope, { merge: true });
 
+      await recordUsageEvent(decodedToken.uid, {
+        feature: "daily_horoscope",
+        provider: "gemini",
+        model: GEMINI_FLASH_LITE_MODEL,
+        cached: false,
+      });
+
       return {
         ...dailyHoroscopePayload({
           ...storedHoroscope,
@@ -1910,10 +2057,10 @@ If you cannot use a real transit or aspect, say the lunar context plainly instea
   }
 );
 exports.generateTarotEmbedding = onCall(
-  {
+  callableRuntimeOptions({
     secrets: [GEMINI_API_KEY],
     region: FUNCTION_REGION,
-  },
+  }),
   async (request) => {
     const idToken = request.data.idToken;
 
@@ -1921,8 +2068,10 @@ exports.generateTarotEmbedding = onCall(
       throw new HttpsError("unauthenticated", "Missing Firebase ID token.");
     }
 
+    let decodedToken;
+
     try {
-      await admin.auth().verifyIdToken(idToken);
+      decodedToken = await admin.auth().verifyIdToken(idToken);
     } catch (error) {
       console.error("Tarot embedding token verification failed:", error);
       throw new HttpsError("unauthenticated", "Invalid Firebase ID token.");
@@ -1939,21 +2088,14 @@ exports.generateTarotEmbedding = onCall(
     }
 
     try {
-      const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${GEMINI_API_KEY.value()}`,
-        {
-          model: "models/gemini-embedding-001",
-          content: {
-            parts: [
-              {
-                text: text,
-              },
-            ],
-          },
-        }
-      );
+      const values = await generateGeminiEmbedding(text);
 
-      const values = response.data.embedding.values || [];
+      await recordUsageEvent(decodedToken.uid, {
+        feature: "tarot_embedding",
+        provider: "gemini",
+        model: "gemini-embedding-001",
+        cached: false,
+      });
 
       return {
         values: values,
@@ -1998,7 +2140,7 @@ function cosineSimilarity(a, b) {
   return denom === 0 ? 0 : dot / denom;
 }
 
-async function generateTarotQueryEmbedding(text) {
+async function generateGeminiEmbedding(text) {
   const response = await axios.post(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${GEMINI_API_KEY.value()}`,
     {
@@ -2016,6 +2158,108 @@ async function generateTarotQueryEmbedding(text) {
   return response.data.embedding.values || [];
 }
 
+async function generateTarotQueryEmbedding(text) {
+  return generateGeminiEmbedding(text);
+}
+
+let tarotKnowledgeDocsCache = null;
+let tarotKnowledgeDocsCacheAt = 0;
+let tarotKnowledgeDocsPromise = null;
+const tarotKnowledgeByCardCache = new Map();
+let compatibilityKnowledgeDocsCache = null;
+let compatibilityKnowledgeDocsCacheAt = 0;
+let compatibilityKnowledgeDocsPromise = null;
+
+async function readExactTarotKnowledge(cleanCardName) {
+  const cacheKey = cleanCardName.toLowerCase();
+
+  if (tarotKnowledgeByCardCache.has(cacheKey)) {
+    return tarotKnowledgeByCardCache.get(cacheKey);
+  }
+
+  const snap = await admin
+    .firestore()
+    .collection("tarot_knowledge")
+    .where("card", "==", cleanCardName)
+    .limit(1)
+    .get();
+
+  const text = snap.empty
+    ? ""
+    : String(snap.docs[0].data()?.reading_style || "").trim();
+
+  tarotKnowledgeByCardCache.set(cacheKey, text);
+  return text;
+}
+
+async function readTarotKnowledgeDocs() {
+  const now = Date.now();
+
+  if (
+    tarotKnowledgeDocsCache &&
+    now - tarotKnowledgeDocsCacheAt < KNOWLEDGE_CACHE_TTL_MS
+  ) {
+    return tarotKnowledgeDocsCache;
+  }
+
+  if (tarotKnowledgeDocsPromise) {
+    return tarotKnowledgeDocsPromise;
+  }
+
+  tarotKnowledgeDocsPromise = admin
+    .firestore()
+    .collection("tarot_knowledge")
+    .get()
+    .then((snap) => {
+      const docs = [];
+      snap.forEach((doc) => {
+        docs.push(doc.data() || {});
+      });
+      tarotKnowledgeDocsCache = docs;
+      tarotKnowledgeDocsCacheAt = Date.now();
+      return docs;
+    })
+    .finally(() => {
+      tarotKnowledgeDocsPromise = null;
+    });
+
+  return tarotKnowledgeDocsPromise;
+}
+
+async function readCompatibilityKnowledgeDocs() {
+  const now = Date.now();
+
+  if (
+    compatibilityKnowledgeDocsCache &&
+    now - compatibilityKnowledgeDocsCacheAt < KNOWLEDGE_CACHE_TTL_MS
+  ) {
+    return compatibilityKnowledgeDocsCache;
+  }
+
+  if (compatibilityKnowledgeDocsPromise) {
+    return compatibilityKnowledgeDocsPromise;
+  }
+
+  compatibilityKnowledgeDocsPromise = admin
+    .firestore()
+    .collection("compatibility_knowledge")
+    .get()
+    .then((snap) => {
+      const docs = [];
+      snap.forEach((doc) => {
+        docs.push(doc.data() || {});
+      });
+      compatibilityKnowledgeDocsCache = docs;
+      compatibilityKnowledgeDocsCacheAt = Date.now();
+      return docs;
+    })
+    .finally(() => {
+      compatibilityKnowledgeDocsPromise = null;
+    });
+
+  return compatibilityKnowledgeDocsPromise;
+}
+
 async function retrieveTarotKnowledge({
   cardName,
   keywords,
@@ -2024,6 +2268,18 @@ async function retrieveTarotKnowledge({
   const cleanCardName = String(cardName || "").trim();
   const cleanFallback = String(fallback || "").trim();
   const query = `${cleanCardName}: ${String(keywords || "").trim()}`;
+
+  try {
+    if (cleanCardName) {
+      const exactKnowledge = await readExactTarotKnowledge(cleanCardName);
+
+      if (exactKnowledge) {
+        return exactKnowledge;
+      }
+    }
+  } catch (error) {
+    console.error("Tarot exact lookup error:", error.message);
+  }
 
   let queryEmbedding = [];
 
@@ -2037,14 +2293,13 @@ async function retrieveTarotKnowledge({
   }
 
   try {
-    const snap = await admin.firestore().collection("tarot_knowledge").get();
+    const docs = await readTarotKnowledgeDocs();
 
     let exactText = "";
     let bestText = cleanFallback;
     let bestScore = -1;
 
-    snap.forEach((doc) => {
-      const data = doc.data() || {};
+    docs.forEach((data) => {
       const docCardName = String(data.card || "").trim();
       const readingStyle = String(data.reading_style || "").trim();
 
@@ -2074,12 +2329,12 @@ async function retrieveTarotKnowledge({
 }
 
 exports.generateTarotReading = onCall(
-  {
+  callableRuntimeOptions({
     secrets: [GEMINI_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 120,
     memory: "1GiB",
-  },
+  }),
   async (request) => {
     const idToken = request.data.idToken;
 
@@ -2097,7 +2352,14 @@ exports.generateTarotReading = onCall(
     }
 
     const birthData = request.data.birthData || "Birth data not available.";
-    const question = request.data.question || "";
+    const question =
+      typeof request.data.question === "string"
+        ? request.data.question.trim()
+        : "";
+    const enquiryText =
+      question.length === 0
+        ? "General tarot guidance. No specific enquiry was provided."
+        : question;
     const pastName = request.data.pastName || "";
     const presentName = request.data.presentName || "";
     const futureName = request.data.futureName || "";
@@ -2111,7 +2373,7 @@ exports.generateTarotReading = onCall(
       version: TAROT_READING_CONTENT_VERSION,
       model: GEMINI_FLASH_LITE_MODEL,
       maxTokens: TAROT_MAX_OUTPUT_TOKENS,
-      temperature: MYSTIC_READING_TEMPERATURE,
+      temperature: TAROT_READING_TEMPERATURE,
       birthData,
       question,
       pastName,
@@ -2129,6 +2391,13 @@ exports.generateTarotReading = onCall(
     );
 
     if (cachedText) {
+      await recordUsageEvent(decodedToken.uid, {
+        feature: "tarot_reading",
+        provider: "firestore_cache",
+        model: "cached",
+        cached: true,
+      });
+
       return {
         text: cachedText,
         cached: true,
@@ -2156,36 +2425,48 @@ exports.generateTarotReading = onCall(
       ]);
 
     const prompt = `
-You are Bhrigu — a Vedic sage and experienced tarot reader.
+You are Bhrigu, a Vedic sage and experienced tarot reader inside the BHR1GU app.
 
-READING STYLE:
-- Speak directly and warmly to the seeker by name
-- Read each card separately with a clear label: PAST, PRESENT, FUTURE
-- For each card give 2-3 sentences — one positive prospect and one honest challenge or caution
-- Build a connecting narrative that flows from past to present to future based on user question.
-- Weave in the seeker's birth chart naturally where relevant
-- Be specific and personal — never generic
-- End with one powerful closing statement — no question
-- Plain text only, absolutely no asterisks, no markdown, no bullet points
+CORE TASK:
+Answer the SEEKER_ENQUIRY through the three drawn tarot cards.
+The enquiry is the anchor. Every section must directly interpret its card in relation to that exact enquiry.
+If the enquiry names love, career, money, health, family, timing, choice, or spiritual direction, stay inside that domain unless a card clearly adds a necessary connected warning.
+If the enquiry is empty or generic, give a general reading, but do not invent unrelated dramatic scenarios.
 
-RESPONSE FORMAT — follow this exactly:
-PAST — [card name]
-[2-3 sentences about the past card — positive and honest challenge balanced]
+STRICT ENQUIRY RULES:
+- Treat SEEKER_ENQUIRY as the question being judged by the spread, not as optional background.
+- Each card section must contain at least two specific references to the enquiry's subject or situation.
+- Reuse key nouns from SEEKER_ENQUIRY naturally in every card section.
+- Do not give a generic meaning that could fit any question.
+- Do not switch domains. For example, if the enquiry is about love, do not make the answer mainly about career or money.
+- Do not overuse birth data. Use it only as quiet background when it sharpens the tarot answer.
+- Be concrete, personal, and useful. Name the pattern, the opportunity, the risk, and the likely direction.
 
-PRESENT — [card name]
-[2-3 sentences about the present card — positive and honest challenge balanced]
+SECTION DEPTH:
+- Write 4 to 5 complete sentences for PAST, PRESENT, and FUTURE.
+- Each card section must be 85 to 120 words.
+- Include one positive prospect, one honest challenge or caution, and one practical implication for the enquiry.
+- Build a clear story from past to present to future, but keep each card distinct.
+- The closing must be 25 to 45 words and must answer the enquiry in one firm statement.
 
-FUTURE — [card name]
-[2-3 sentences about the future card — positive and honest challenge balanced]
-
-[One closing sentence tying all three together and speaking to the seeker's question]
+VOICE AND FORMAT:
+- Speak directly and warmly to the seeker by name when a name is available.
+- Keep Bhrigu's voice wise, direct, mystical but grounded.
+- Plain text only. No markdown, no asterisks, no bullet points in the answer.
+- No headings inside JSON values.
+- No question at the end.
 
 SEEKER: ${birthData}
-QUESTION: ${question}
+SEEKER_ENQUIRY: ${enquiryText}
 
-PAST CARD — ${pastName}: ${pastKnowledge}
-PRESENT CARD — ${presentName}: ${presentKnowledge}
-FUTURE CARD — ${futureName}: ${futureKnowledge}
+PAST CARD: ${pastName}
+Past card knowledge: ${pastKnowledge}
+
+PRESENT CARD: ${presentName}
+Present card knowledge: ${presentKnowledge}
+
+FUTURE CARD: ${futureName}
+Future card knowledge: ${futureKnowledge}
 `;
 
     function cleanText(value) {
@@ -2252,20 +2533,24 @@ ${closing}`.trim();
     try {
       const rawText = await generateGeminiReadingText({
         systemInstruction:
-          "You are generating tarot reading content for an app. Return only valid JSON. Do not include markdown. Do not include headings. Do not include labels. Do not include conclusion headings. Do not ask a question at the end.",
+          "You are generating tarot reading content for an app. Return only valid JSON. Follow the user's tarot enquiry exactly. Every JSON value must answer the enquiry directly, stay in the enquiry's domain, and avoid generic card meanings. Do not include markdown, headings, labels, conclusion headings, or a question at the end.",
         prompt: `${prompt}
 
 Return only valid JSON in this exact structure:
 {
-  "past": "2 to 3 sentences for the past card. Include one positive prospect and one honest challenge.",
-  "present": "2 to 3 sentences for the present card. Include one positive prospect and one honest challenge.",
-  "future": "2 to 3 sentences for the future card. Include one positive prospect and one honest challenge.",
-  "closing": "One powerful closing sentence tying all three cards to the user's question. No question."
+  "past": "85 to 120 words, 4 to 5 complete sentences for the past card. Directly answer SEEKER_ENQUIRY. Reuse key nouns from the enquiry, include the enquiry subject at least twice, one positive prospect, one honest challenge, and one practical implication.",
+  "present": "85 to 120 words, 4 to 5 complete sentences for the present card. Directly answer SEEKER_ENQUIRY. Reuse key nouns from the enquiry, include the enquiry subject at least twice, one positive prospect, one honest challenge, and one practical implication.",
+  "future": "85 to 120 words, 4 to 5 complete sentences for the future card. Directly answer SEEKER_ENQUIRY. Reuse key nouns from the enquiry, include the enquiry subject at least twice, one positive prospect, one honest challenge, and one practical implication.",
+  "closing": "25 to 45 words. Give one firm final answer tying all three cards to SEEKER_ENQUIRY. No question."
 }
 
-Do not write PAST, PRESENT, FUTURE, Conclusion, Final Message, Overall Reading, or Closing Insight inside the JSON values. Only write the actual reading content.`,
+Hard constraints:
+- If any section could be reused for a different enquiry, rewrite it to be more specific.
+- Keep the answer inside the user's enquiry domain.
+- Do not write PAST, PRESENT, FUTURE, Conclusion, Final Message, Overall Reading, or Closing Insight inside the JSON values.
+- Only write the actual reading content.`,
         maxTokens: TAROT_MAX_OUTPUT_TOKENS,
-        temperature: MYSTIC_READING_TEMPERATURE,
+        temperature: TAROT_READING_TEMPERATURE,
       });
 
       let parsed;
@@ -2283,6 +2568,13 @@ Do not write PAST, PRESENT, FUTURE, Conclusion, Final Message, Overall Reading, 
       } catch (parseError) {
         console.error("Tarot JSON parse error:", parseError);
 
+        await recordUsageEvent(decodedToken.uid, {
+          feature: "tarot_reading_fallback",
+          provider: "local_fallback",
+          model: "fallback",
+          cached: false,
+        });
+
         return {
           text: buildFallbackText(),
         };
@@ -2296,6 +2588,13 @@ Do not write PAST, PRESENT, FUTURE, Conclusion, Final Message, Overall Reading, 
         finalText
       );
 
+      await recordUsageEvent(decodedToken.uid, {
+        feature: "tarot_reading",
+        provider: "gemini",
+        model: GEMINI_FLASH_LITE_MODEL,
+        cached: false,
+      });
+
       return {
         text: finalText,
         cached: false,
@@ -2306,6 +2605,13 @@ Do not write PAST, PRESENT, FUTURE, Conclusion, Final Message, Overall Reading, 
         error.response?.data || error.message
       );
 
+      await recordUsageEvent(decodedToken.uid, {
+        feature: "tarot_reading_fallback",
+        provider: "local_fallback",
+        model: "fallback",
+        cached: false,
+      });
+
       return {
         text: buildFallbackText(),
         fallback: true,
@@ -2315,12 +2621,12 @@ Do not write PAST, PRESENT, FUTURE, Conclusion, Final Message, Overall Reading, 
   }
 );
 exports.generateGeomancyReading = onCall(
-  {
+  callableRuntimeOptions({
     secrets: [GEMINI_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 120,
     memory: "512MiB",
-  },
+  }),
   async (request) => {
     const idToken = request.data.idToken;
 
@@ -2337,7 +2643,10 @@ exports.generateGeomancyReading = onCall(
       throw new HttpsError("unauthenticated", "Invalid Firebase ID token.");
     }
 
-    const question = request.data.question || "";
+    const question =
+      typeof request.data.question === "string"
+        ? request.data.question.trim()
+        : "";
     const birthData = request.data.birthData || "Birth data not available.";
     const answer = request.data.answer || "Mixed result";
     const chart = request.data.chart || {};
@@ -2350,7 +2659,7 @@ exports.generateGeomancyReading = onCall(
       version: GEOMANCY_READING_CONTENT_VERSION,
       model: GEMINI_FLASH_LITE_MODEL,
       maxTokens: GEOMANCY_MAX_OUTPUT_TOKENS,
-      temperature: MYSTIC_READING_TEMPERATURE,
+      temperature: GEOMANCY_READING_TEMPERATURE,
       question,
       birthData,
       answer,
@@ -2364,6 +2673,13 @@ exports.generateGeomancyReading = onCall(
     );
 
     if (cachedText) {
+      await recordUsageEvent(decodedToken.uid, {
+        feature: "geomancy_reading",
+        provider: "firestore_cache",
+        model: "cached",
+        cached: true,
+      });
+
       return {
         text: cachedText,
         cached: true,
@@ -2372,14 +2688,17 @@ exports.generateGeomancyReading = onCall(
     }
 
     const geminiPrompt = `
-Give one short symbolic context paragraph for this geomancy chart.
+Give one short symbolic context paragraph for this geomancy chart in relation to the user's question.
+
+User question:
+${question || "General geomancy guidance. No specific question was provided."}
 
 Judge: ${judge.name || ""}
 Left Witness: ${leftWitness.name || ""}
 Right Witness: ${rightWitness.name || ""}
 Reconciler: ${reconciler.name || ""}
 
-Keep it under 60 words. No markdown.
+Keep it under 70 words. Stay in the user's question domain. No markdown.
 `;
 
     let geminiContext =
@@ -2416,9 +2735,9 @@ Keep it under 60 words. No markdown.
     }
 
     const q =
-      question.trim().length === 0
+      question.length === 0
         ? "The user did not type a question. Give a general reading from the pattern."
-        : question.trim();
+        : question;
 
     const prompt = `
 You are Bhrigu Geomancer inside the BHR1GU astrology app.
@@ -2426,6 +2745,12 @@ You are interpreting a geomancy shield chart created by the user's sixteen hand-
 
 Speak like Bhrigu: wise, direct, mystical but grounded in earth magic. 
 Do not sound like a generic horoscope. Keep it premium, emotionally engaging, and specific to the geomantic figures.
+
+CORE TASK:
+Answer the USER QUESTION through the Judge, Witnesses, and Reconciler.
+The user's question is the anchor. Every section must directly interpret the figures in relation to that exact question.
+If the question names love, career, money, health, family, timing, a choice, conflict, or spiritual direction, stay inside that domain unless a figure clearly adds a necessary connected warning.
+If no specific question was provided, give a general geomancy reading from the chart without inventing a dramatic scenario.
 
 User birth data:
 ${birthData}
@@ -2448,19 +2773,24 @@ STRICT RESPONSE STRUCTURE:
 You MUST format your response exactly like this. Plain text only. No markdown (no ** or *). Separate each section with a double line break. 
 
 THE JUDGEMENT
-[1 to 2 sentences directly answering the user's question using the Judge figure. Be definitive.]
+[3 to 4 sentences directly answering the user's question using the Judge figure and the Judge answer. Be definitive. Mention the user's question domain and the Judge figure by name. Include the main opportunity and the main caution.]
 
 THE WITNESSES
-[2 sentences explaining the underlying forces at play using the Left and Right Witnesses. What is pushing them forward, and what is holding them back?]
+[4 to 5 sentences explaining the underlying forces at play using the Left and Right Witnesses. Name both witness figures. Explain what is pushing the user forward, what is resisting or delaying the matter, and how these forces affect the exact question asked.]
 
 THE RECONCILER
-[1 to 2 sentences explaining the hidden lesson or ultimate outcome using the Reconciler figure.]
+[3 to 4 sentences explaining the hidden lesson, practical integration, and likely outcome using the Reconciler figure. Name the Reconciler figure. Show how it resolves the tension between the Judge and Witnesses for the user's question.]
 
 EARTH'S COUNSEL
-[1 short, powerful, imperative sentence giving them a strict action or mantra to follow.]
+[2 to 3 short sentences. Give one strict action, one clear boundary or timing instruction, and one grounded mantra if it fits naturally.]
 
 RULES:
 - Do not add any conversational filler (e.g., "Here is your reading").
+- Do not give generic figure meanings that could fit any question.
+- Do not switch to astrology, planets, houses, signs, or transits unless the user explicitly asked for astrology.
+- Treat the Judge answer as the verdict and do not contradict it.
+- Reuse key nouns from the user's question naturally in every section.
+- Do not add extra headings or rename the headings.
 - Never ask a question at the end.
 - Use the exact all-caps headings shown above.
 
@@ -2470,7 +2800,7 @@ RULES:
       const text = await generateGeminiReadingText({
         prompt,
         maxTokens: GEOMANCY_MAX_OUTPUT_TOKENS,
-        temperature: MYSTIC_READING_TEMPERATURE,
+        temperature: GEOMANCY_READING_TEMPERATURE,
       });
       await writeCachedReading(
         decodedToken.uid,
@@ -2478,6 +2808,13 @@ RULES:
         GEOMANCY_READING_CONTENT_VERSION,
         text
       );
+
+      await recordUsageEvent(decodedToken.uid, {
+        feature: "geomancy_reading",
+        provider: "gemini",
+        model: GEMINI_FLASH_LITE_MODEL,
+        cached: false,
+      });
 
       return {
         text: text,
@@ -2505,10 +2842,10 @@ RULES:
 );
 
 exports.generateCompatibilityEmbedding = onCall(
-  {
+  callableRuntimeOptions({
     secrets: [GEMINI_API_KEY],
     region: FUNCTION_REGION,
-  },
+  }),
   async (request) => {
     const idToken = request.data.idToken;
 
@@ -2516,8 +2853,10 @@ exports.generateCompatibilityEmbedding = onCall(
       throw new HttpsError("unauthenticated", "Missing Firebase ID token.");
     }
 
+    let decodedToken;
+
     try {
-      await admin.auth().verifyIdToken(idToken);
+      decodedToken = await admin.auth().verifyIdToken(idToken);
     } catch (error) {
       console.error("Compatibility embedding token verification failed:", error);
       throw new HttpsError("unauthenticated", "Invalid Firebase ID token.");
@@ -2534,21 +2873,14 @@ exports.generateCompatibilityEmbedding = onCall(
     }
 
     try {
-      const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${GEMINI_API_KEY.value()}`,
-        {
-          model: "models/gemini-embedding-001",
-          content: {
-            parts: [
-              {
-                text: text,
-              },
-            ],
-          },
-        }
-      );
+      const values = await generateGeminiEmbedding(text);
 
-      const values = response.data.embedding.values || [];
+      await recordUsageEvent(decodedToken.uid, {
+        feature: "compatibility_embedding",
+        provider: "gemini",
+        model: "gemini-embedding-001",
+        cached: false,
+      });
 
       return {
         values: values,
@@ -2567,13 +2899,98 @@ exports.generateCompatibilityEmbedding = onCall(
   }
 );
 
+exports.retrieveCompatibilityKnowledge = onCall(
+  callableRuntimeOptions({
+    secrets: [GEMINI_API_KEY],
+    region: FUNCTION_REGION,
+    timeoutSeconds: 60,
+    memory: "512MiB",
+  }),
+  async (request) => {
+    const idToken = request.data.idToken;
+
+    if (!idToken || typeof idToken !== "string") {
+      throw new HttpsError("unauthenticated", "Missing Firebase ID token.");
+    }
+
+    let decodedToken;
+
+    try {
+      decodedToken = await admin.auth().verifyIdToken(idToken);
+    } catch (error) {
+      console.error("Compatibility retrieval token verification failed:", error);
+      throw new HttpsError("unauthenticated", "Invalid Firebase ID token.");
+    }
+
+    const query = String(request.data.query || "").trim();
+    const limit = Math.min(
+      10,
+      Math.max(1, Number.parseInt(request.data.limit, 10) || 5)
+    );
+
+    if (!query) {
+      throw new HttpsError("invalid-argument", "Query is required.");
+    }
+
+    if (query.length > 4000) {
+      throw new HttpsError("invalid-argument", "Query is too long.");
+    }
+
+    try {
+      const queryEmbedding = await generateGeminiEmbedding(query);
+      const docs = await readCompatibilityKnowledgeDocs();
+      const scoredChunks = [];
+
+      docs.forEach((data) => {
+        if (!Array.isArray(data.embedding)) return;
+
+        const score = cosineSimilarity(queryEmbedding, data.embedding);
+        const tags = Array.isArray(data.tags)
+          ? data.tags.map((tag) => String(tag))
+          : [];
+
+        scoredChunks.push({
+          title: String(data.title || ""),
+          category: String(data.category || ""),
+          tags,
+          text: String(data.text || ""),
+          score,
+        });
+      });
+
+      scoredChunks.sort((a, b) => b.score - a.score);
+
+      await recordUsageEvent(decodedToken.uid, {
+        feature: "compatibility_rag",
+        provider: "gemini",
+        model: "gemini-embedding-001",
+        cached: false,
+      });
+
+      return {
+        chunks: scoredChunks.slice(0, limit),
+      };
+    } catch (error) {
+      console.error(
+        "Compatibility retrieval error:",
+        error.response?.data || error.message
+      );
+
+      throw new HttpsError(
+        "internal",
+        "Compatibility knowledge retrieval failed."
+      );
+    }
+  }
+);
+
 exports.generatePartnerMatchReading = onCall(
-  {
-    secrets: [GROQ_API_KEY],
+  callableRuntimeOptions({
+    secrets: [GROQ_API_KEY, GEMINI_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 180,
     memory: "512MiB",
-  },
+  }),
   async (request) => {
     const idToken = request.data.idToken;
 
@@ -2720,13 +3137,17 @@ Do not be overly positive.
 Keep the tone mystical, direct, and emotionally intelligent.
 `;
 
+    const systemInstruction =
+      "Follow the compatibility reading format exactly. Do not use markdown. Do not use bullet points. Do not ask a question at the end. Do not write percentage numbers.";
+    let providerUsed = "groq";
+    let modelUsed = GROQ_PARTNER_MATCH_MODEL;
+
     try {
       const text = await generateGroqReadingText({
         messages: [
           {
             role: "system",
-            content:
-              "Follow the compatibility reading format exactly. Do not use markdown. Do not use bullet points. Do not ask a question at the end. Do not write percentage numbers.",
+            content: systemInstruction,
           },
           {
             role: "user",
@@ -2738,6 +3159,13 @@ Keep the tone mystical, direct, and emotionally intelligent.
         temperature: 0.35,
       });
 
+      await recordUsageEvent(decodedToken.uid, {
+        feature: "partner_match",
+        provider: providerUsed,
+        model: modelUsed,
+        cached: false,
+      });
+
       return {
         text: text.trim(),
       };
@@ -2747,6 +3175,36 @@ Keep the tone mystical, direct, and emotionally intelligent.
         error.response?.data || error.message
       );
 
+      if (isRetryableAiError(error)) {
+        try {
+          const text = await generateGeminiReadingText({
+            systemInstruction,
+            prompt,
+            maxTokens: 620,
+            temperature: 0.35,
+          });
+
+          providerUsed = "gemini";
+          modelUsed = GEMINI_FLASH_LITE_MODEL;
+
+          await recordUsageEvent(decodedToken.uid, {
+            feature: "partner_match",
+            provider: providerUsed,
+            model: modelUsed,
+            cached: false,
+          });
+
+          return {
+            text: text.trim(),
+          };
+        } catch (fallbackError) {
+          console.error(
+            "Partner match Gemini fallback error:",
+            fallbackError.response?.data || fallbackError.message
+          );
+        }
+      }
+
       throw new HttpsError(
         "internal",
         "Partner match reading generation failed."
@@ -2755,10 +3213,10 @@ Keep the tone mystical, direct, and emotionally intelligent.
   }
 );
 exports.generateCompatibilityInsight = onCall(
-  {
+  callableRuntimeOptions({
     secrets: [GROQ_API_KEY, GEMINI_API_KEY],
     region: FUNCTION_REGION,
-  },
+  }),
   async (request) => {
     const idToken = request.data.idToken;
 
@@ -2766,8 +3224,10 @@ exports.generateCompatibilityInsight = onCall(
       throw new HttpsError("unauthenticated", "Missing Firebase ID token.");
     }
 
+    let decodedToken;
+
     try {
-      await admin.auth().verifyIdToken(idToken);
+      decodedToken = await admin.auth().verifyIdToken(idToken);
     } catch (error) {
       console.error("Chart AI token verification failed:", error);
       throw new HttpsError("unauthenticated", "Invalid Firebase ID token.");
@@ -2804,6 +3264,15 @@ Rules:
         maxTokens: 160,
       });
 
+      await recordUsageEvent(decodedToken.uid, {
+        feature: "compatibility_insight",
+        provider: shouldUsePremiumReadingModel(request.data) ? "groq" : "gemini",
+        model: shouldUsePremiumReadingModel(request.data)
+          ? GROQ_PARTNER_MATCH_MODEL
+          : GEMINI_FLASH_LITE_MODEL,
+        cached: false,
+      });
+
       return {
         text: text.trim(),
       };
@@ -2821,10 +3290,10 @@ Rules:
   }
 );
 exports.searchBirthPlaces = onCall(
-  {
+  callableRuntimeOptions({
     region: FUNCTION_REGION,
     secrets: [GOOGLE_PLACES_API_KEY],
-  },
+  }),
   async (request) => {
     try {
       const data = request.data || {};
@@ -2835,7 +3304,7 @@ exports.searchBirthPlaces = onCall(
         throw new HttpsError("unauthenticated", "Missing Firebase ID token.");
       }
 
-      await admin.auth().verifyIdToken(idToken);
+      const decodedToken = await admin.auth().verifyIdToken(idToken);
 
       if (query.length < 2) {
         return {
@@ -2976,6 +3445,13 @@ exports.searchBirthPlaces = onCall(
           }
         })
       );
+
+      await recordUsageEvent(decodedToken.uid, {
+        feature: "birth_place_search",
+        provider: "google_places",
+        model: "places_autocomplete",
+        cached: false,
+      });
 
       return {
         places: placeDetails.map((place) => place.description),

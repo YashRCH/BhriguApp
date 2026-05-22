@@ -135,17 +135,17 @@ service cloud.firestore {
     }
 
     match /book_knowledge/{docId} {
-      allow read: if signedIn();
+      allow read: if false;
       allow write: if false;
     }
 
     match /tarot_knowledge/{docId} {
-      allow read: if signedIn();
+      allow read: if false;
       allow write: if false;
     }
 
     match /compatibility_knowledge/{docId} {
-      allow read: if signedIn();
+      allow read: if false;
       allow write: if false;
     }
 

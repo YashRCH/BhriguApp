@@ -62,10 +62,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     if (uid == null) return;
 
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .get();
+    final doc =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
 
     final info = await PackageInfo.fromPlatform();
 
@@ -228,11 +226,25 @@ class _ProfileScreenState extends State<ProfileScreen>
       final firestore = FirebaseFirestore.instance;
       final userRef = firestore.collection('users').doc(uid);
 
-      await _deleteCollection(userRef.collection('chat'));
-      await _deleteCollection(userRef.collection('follow_up_contexts'));
-      await _deleteCollection(userRef.collection('partner_matches'));
-      await _deleteCollection(userRef.collection('rewards'));
-      await _deleteCollection(userRef.collection('horoscopes'));
+      const subcollections = [
+        'chat',
+        'follow_up_contexts',
+        'partner_matches',
+        'partner_match_readings',
+        'match_readings',
+        'compatibility_readings',
+        'tarot_readings',
+        'geomancy_readings',
+        'rewards',
+        'horoscopes',
+        'aiReadingCache',
+        'entitlements',
+        'usage',
+      ];
+
+      for (final collectionId in subcollections) {
+        await _deleteCollection(userRef.collection(collectionId));
+      }
 
       await userRef.delete();
       await user.delete();

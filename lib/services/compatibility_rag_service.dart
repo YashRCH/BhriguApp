@@ -1,9 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 import '../constants/firebase_constants.dart';
-import '../utils/similarity.dart';
 import 'firebase_session_service.dart';
 
 class CompatibilityKnowledgeChunk {
@@ -44,53 +42,6 @@ class CompatibilityRagService {
     int limit = 5,
   }) async {
     try {
-      final queryEmbedding = await _embedQuery(query);
-
-      if (queryEmbedding.isEmpty) {
-        return [];
-      }
-
-      final snap = await FirebaseFirestore.instance
-          .collection('compatibility_knowledge')
-          .get();
-
-      final scoredChunks = <CompatibilityKnowledgeChunk>[];
-
-      for (final doc in snap.docs) {
-        final data = doc.data();
-
-        final rawEmbedding = data['embedding'];
-        if (rawEmbedding is! List) continue;
-
-        final storedEmbedding =
-            rawEmbedding.map((value) => (value as num).toDouble()).toList();
-
-        final score = cosineSimilarity(queryEmbedding, storedEmbedding);
-
-        scoredChunks.add(
-          CompatibilityKnowledgeChunk(
-            title: data['title'] as String? ?? '',
-            category: data['category'] as String? ?? '',
-            tags: ((data['tags'] as List?) ?? [])
-                .map((tag) => tag.toString())
-                .toList(),
-            text: data['text'] as String? ?? '',
-            score: score,
-          ),
-        );
-      }
-
-      scoredChunks.sort((a, b) => b.score.compareTo(a.score));
-
-      return scoredChunks.take(limit).toList();
-    } catch (e) {
-      debugPrint('Compatibility RAG retrieve error: $e');
-      return [];
-    }
-  }
-
-  Future<List<double>> _embedQuery(String text) async {
-    try {
       final idToken = await _session.idToken();
 
       if (idToken == null) {
@@ -98,25 +49,44 @@ class CompatibilityRagService {
       }
 
       final callable = _functions.httpsCallable(
-        'generateCompatibilityEmbedding',
+        'retrieveCompatibilityKnowledge',
+        options: HttpsCallableOptions(
+          timeout: const Duration(seconds: 60),
+        ),
       );
 
       final response = await callable.call(
         {
           'idToken': idToken,
-          'text': text,
+          'query': query,
+          'limit': limit,
         },
       );
 
       final data = Map<String, dynamic>.from(
         response.data as Map,
       );
+      final chunks = data['chunks'];
 
-      final values = data['values'] as List;
+      if (chunks is! List) {
+        return [];
+      }
 
-      return values.map((value) => (value as num).toDouble()).toList();
+      return chunks.whereType<Map>().map((chunk) {
+        final normalized = Map<String, dynamic>.from(chunk);
+
+        return CompatibilityKnowledgeChunk(
+          title: normalized['title'] as String? ?? '',
+          category: normalized['category'] as String? ?? '',
+          tags: ((normalized['tags'] as List?) ?? [])
+              .map((tag) => tag.toString())
+              .toList(),
+          text: normalized['text'] as String? ?? '',
+          score: (normalized['score'] as num?)?.toDouble() ?? 0,
+        );
+      }).toList();
     } catch (e) {
-      debugPrint('Compatibility Gemini embedding error: $e');
+      debugPrint('Compatibility RAG retrieve error: $e');
       return [];
     }
   }
