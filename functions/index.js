@@ -28,6 +28,7 @@ const TAROT_READING_TEMPERATURE = 0.55;
 const GEOMANCY_READING_TEMPERATURE = 0.55;
 const APP_CHECK_ENFORCEMENT_ENABLED = false;
 const KNOWLEDGE_CACHE_TTL_MS = 10 * 60 * 1000;
+const BHRIGU_CHAT_KNOWLEDGE_LIMIT = 5;
 
 const HORIZONS_API_URL = "https://ssd.jpl.nasa.gov/api/horizons.api";
 const HORIZONS_TIMEOUT_MS = 18000;
@@ -1008,6 +1009,475 @@ async function getDailyTransits(dateKey) {
   return transits;
 }
 
+function currentSkyCacheKey(now = new Date()) {
+  return now.toISOString().slice(0, 13).replace("T", "-");
+}
+
+function planetSnapshotFromBodyPosition(body) {
+  return {
+    longitude: roundTo(body.longitude, 6),
+    sign: signFromLongitude(body.longitude),
+    degree: roundTo(degreeWithinSign(body.longitude), 2),
+  };
+}
+
+async function calculateCurrentSkySnapshot(now = new Date()) {
+  const planets = {};
+  const missingPlanets = [];
+  const results = await Promise.allSettled(
+    HORIZONS_BODIES.map(async (body) => ({
+      body,
+      ecliptic: await fetchHorizonsObserverEcliptic(body, now),
+    }))
+  );
+
+  results.forEach((result, index) => {
+    const body = HORIZONS_BODIES[index];
+
+    if (result.status === "fulfilled") {
+      planets[body.name] = planetSnapshotFromBodyPosition({
+        longitude: result.value.ecliptic.longitude,
+      });
+      return;
+    }
+
+    missingPlanets.push(body.name);
+    console.error(
+      "Current sky body calculation failed:",
+      body.name,
+      result.reason?.message || result.reason
+    );
+  });
+
+  if (Object.keys(planets).length === 0) {
+    throw new Error("Current sky calculation failed for every planet.");
+  }
+
+  return {
+    key: currentSkyCacheKey(now),
+    source: "NASA/JPL Horizons API",
+    isoTime: now.toISOString(),
+    planets,
+    partial: missingPlanets.length > 0,
+    missingPlanets,
+  };
+}
+
+function hasCurrentSkyPlanets(data = {}) {
+  const planets = data.planets && typeof data.planets === "object"
+    ? data.planets
+    : {};
+
+  return HORIZONS_BODIES.every((body) => {
+    const longitude = Number(planets[body.name]?.longitude);
+    return Number.isFinite(longitude);
+  });
+}
+
+async function getCurrentSkySnapshot(now = new Date()) {
+  const key = currentSkyCacheKey(now);
+  const transitRef = admin.firestore().collection("astro_transits").doc(key);
+  const transitDoc = await transitRef.get();
+
+  if (transitDoc.exists) {
+    const cached = transitDoc.data() || {};
+
+    if (hasCurrentSkyPlanets(cached)) {
+      return {
+        key,
+        ...cached,
+      };
+    }
+  }
+
+  const snapshot = await calculateCurrentSkySnapshot(now);
+
+  if (!snapshot.partial) {
+    await transitRef.set(
+      {
+        ...snapshot,
+        generatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+
+  return snapshot;
+}
+
+function transitPlanetListFromCurrentSky(currentSky = {}) {
+  const planets = currentSky.planets || {};
+
+  return Object.entries(planets).map(([name, placement]) => ({
+    name,
+    ...(placement || {}),
+  }));
+}
+
+function selectNatalChartForTransits(userData = {}) {
+  if (Array.isArray(userData?.westernChart?.planets)) {
+    return userData.westernChart;
+  }
+
+  if (Array.isArray(userData?.vedicChart?.planets)) {
+    return userData.vedicChart;
+  }
+
+  return null;
+}
+
+function maxOrbForTransitPlanet(transitName) {
+  if (transitName === "Sun" || transitName === "Moon") return 6;
+  if (["Mercury", "Venus", "Mars"].includes(transitName)) return 4;
+  if (["Jupiter", "Saturn"].includes(transitName)) return 3;
+  return 3;
+}
+
+function transitAspectTheme(transitPlanet, natalPlanet, aspectName) {
+  const specificThemes = {
+    "Saturn:Moon": "emotional pressure, maturity, delayed comfort, patience",
+    "Venus:Sun": "self-worth, attraction, confidence, social warmth",
+    "Mars:Mercury": "sharp speech, fast decisions, conflict risk",
+    "Jupiter:Sun": "growth, opportunity, confidence, visibility",
+    "Saturn:Sun": "discipline, responsibility, pressure, long-term growth",
+    "Moon:Venus": "softness, affection, emotional needs",
+    "Mars:Venus": "desire, attraction, impulsive romance",
+    "Mercury:Moon": "thoughts, mood, communication, emotional processing",
+  };
+  const specificTheme = specificThemes[`${transitPlanet}:${natalPlanet}`];
+
+  if (specificTheme) {
+    return specificTheme;
+  }
+
+  const planetMeanings = {
+    Sun: "identity, vitality, confidence",
+    Moon: "mood, emotional needs, instinct",
+    Mercury: "thoughts, speech, decisions",
+    Venus: "love, pleasure, values",
+    Mars: "drive, desire, conflict",
+    Jupiter: "growth, faith, opportunity",
+    Saturn: "discipline, limits, responsibility",
+  };
+  const aspectMeanings = {
+    conjunction: "direct activation and emphasis",
+    sextile: "supportive opportunity that still needs effort",
+    square: "friction, pressure, and necessary adjustment",
+    trine: "natural flow and easier expression",
+    opposition: "mirroring, tension, and relationship awareness",
+  };
+
+  return `${planetMeanings[transitPlanet] || "current planetary pressure"} influencing natal ${planetMeanings[natalPlanet] || "chart patterns"} through ${aspectMeanings[aspectName] || "an active aspect"}`;
+}
+
+function calculateTransitAspectMatches({
+  transitPlanets,
+  natalPlanets,
+  limit = 5,
+}) {
+  const aspectDefs = [
+    { name: "conjunction", angle: 0 },
+    { name: "sextile", angle: 60 },
+    { name: "square", angle: 90 },
+    { name: "trine", angle: 120 },
+    { name: "opposition", angle: 180 },
+  ];
+  const aspects = [];
+
+  for (const transit of transitPlanets) {
+    const transitLongitude = longitudeFromPlacement(transit);
+    if (transitLongitude === null) continue;
+
+    for (const natal of natalPlanets) {
+      const natalLongitude = longitudeFromPlacement(natal);
+      if (natalLongitude === null) continue;
+
+      const separation = Math.abs(signedAngularDistance(transitLongitude, natalLongitude));
+      const maxOrb = maxOrbForTransitPlanet(transit.name);
+
+      for (const aspect of aspectDefs) {
+        const orb = Math.abs(separation - aspect.angle);
+
+        if (orb <= maxOrb) {
+          const strength = Math.min(
+            100,
+            Math.max(1, Math.round((1 - (orb / maxOrb)) * 100))
+          );
+
+          aspects.push({
+            transitPlanet: transit.name,
+            natalPlanet: natal.name,
+            aspect: aspect.name,
+            orb: roundTo(orb, 2),
+            strength,
+            theme: transitAspectTheme(transit.name, natal.name, aspect.name),
+            transitSign: transit.sign || signFromLongitude(transitLongitude),
+            natalSign: natal.sign || signFromLongitude(natalLongitude),
+            description: `${transit.name} ${aspect.name} natal ${natal.name}`,
+          });
+        }
+      }
+    }
+  }
+
+  return aspects
+    .sort((a, b) => b.strength - a.strength || a.orb - b.orb)
+    .slice(0, limit);
+}
+
+function messageHasKeyword(text, keyword) {
+  const escaped = String(keyword || "")
+    .trim()
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\s+/g, "\\s+");
+
+  if (!escaped) return false;
+
+  return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "i").test(text);
+}
+
+function detectQuestionCategory(message) {
+  const text = String(message || "").toLowerCase();
+  const categories = [
+    {
+      name: "love_relationship",
+      keywords: [
+        "love", "relationship", "crush", "marriage", "partner", "ex",
+        "boyfriend", "girlfriend", "connection", "feelings", "breakup",
+        "trust", "soulmate", "twin flame", "dating", "proposal",
+      ],
+    },
+    {
+      name: "career_work",
+      keywords: [
+        "career", "job", "work", "business", "promotion", "boss", "office",
+        "success", "startup", "project", "client", "company",
+      ],
+    },
+    {
+      name: "money",
+      keywords: [
+        "money", "finance", "income", "salary", "wealth", "debt",
+        "investment", "payment", "savings", "loan",
+      ],
+    },
+    {
+      name: "family",
+      keywords: [
+        "family", "mother", "father", "parents", "home", "sibling",
+        "brother", "sister",
+      ],
+    },
+    {
+      name: "health_wellbeing",
+      keywords: [
+        "health", "stress", "anxiety", "tired", "mental", "sleep",
+        "energy", "depression", "overwhelmed",
+      ],
+    },
+    {
+      name: "education",
+      keywords: [
+        "study", "exam", "college", "marks", "course", "degree",
+        "interview", "placement", "internship", "university",
+      ],
+    },
+    {
+      name: "spiritual_growth",
+      keywords: [
+        "purpose", "karma", "spiritual", "path", "lesson", "soul",
+        "meaning", "destiny", "dharma",
+      ],
+    },
+    {
+      name: "timing_decision",
+      keywords: [
+        "when", "should i", "will i", "decision", "choose", "move",
+        "leave", "start", "wait", "accept", "reject", "continue", "stop",
+      ],
+    },
+  ];
+
+  for (const category of categories) {
+    if (category.keywords.some((keyword) => messageHasKeyword(text, keyword))) {
+      return category.name;
+    }
+  }
+
+  return "general";
+}
+
+function categoryFocus(category) {
+  const focusByCategory = {
+    love_relationship:
+      "Prioritize Moon, Venus, Mars, 5th house, 7th house, emotional pattern, attraction, attachment, trust, and timing. Do not drift into career unless the user asks.",
+    career_work:
+      "Prioritize Sun, Saturn, Mars, Jupiter, 6th house, 10th house, discipline, recognition, delay, authority, skill, and practical next steps. Do not drift into romance unless the user asks.",
+    money:
+      "Prioritize Venus, Jupiter, Saturn, 2nd house, 8th house, 11th house, income, spending, risk, patience, and discipline.",
+    family:
+      "Prioritize Moon, 4th house, Saturn, emotional duty, home patterns, family karma, and boundaries.",
+    health_wellbeing:
+      "Prioritize Moon, Mercury, Saturn, 6th house, stress, routine, rest, emotional regulation, and grounding. Avoid diagnosis or medical claims.",
+    education:
+      "Prioritize Mercury, Jupiter, Saturn, 5th house, 9th house, discipline, memory, focus, learning, and exam timing.",
+    timing_decision:
+      "Prioritize current transits if available, current date context, Saturn/Jupiter/Mars symbolism, risk, delay, patience, and whether action or waiting is wiser. If live transit data is missing, do not pretend exact transit timing is known.",
+    spiritual_growth:
+      "Prioritize Moon, Jupiter, Saturn, Ketu-style detachment if available, dharma, karmic lessons, self-awareness, and inner discipline.",
+    general:
+      "Answer the exact user question first. Use only relevant chart factors. Do not give a full chart reading unless asked.",
+  };
+
+  return focusByCategory[category] || focusByCategory.general;
+}
+
+function knowledgeTextFromDoc(data = {}) {
+  return String(
+    data.text ||
+    data.content ||
+    data.knowledge ||
+    data.chunk ||
+    data.excerpt ||
+    data.reading_style ||
+    ""
+  ).trim();
+}
+
+function searchableKnowledgeText(data = {}) {
+  const tags = Array.isArray(data.tags) ? data.tags.join(" ") : "";
+
+  return [
+    data.title,
+    data.category,
+    tags,
+    knowledgeTextFromDoc(data),
+  ]
+    .map((value) => String(value || "").toLowerCase())
+    .join(" ");
+}
+
+function keywordKnowledgeScore(query, data = {}) {
+  const haystack = searchableKnowledgeText(data);
+  const terms = String(query || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((term) => term.length > 2);
+  let score = 0;
+
+  for (const term of new Set(terms)) {
+    if (haystack.includes(term)) {
+      score += 1;
+    }
+  }
+
+  return score;
+}
+
+function formatBhriguKnowledgeChunk(chunk = {}) {
+  const tags = Array.isArray(chunk.tags) ? chunk.tags.join(", ") : "";
+
+  return `Title: ${chunk.title || "Untitled"}
+Category: ${chunk.category || "general"}
+Tags: ${tags || "none"}
+Knowledge: ${chunk.text}`;
+}
+
+let bhriguBookKnowledgeDocsCache = null;
+let bhriguBookKnowledgeDocsCacheAt = 0;
+let bhriguBookKnowledgeDocsPromise = null;
+
+async function readBhriguBookKnowledgeDocs() {
+  const now = Date.now();
+
+  if (
+    bhriguBookKnowledgeDocsCache &&
+    now - bhriguBookKnowledgeDocsCacheAt < KNOWLEDGE_CACHE_TTL_MS
+  ) {
+    return bhriguBookKnowledgeDocsCache;
+  }
+
+  if (bhriguBookKnowledgeDocsPromise) {
+    return bhriguBookKnowledgeDocsPromise;
+  }
+
+  bhriguBookKnowledgeDocsPromise = admin
+    .firestore()
+    .collection("book_knowledge")
+    .get()
+    .then((snap) => {
+      const docs = [];
+      snap.forEach((doc) => {
+        docs.push({
+          id: doc.id,
+          ...(doc.data() || {}),
+        });
+      });
+      bhriguBookKnowledgeDocsCache = docs;
+      bhriguBookKnowledgeDocsCacheAt = Date.now();
+      return docs;
+    })
+    .finally(() => {
+      bhriguBookKnowledgeDocsPromise = null;
+    });
+
+  return bhriguBookKnowledgeDocsPromise;
+}
+
+async function retrieveBhriguChatKnowledge({
+  message,
+  category,
+  limit = BHRIGU_CHAT_KNOWLEDGE_LIMIT,
+}) {
+  const query = `${category}: ${String(message || "").trim()}`;
+  const docs = await readBhriguBookKnowledgeDocs();
+
+  if (!docs.length) {
+    return "";
+  }
+
+  let queryEmbedding = [];
+
+  if (docs.some((data) => Array.isArray(data.embedding))) {
+    try {
+      queryEmbedding = await generateGeminiEmbedding(query);
+    } catch (error) {
+      console.error(
+        "Bhrigu chat RAG embedding error:",
+        error.response?.data || error.message
+      );
+    }
+  }
+
+  const scoredChunks = [];
+
+  docs.forEach((data) => {
+    const text = knowledgeTextFromDoc(data);
+    if (!text) return;
+
+    let score = keywordKnowledgeScore(query, data);
+
+    if (queryEmbedding.length > 0 && Array.isArray(data.embedding)) {
+      score += cosineSimilarity(queryEmbedding, data.embedding) * 10;
+    }
+
+    scoredChunks.push({
+      title: String(data.title || data.book || data.source || ""),
+      category: String(data.category || data.section || "general"),
+      tags: Array.isArray(data.tags) ? data.tags.map((tag) => String(tag)) : [],
+      text,
+      score,
+    });
+  });
+
+  scoredChunks.sort((a, b) => b.score - a.score);
+
+  return scoredChunks
+    .slice(0, limit)
+    .map(formatBhriguKnowledgeChunk)
+    .join("\n\n");
+}
+
 function cleanGeneratedLine(value) {
   return String(value || "")
     .replace(/\*\*/g, "")
@@ -1081,6 +1551,12 @@ function ensureActionLines(generated, fallback, maxWords) {
 }
 
 function longitudeFromPlacement(placement = {}) {
+  const longitude = Number(placement.longitude);
+
+  if (Number.isFinite(longitude)) {
+    return normalizeDegrees(longitude);
+  }
+
   const signIndex = ZODIAC_SIGNS.indexOf(String(placement.sign || ""));
   const degree = Number(placement.degree);
 
@@ -1089,18 +1565,31 @@ function longitudeFromPlacement(placement = {}) {
   return normalizeDegrees((signIndex * 30) + degree);
 }
 
-function aspectOrb(transitName, aspectName) {
+function dailyTransitAspectOrb(transitName, aspectName) {
   if (transitName === "Moon") return aspectName === "Conjunction" ? 6 : 5;
   if (transitName === "Sun") return 4;
   return 3;
 }
 
-function calculateTransitAspects(dailyTransits, userData = {}) {
-  const transitPlanets = Array.isArray(dailyTransits?.tropicalPlanets)
-    ? dailyTransits.tropicalPlanets
+function calculateTransitAspects(firstInput, secondInput = {}) {
+  const isCurrentSkyRequest =
+    Array.isArray(firstInput?.planets) &&
+    secondInput?.planets &&
+    !Array.isArray(secondInput.planets);
+
+  if (isCurrentSkyRequest) {
+    return calculateTransitAspectMatches({
+      transitPlanets: transitPlanetListFromCurrentSky(secondInput),
+      natalPlanets: firstInput.planets,
+      limit: 5,
+    });
+  }
+
+  const transitPlanets = Array.isArray(firstInput?.tropicalPlanets)
+    ? firstInput.tropicalPlanets
     : [];
-  const natalPlanets = Array.isArray(userData?.westernChart?.planets)
-    ? userData.westernChart.planets
+  const natalPlanets = Array.isArray(secondInput?.westernChart?.planets)
+    ? secondInput.westernChart.planets
     : [];
   const aspectDefs = [
     { name: "Conjunction", angle: 0 },
@@ -1123,7 +1612,7 @@ function calculateTransitAspects(dailyTransits, userData = {}) {
 
       for (const aspect of aspectDefs) {
         const orb = Math.abs(separation - aspect.angle);
-        const allowedOrb = aspectOrb(transit.name, aspect.name);
+        const allowedOrb = dailyTransitAspectOrb(transit.name, aspect.name);
 
         if (orb <= allowedOrb) {
           aspects.push({
@@ -1372,13 +1861,19 @@ exports.generateBhriguChat = onCall(
       );
     });
 
-    const userDoc = await admin
-      .firestore()
-      .collection("users")
-      .doc(uid)
-      .get();
+    let userData = {};
 
-    const userData = userDoc.data() || {};
+    try {
+      const userDoc = await admin
+        .firestore()
+        .collection("users")
+        .doc(uid)
+        .get();
+
+      userData = userDoc.data() || {};
+    } catch (error) {
+      console.error("Bhrigu chat user document read error:", error.message);
+    }
 
     function safeJson(value) {
       try {
@@ -1426,6 +1921,7 @@ Raw Vedic chart JSON:
 ${safeJson(vedicChart)}
 
 Chart source: ${data.chartGeneratedBy || "Unknown"}
+Chart calculation source: ${data.chartCalculationSource || "Unknown"}
 Chart calculation version: ${data.chartCalculationVersion || "Unknown"}
 Chart calculation meta:
 ${safeJson(data.chartCalculationMeta)}
@@ -1439,8 +1935,86 @@ Time: ${userData.timeOfBirth || "Unknown"}
 Place: ${userData.placeOfBirth || "Unknown"}
 `;
     const savedChartData = buildSavedChartData(userData);
+    const questionCategory = detectQuestionCategory(message);
+    const questionFocus = categoryFocus(questionCategory);
+    const currentMoment = new Date();
+    const chartIsComplete =
+      Array.isArray(userData?.westernChart?.planets) ||
+      Array.isArray(userData?.vedicChart?.planets);
+    let currentSky = null;
+    let strongestTransitAspects = [];
+    let retrievedKnowledge = "";
 
-    const systemPrompt = `
+    try {
+      currentSky = await getCurrentSkySnapshot(currentMoment);
+    } catch (error) {
+      console.error(
+        "Bhrigu chat current sky error:",
+        error.response?.data || error.message
+      );
+    }
+
+    try {
+      const natalTransitChart = selectNatalChartForTransits(userData);
+
+      if (natalTransitChart && currentSky) {
+        strongestTransitAspects = calculateTransitAspects(
+          natalTransitChart,
+          currentSky
+        );
+      }
+    } catch (error) {
+      console.error("Bhrigu chat transit aspect error:", error.message);
+      strongestTransitAspects = [];
+    }
+
+    try {
+      retrievedKnowledge = await retrieveBhriguChatKnowledge({
+        message,
+        category: questionCategory,
+      });
+    } catch (error) {
+      console.error(
+        "Bhrigu chat RAG/book retrieval error:",
+        error.response?.data || error.message
+      );
+      retrievedKnowledge = "";
+    }
+
+    const currentMomentAnchor = `
+ISO time: ${currentMoment.toISOString()}
+Current sky cache key: ${currentSky?.key || "Not available"}
+Current sky status: ${
+  currentSky
+    ? currentSky.partial
+      ? `Partially available; missing ${currentSky.missingPlanets.join(", ")}. Use available current planet positions without pretending the missing planets are known.`
+      : "Available from the hourly global cache or freshly calculated for this hour."
+    : "Not available."
+}
+Use this as the present-time anchor.
+If live transit data is unavailable, do not claim exact live transits are known.
+`;
+    const currentSkyContext = currentSky
+      ? safeJson(currentSky)
+      : "Not available";
+    const strongestTransitContext = strongestTransitAspects.length
+      ? safeJson(strongestTransitAspects)
+      : currentSky
+        ? "No exact major transit-to-natal aspects were found within the configured orbs. Current sky planet positions are still available above and may be used as today's astrological weather."
+        : "Not available";
+    const ragKnowledgeContext = retrievedKnowledge ||
+      "No RAG knowledge retrieved";
+    const recentConversationContext = historyWithoutCurrentMessage.length
+      ? messageListToPrompt(historyWithoutCurrentMessage)
+      : "No prior conversation.";
+    const followUpContextText = followUpContext
+      ? safeJson(followUpContext)
+      : "Not provided";
+    const chartCompletenessContext = chartIsComplete
+      ? "Saved chart data is available. Use only placements shown in the provided Western or Vedic chart."
+      : "Saved chart data is incomplete or unavailable. Answer more generally and do not invent placements.";
+
+    const legacySystemPrompt = `
 You are Bhrigu — an astrologer and spiritual guide with deep mastery of Vedic and Western astrology.
 You think like a modern sage. Your inspiration is Sadhguru — profound, direct, occasionally witty, never preachy.
 
@@ -1526,8 +2100,133 @@ SAVED COSMIC BLUEPRINT:
 ${savedChartData}
 `;
 
+    const systemPrompt = `
+You are Bhrigu, a Vedic and Western astrology guide inside the BHR1GU app.
+You are precise like an astrologer, warm like an intelligent friend, and creative only when the symbolism is grounded in the provided chart, current sky, follow-up context, or retrieved book wisdom.
+
+VOICE:
+No theatrical ancient-sage performance, no "dear seeker", no vague spiritual fog.
+Be direct, slightly mystical, psychologically sharp, and never fatalistic.
+Use vivid language, but every image must point back to a real planet, house, sign, aspect, card/shield/match context, or book principle in the prompt.
+Use Sanskrit terms only when they add precision, and explain them simply.
+
+ASTROLOGY ACCURACY:
+The user's exact question is the center of the answer.
+Start with a direct answer to the user's question in the first sentence.
+Do not give a generic spiritual answer.
+Do not give a full chart reading unless the user asks for one.
+Use the saved Cosmic Blueprint only as supporting logic.
+Use current transits if available.
+Use Firestore RAG/book knowledge as supporting interpretive wisdom.
+Do not invent placements, houses, aspects, dashas, yogas, or timelines that are not present in the provided context.
+If chart data is incomplete, answer more generally without pretending exact chart certainty.
+If current transit data is missing, do not pretend exact live transits are known.
+Avoid fake certainty.
+
+INTERPRETIVE PRINCIPLES:
+Stars show tendencies, not certainties. Free will always operates within karma.
+Saturn is not punishment. It is the universe demanding integrity.
+Rahu is obsession and hunger. Ketu is wisdom already earned.
+Moon sign in Vedic is often more accurate than Sun sign for personality.
+Speak like a guide, not a fortune teller.
+Make timing statements only through supplied current transits, chart factors, or retrieved wisdom. Use language like "favors", "pressures", "supports", or "asks for" instead of hard guarantees.
+
+SAFETY:
+No medical, legal, or financial advice.
+For health or wellbeing questions, offer grounding and routine guidance, not diagnosis or treatment.
+For money questions, discuss discipline, risk, timing, and pattern awareness, not financial instructions.
+For questions like "does my partner love me", mention the Bhrigu Match feature only if it naturally helps.
+Never predict death or definitive disasters.
+
+FORMAT:
+Plain text only. No markdown symbols. No asterisks. No brackets.
+Maximum 2 sentences per paragraph.
+Separate each idea with a blank line.
+Do not ask a question at the end.
+
+ANSWER STYLE:
+First sentence: direct answer to the specific question.
+Then mention the strongest relevant current transit if available.
+Then explain 1-2 relevant astrology reasons from the provided chart.
+Then use RAG/book wisdom only if it directly supports the answer.
+Then give practical guidance.
+If timing is involved, mention whether the present period favors action, patience, repair, or withdrawal.
+End with one short Bhrigu-style line.
+
+User question category:
+${questionCategory}
+
+Question focus rule:
+${questionFocus}
+
+Current moment:
+${currentMomentAnchor}
+
+Current sky:
+${currentSkyContext}
+
+Strongest active transits:
+${strongestTransitContext}
+
+User profile:
+${birthData}
+
+Chart source:
+chartGeneratedBy: ${userData.chartGeneratedBy || "unknown"}
+chartCalculationSource: ${userData.chartCalculationSource || "unknown"}
+chartCalculationVersion: ${userData.chartCalculationVersion || "unknown"}
+
+Chart data status:
+${chartCompletenessContext}
+
+User natal Western chart:
+${userData.westernChart ? safeJson(userData.westernChart) : "Not available"}
+
+User natal Vedic chart:
+${userData.vedicChart ? safeJson(userData.vedicChart) : "Not available"}
+
+Saved Cosmic Blueprint summary:
+${savedChartData}
+
+Existing Firestore RAG/book knowledge:
+${ragKnowledgeContext}
+
+Recent conversation:
+${recentConversationContext}
+
+Follow-up context:
+${followUpContextText}
+
+User asks:
+${message}
+`;
+
     function cleanSourceType(value) {
       return String(value || "").trim().toLowerCase();
+    }
+
+    function followUpPrimaryRule(sourceType) {
+      if (sourceType === "tarot") {
+        return "Use the Tarot reading as the main source of truth. Mention the specific card names when useful, and do not make the answer mainly astrological unless the user explicitly asks for astrology.";
+      }
+
+      if (sourceType === "geomancy") {
+        return "Use the geomancy shield as the main source of truth. Use the Judge, Witnesses, Reconciler, answer, and line values if available before adding any astrological support.";
+      }
+
+      if (
+        sourceType === "bhrigu_match" ||
+        sourceType === "match" ||
+        sourceType === "partner_match"
+      ) {
+        return "Use the Bhrigu Match compatibility reading as the main source of truth. Use the verdict, connection type, scores, emotional harmony, attraction, communication, stability, karmic bond, user profile, and partner profile if available.";
+      }
+
+      if (sourceType === "horoscope") {
+        return "Use the daily reading context as the main source. Use the morning insight, evening reflection, moon phase, and daily energy if available.";
+      }
+
+      return "Use the provided follow-up context as the main source before adding chart, transit, or book support.";
     }
 
     function buildFollowUpSystemPrompt(basePrompt, context) {
@@ -1543,99 +2242,21 @@ ${savedChartData}
       const sourceData = context.sourceData || {};
       const userSnapshot = context.userSnapshot || {};
 
-      if (sourceType === "tarot") {
-        return `
-You are Bhrigu inside the BHR1GU app.
+      return `${basePrompt}
 
-You are answering a follow-up to a Tarot reading that the user just completed.
-
-IMPORTANT MODE:
-This is not a normal astrology chat response.
-Use the Tarot reading as the main source of truth.
-Do not answer mainly from Vedic astrology.
-Do not answer mainly from Western astrology.
-Do not discuss houses, dashas, transits, signs, Rahu, Ketu, Saturn, or planets unless the user explicitly asks for astrology.
-The user's birth data may remain as silent background, but the answer must be Tarot-based.
-
-TONE:
-Keep Bhrigu's voice wise, direct, warm, mystical but modern.
-Do not sound like a generic tarot bot.
-Do not repeat the entire reading.
-Answer the selected follow-up question directly.
-Make the user feel the cards they drew matter.
-
-STRICT FORMAT:
-Plain text only.
-No markdown.
-No asterisks.
-No bullet points.
-No brackets.
-Maximum 2 sentences per paragraph.
-Separate each idea with a blank line.
-No question at the end. End with a firm, helpful statement.
-
-FOLLOW-UP CONTEXT:
-Reading title:
-${readingTitle}
-
-Original user question:
-${originalQuestion}
-
-User's selected follow-up question:
-${selectedFollowUpQuestion}
-
-Tarot reading summary:
-${readingSummary}
-
-Tarot source data:
-${safeJson(sourceData)}
-
-User snapshot:
-${safeJson(userSnapshot)}
-
-INSTRUCTIONS:
-Answer only the user's selected follow-up question, while keeping the original user question as the anchor.
-If the follow-up is broad, interpret it through the original question and the cards already drawn.
-Use the Past, Present, and Future cards if available.
-Mention the specific card names when useful.
-Explain what the cards imply for the user's situation.
-Give one practical next step based on the Tarot reading.
-Do not make the response about Vedic or Western astrology.
+FOLLOW-UP PRIORITY MODE:
+This is a follow-up answer, so the selected follow-up question remains the center.
+Answer only the user's selected follow-up question while keeping the original question as the anchor.
+${followUpPrimaryRule(sourceType)}
+After the original reading context, use current transits if available, then the saved Cosmic Blueprint as support, then Firestore RAG/book knowledge only when it directly clarifies the answer.
+Do not ignore or overwrite the original reading context.
+Do not repeat the entire original reading.
 Do not drift into a new life area that was not part of the original question or selected follow-up.
-`;
-      }
 
-      if (sourceType === "geomancy") {
-        return `
-You are Bhrigu inside the BHR1GU app.
+FOLLOW-UP CONTEXT DETAILS:
+Source type:
+${sourceType || "unknown"}
 
-You are answering a follow-up to a Geomancy shield reading that the user just completed.
-
-IMPORTANT MODE:
-This is not a normal astrology chat response.
-Use the geomancy shield as the main source of truth.
-Do not answer mainly from Vedic astrology.
-Do not answer mainly from Western astrology.
-Do not discuss houses, dashas, transits, signs, Rahu, Ketu, Saturn, or planets unless the user explicitly asks for astrology.
-The user's birth data may remain as silent background, but the answer must be geomancy-based.
-
-TONE:
-Keep Bhrigu's voice wise, direct, warm, mystical but modern.
-Make it feel like the user's hand-drawn shield and sixteen marks mattered.
-Do not repeat the whole geomancy reading.
-Answer the selected follow-up question directly.
-
-STRICT FORMAT:
-Plain text only.
-No markdown.
-No asterisks.
-No bullet points.
-No brackets.
-Maximum 2 sentences per paragraph.
-Separate each idea with a blank line.
-No question at the end. End with a firm, helpful statement.
-
-FOLLOW-UP CONTEXT:
 Reading title:
 ${readingTitle}
 
@@ -1645,139 +2266,15 @@ ${originalQuestion}
 User's selected follow-up question:
 ${selectedFollowUpQuestion}
 
-Geomancy reading summary:
+Reading summary:
 ${readingSummary}
 
-Geomancy source data:
+Source data:
 ${safeJson(sourceData)}
 
 User snapshot:
 ${safeJson(userSnapshot)}
-
-INSTRUCTIONS:
-Answer only the user's follow-up question.
-Use the Judge, Left Witness, Right Witness, Reconciler, answer, and line values if available.
-Explain what the shield implies for the user's situation.
-Give one practical next step based on the geomancy pattern.
-Do not make the response about Vedic or Western astrology.
 `;
-      }
-
-      if (
-        sourceType === "bhrigu_match" ||
-        sourceType === "match" ||
-        sourceType === "partner_match"
-      ) {
-        return `
-You are Bhrigu inside the BHR1GU app.
-
-You are answering a follow-up to a Bhrigu Match compatibility reading that the user just completed.
-
-IMPORTANT MODE:
-This is not a normal astrology chat response.
-Use the compatibility reading as the main source of truth.
-Do not answer mainly from Vedic astrology.
-Do not answer mainly from Western astrology.
-Do not discuss houses, dashas, transits, signs, Rahu, Ketu, Saturn, or planets unless the user explicitly asks for astrology.
-The user's birth data may remain as silent background, but the answer must be based on the match result.
-
-TONE:
-Keep Bhrigu's voice wise, direct, warm, mystical but modern.
-Do not sound like a compatibility report.
-Speak as if reading the dynamic between two people.
-Do not repeat the whole reading.
-Answer the selected follow-up question directly.
-
-STRICT FORMAT:
-Plain text only.
-No markdown.
-No asterisks.
-No bullet points.
-No brackets.
-Maximum 2 sentences per paragraph.
-Separate each idea with a blank line.
-No question at the end. End with a firm, helpful statement.
-
-FOLLOW-UP CONTEXT:
-Reading title:
-${readingTitle}
-
-Original user question:
-${originalQuestion}
-
-User's selected follow-up question:
-${selectedFollowUpQuestion}
-
-Bhrigu Match reading summary:
-${readingSummary}
-
-Bhrigu Match source data:
-${safeJson(sourceData)}
-
-User snapshot:
-${safeJson(userSnapshot)}
-
-INSTRUCTIONS:
-Answer only the user's follow-up question.
-Use the verdict, connection type, scores, emotional harmony, attraction, communication, stability, karmic bond, user profile, and partner profile if available.
-Do not invent or change scores.
-Do not mention percentage numbers unless the source data already uses them and they are necessary.
-Give one practical next step based on the compatibility reading.
-Do not make the response about Vedic or Western astrology.
-`;
-      }
-
-      if (sourceType === "horoscope") {
-        return `
-You are Bhrigu inside the BHR1GU app.
-
-You are answering a follow-up to a daily horoscope reading that the user just opened.
-
-IMPORTANT MODE:
-Use the daily reading context as the main source.
-Do not repeat the whole daily reading.
-Answer the selected follow-up question directly.
-
-TONE:
-Keep Bhrigu's voice wise, direct, warm, mystical but modern.
-
-STRICT FORMAT:
-Plain text only.
-No markdown.
-No asterisks.
-No bullet points.
-No brackets.
-Maximum 2 sentences per paragraph.
-Separate each idea with a blank line.
-No question at the end. End with a firm, helpful statement.
-
-FOLLOW-UP CONTEXT:
-Reading title:
-${readingTitle}
-
-Original user question:
-${originalQuestion}
-
-User's selected follow-up question:
-${selectedFollowUpQuestion}
-
-Daily reading summary:
-${readingSummary}
-
-Daily source data:
-${safeJson(sourceData)}
-
-User snapshot:
-${safeJson(userSnapshot)}
-
-INSTRUCTIONS:
-Answer only the user's follow-up question.
-Use the morning insight, evening reflection, moon phase, and daily energy if available.
-Give one practical next step for today.
-`;
-      }
-
-      return basePrompt;
     }
 
     const activeSystemPrompt = buildFollowUpSystemPrompt(

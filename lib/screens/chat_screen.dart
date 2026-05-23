@@ -44,6 +44,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Timer? _hintTimer;
   int _hintIndex = 0;
 
+  static const String _ephemerisTrustLine =
+      'Planetary positions calculated using NASA/JPL Horizons ephemeris data.';
   static const int _apiHistoryLimit = 5;
 
   late final AnimationController _pulseController;
@@ -482,13 +484,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'BHRIGU',
-                style: GoogleFonts.cinzel(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2.0,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'BHRIGU',
+                      style: GoogleFonts.cinzel(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 2.0,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _ephemerisTrustLine,
+                      maxLines: 2,
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFFB58E34).withValues(alpha: 0.52),
+                        fontSize: 8.8,
+                        height: 1.25,
+                        fontWeight: FontWeight.w400,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               Row(

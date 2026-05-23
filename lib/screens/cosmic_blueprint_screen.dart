@@ -12,13 +12,13 @@ class CosmicBlueprintScreen extends StatefulWidget {
   const CosmicBlueprintScreen({super.key});
 
   @override
-  State<CosmicBlueprintScreen> createState() =>
-      _CosmicBlueprintScreenState();
+  State<CosmicBlueprintScreen> createState() => _CosmicBlueprintScreenState();
 }
 
-class _CosmicBlueprintScreenState
-    extends State<CosmicBlueprintScreen> {
+class _CosmicBlueprintScreenState extends State<CosmicBlueprintScreen> {
   final PageController _pageController = PageController();
+  static const String _ephemerisTrustLine =
+      'Planetary positions calculated using NASA/JPL Horizons ephemeris data.';
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +40,6 @@ class _CosmicBlueprintScreenState
               ),
             ),
           ),
-
           Positioned(
             top: -120,
             left: -80,
@@ -63,7 +62,6 @@ class _CosmicBlueprintScreenState
                   end: const Offset(1.1, 1.1),
                 ),
           ),
-
           SafeArea(
             child: Column(
               children: [
@@ -92,23 +90,38 @@ class _CosmicBlueprintScreenState
                           ),
                         ),
                       ),
-
                       const SizedBox(width: 16),
-
-                      Text(
-                        'Cosmic Blueprint',
-                        style: GoogleFonts.inter(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Cosmic Blueprint',
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              _ephemerisTrustLine,
+                              maxLines: 2,
+                              style: GoogleFonts.inter(
+                                color: Colors.white.withValues(alpha: 0.42),
+                                fontSize: 10,
+                                height: 1.25,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 10),
-
                 Expanded(
                   child: PageView(
                     controller: _pageController,
@@ -120,9 +133,7 @@ class _CosmicBlueprintScreenState
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 18),
-
                 SmoothPageIndicator(
                   controller: _pageController,
                   count: 4,
@@ -133,7 +144,6 @@ class _CosmicBlueprintScreenState
                     dotColor: Colors.white24,
                   ),
                 ),
-
                 const SizedBox(height: 28),
               ],
             ),
