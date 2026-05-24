@@ -1,0 +1,1479 @@
+part of '../home_screen.dart';
+
+extension _HomeScreenSections on _HomeScreenState {
+  Widget _homeLoadingPage() {
+    return Scaffold(
+      backgroundColor: const Color(0xFF03010A),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF020008),
+                  Color(0xFF080214),
+                  Color(0xFF17062A),
+                  Color(0xFF07010F),
+                ],
+                stops: [0.0, 0.38, 0.72, 1.0],
+              ),
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(0.18, -0.12),
+                radius: 0.82,
+                colors: [
+                  const Color(0xFF4A148C).withValues(alpha: 0.36),
+                  const Color(0xFF14051F).withValues(alpha: 0.18),
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.46, 1.0],
+              ),
+            ),
+          ),
+          CustomPaint(
+            painter: _CosmicLoadingBackgroundPainter(),
+          ),
+          Center(
+            child: AnimatedBuilder(
+              animation: _plasmaController,
+              builder: (context, child) => Container(
+                width: 112,
+                height: 112,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFE040FB).withValues(alpha: 0.22),
+                      blurRadius: 42,
+                      spreadRadius: 8,
+                    ),
+                    BoxShadow(
+                      color: const Color(0xFF00E5FF).withValues(alpha: 0.10),
+                      blurRadius: 32,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: SizedBox(
+                  width: 76,
+                  height: 76,
+                  child: CustomPaint(
+                    painter: _TeslaGlobePainter(_plasmaController.value),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _welcomeHeader(String name, String sunSign) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _todayFormatted(),
+          style: const TextStyle(
+            fontSize: 12,
+            color: Color(0xFF6B6080),
+            letterSpacing: 1.5,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: RichText(
+                text: TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '${_greeting()}, ',
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w300,
+                        color: Color(0xFFF0ECF8),
+                      ),
+                    ),
+                    TextSpan(
+                      text: name,
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF9D6FE8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                GestureDetector(
+                  onTap: () => context.push('/profile'),
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1630),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFF2E2650),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.person_outline,
+                      color: Color(0xFFB58E34),
+                      size: 22,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 50,
+                  top: -4,
+                  child: IgnorePointer(
+                    child: AnimatedOpacity(
+                      opacity: _showCosmicBlueprintHint ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 350),
+                      child: Container(
+                        width: 155,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 9,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1A1630),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color:
+                                const Color(0xFFB58E34).withValues(alpha: 0.45),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.25),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Text(
+                          'View your cosmic blueprint here',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 11,
+                            height: 1.25,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFC7A867),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          sunSign,
+          style: const TextStyle(
+            fontSize: 13,
+            color: Color(0xFFF59E0B),
+            letterSpacing: 1,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionLabel(String label) {
+    return Text(
+      label,
+      style: const TextStyle(
+        fontSize: 11,
+        color: Color(0xFF6B6080),
+        letterSpacing: 2,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+  }
+
+  Widget _horoscopeCard() {
+    return GestureDetector(
+      onTap: _revealHoroscope,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 400),
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF2E1065), Color(0xFF1A1630)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF6B21A8), width: 0.5),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: _horoscopeLoading
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator(
+                    color: Color(0xFF9D6FE8),
+                    strokeWidth: 2,
+                  ),
+                ),
+              )
+            : _horoscope == null
+                ? const Text(
+                    'Could not load today\'s reading. Pull to refresh.',
+                    style: TextStyle(color: Color(0xFF6B6080)),
+                  )
+                : _horoscopeRevealed
+                    ? FadeTransition(
+                        opacity: _envelopeFade,
+                        child: _horoscopePremiumReading(),
+                      )
+                    : _envelopeLocked(),
+      ),
+    );
+  }
+
+  Widget _envelopeLocked() {
+    return Column(
+      children: [
+        SizedBox(
+          width: 72,
+          height: 54,
+          child: CustomPaint(painter: _EnvelopePainter()),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'TAP TO OPEN YOUR READING',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF9D6FE8),
+            letterSpacing: 1.5,
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Sealed with cosmic intent',
+          style: TextStyle(fontSize: 12, color: Color(0xFF6B6080)),
+        ),
+      ],
+    );
+  }
+
+  // ignore: unused_element
+  Widget _horoscopeContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Text('🌅', style: TextStyle(fontSize: 14)),
+            SizedBox(width: 8),
+            Text(
+              'MORNING INSIGHT',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFFF59E0B),
+                letterSpacing: 2,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(
+          _horoscope!['morning'] ?? '',
+          style: const TextStyle(
+            fontSize: 14,
+            height: 1.6,
+            color: Color(0xFFF0ECF8),
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Divider(color: Color(0xFF2E2650)),
+        const SizedBox(height: 16),
+        const Row(
+          children: [
+            Text('🌙', style: TextStyle(fontSize: 14)),
+            SizedBox(width: 8),
+            Text(
+              'EVENING REFLECTION',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF9D6FE8),
+                letterSpacing: 2,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(
+          _horoscope!['evening'] ?? '',
+          style: const TextStyle(
+            fontSize: 14,
+            height: 1.6,
+            color: Color(0xFFF0ECF8),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _horoscopePremiumReading() {
+    final bhriguToday = _horoscopeText(
+      'bhriguToday',
+      fallback: _horoscopeText(
+        'morning',
+        fallback: 'Notice what keeps asking for your attention.',
+      ),
+    );
+    final yourTransit = _horoscopeText(
+      'yourTransit',
+      fallback: _horoscopeText(
+        'evening',
+        fallback: 'Today asks for patience before reaction.',
+      ),
+    );
+    final doText = _horoscopeText(
+      'doText',
+      fallback: _horoscopeJoinedList(
+        'doLines',
+        fallback: 'Choose one clean action and finish it before seeking signs.',
+      ),
+    );
+    final avoidText = _horoscopeText(
+      'avoidText',
+      fallback: _horoscopeJoinedList(
+        'avoidLines',
+        fallback: 'Avoid turning silence into evidence, drama, or prophecy.',
+      ),
+    );
+    final relationships = _horoscopeText(
+      'relationships',
+      fallback: 'Let consistency matter more than charm today.',
+    );
+    final workMoney = _horoscopeText(
+      'workMoney',
+      fallback: 'Small discipline brings more luck than big ambition.',
+    );
+    final innerWeather = _horoscopeText(
+      'innerWeather',
+      fallback: 'Calm outside does not always mean settled inside.',
+    );
+    final mantra = _horoscopeText(
+      'mantra',
+      fallback: 'Do not romanticize what costs your peace.',
+    );
+    final today = DateTime.now();
+    final horoscopeContentId =
+        'horoscope_${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    final horoscopeReportText = [
+      bhriguToday,
+      yourTransit,
+      doText,
+      avoidText,
+      relationships,
+      workMoney,
+      innerWeather,
+      mantra,
+    ].where((text) => text.trim().isNotEmpty).join('\n\n');
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF1E1430),
+            Color(0xFF0F0A18),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: const Color(0xFFC7A867).withValues(alpha: 0.3),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _horoscopeHook(bhriguToday),
+          const SizedBox(height: 24),
+          const Divider(color: Color(0xFF2E2650)),
+          const SizedBox(height: 20),
+          _horoscopeTransit(yourTransit),
+          const SizedBox(height: 24),
+          _horoscopeActionParagraphCards(
+            doText: doText,
+            avoidText: avoidText,
+          ),
+          const SizedBox(height: 24),
+          _horoscopeLifeArea(
+            label: 'RELATIONSHIPS',
+            text: relationships,
+          ),
+          _horoscopeLifeArea(
+            label: 'WORK / MONEY',
+            text: workMoney,
+          ),
+          _horoscopeLifeArea(
+            label: 'INNER WEATHER',
+            text: innerWeather,
+            bottomGap: 0,
+          ),
+          const SizedBox(height: 24),
+          _horoscopeMantra(mantra),
+          Align(
+            alignment: Alignment.centerRight,
+            child: AiReportButton(
+              feature: 'horoscope',
+              contentId: horoscopeContentId,
+              contentText: horoscopeReportText,
+              label: 'Report',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _horoscopeHook(String text) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          'BHRIGU TODAY',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.cinzel(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 3,
+            color: const Color(0xFF6B6080),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          text,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.cormorantGaramond(
+            fontSize: 24,
+            fontStyle: FontStyle.italic,
+            height: 1.4,
+            color: const Color(0xFFE5D5F5),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _horoscopeTransit(String text) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'YOUR TRANSIT',
+          style: GoogleFonts.cinzel(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2,
+            color: const Color(0xFFC7A867),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          text,
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            height: 1.5,
+            color: const Color(0xFFB8AEE0),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _horoscopeActionParagraphCards({
+    required String doText,
+    required String avoidText,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stackCards = constraints.maxWidth < 330;
+        final doCard = _horoscopeActionParagraphCard(
+          label: 'DO',
+          text: doText,
+          accent: const Color(0xFFE8B530),
+          textColor: const Color(0xFFE5D5F5),
+        );
+        final avoidCard = _horoscopeActionParagraphCard(
+          label: 'AVOID',
+          text: avoidText,
+          accent: const Color(0xFFE040FB),
+          textColor: const Color(0xFFD8B4E2),
+        );
+
+        if (stackCards) {
+          return Column(
+            children: [
+              doCard,
+              const SizedBox(height: 12),
+              avoidCard,
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: doCard),
+            const SizedBox(width: 12),
+            Expanded(child: avoidCard),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _horoscopeActionParagraphCard({
+    required String label,
+    required String text,
+    required Color accent,
+    required Color textColor,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF050408).withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withValues(alpha: 0.24)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.cinzel(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 2,
+              color: accent,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            text,
+            style: GoogleFonts.cormorantGaramond(
+              fontSize: 16,
+              height: 1.42,
+              color: textColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ignore: unused_element
+  Widget _horoscopeActionCards({
+    required List<String> doLines,
+    required List<String> avoidLines,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stackCards = constraints.maxWidth < 330;
+        final doCard = _horoscopeActionCard(
+          label: 'DO',
+          lines: doLines,
+          accent: const Color(0xFFE8B530),
+          bullet: '✦',
+          textColor: const Color(0xFFE5D5F5),
+        );
+        final avoidCard = _horoscopeActionCard(
+          label: 'AVOID',
+          lines: avoidLines,
+          accent: const Color(0xFFE040FB),
+          bullet: '◌',
+          textColor: const Color(0xFFD8B4E2),
+        );
+
+        if (stackCards) {
+          return Column(
+            children: [
+              doCard,
+              const SizedBox(height: 12),
+              avoidCard,
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: doCard),
+            const SizedBox(width: 12),
+            Expanded(child: avoidCard),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _horoscopeActionCard({
+    required String label,
+    required List<String> lines,
+    required Color accent,
+    required String bullet,
+    required Color textColor,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF050408).withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: accent.withValues(alpha: 0.24),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.cinzel(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 2,
+              color: accent,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...lines.map(
+            (line) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    bullet,
+                    style: TextStyle(
+                      color: accent,
+                      fontSize: 13,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      line,
+                      style: GoogleFonts.cormorantGaramond(
+                        fontSize: 16,
+                        height: 1.35,
+                        color: textColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _horoscopeText(String key, {String fallback = ''}) {
+    final value = (_horoscope?[key] as String? ?? '').trim();
+    return value.isEmpty ? fallback : value;
+  }
+
+  // ignore: unused_element
+  List<String> _horoscopeList(
+    String key, {
+    required List<String> fallback,
+  }) {
+    final value = _horoscope?[key];
+
+    if (value is List) {
+      final lines = value
+          .map((item) => item.toString().trim())
+          .where((item) => item.isNotEmpty)
+          .toList();
+
+      if (lines.isNotEmpty) return lines;
+    }
+
+    return fallback;
+  }
+
+  String _horoscopeJoinedList(String key, {required String fallback}) {
+    final value = _horoscope?[key];
+
+    if (value is List) {
+      final lines = value
+          .map((item) => item.toString().trim())
+          .where((item) => item.isNotEmpty)
+          .toList();
+
+      if (lines.isNotEmpty) return lines.join(' ');
+    }
+
+    return fallback;
+  }
+
+  Widget _horoscopeLifeArea({
+    required String label,
+    required String text,
+    double bottomGap = 20,
+  }) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomGap),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.cinzel(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 2,
+              color: const Color(0xFF6B6080),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 2,
+                height: 44,
+                margin: const EdgeInsets.only(top: 4, right: 14),
+                color: const Color(0xFFC7A867).withValues(alpha: 0.4),
+              ),
+              Expanded(
+                child: Text(
+                  text,
+                  style: GoogleFonts.cormorantGaramond(
+                    fontSize: 18,
+                    height: 1.5,
+                    color: const Color(0xFFD4D4CE),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _horoscopeMantra(String mantra) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF050408).withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(
+          color: const Color(0xFF9D6FE8).withValues(alpha: 0.26),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFE8B530).withValues(alpha: 0.12),
+            blurRadius: 22,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Text(
+            'MANTRA',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.cinzel(
+              fontSize: 10,
+              letterSpacing: 4,
+              color: const Color(0xFF9D6FE8),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            mantra,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.cinzel(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              height: 1.35,
+              color: const Color(0xFFE8B530),
+              shadows: [
+                Shadow(
+                  color: const Color(0xFFE8B530).withValues(alpha: 0.55),
+                  blurRadius: 14,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ignore: unused_element
+  Widget _horoscopeReadingSection({
+    required String label,
+    required Widget child,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF130D1E),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF2E1A4A)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 2,
+            height: 38,
+            margin: const EdgeInsets.only(top: 4, right: 14),
+            color: const Color(0xFF8A6B22).withValues(alpha: 0.62),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFFB58E34),
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                child,
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ignore: unused_element
+  Widget _horoscopeLineList(List<String> lines) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: lines.map((line) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            line,
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.42,
+              color: Color(0xFFD4D4CE),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // ignore: unused_element
+  Widget _horoscopeBodyText(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 14,
+        height: 1.55,
+        color: Color(0xFFD4D4CE),
+        fontWeight: FontWeight.w500,
+      ),
+    );
+  }
+
+  Widget _moonPhaseCard({
+    required MoonPhaseInfo moonPhaseInfo,
+    required String subtitle,
+  }) {
+    return _cosmicStatusCard(
+      label: 'MOON PHASE',
+      mainIcon: moonPhaseInfo.icon,
+      title: moonPhaseInfo.name,
+      subtitle: subtitle,
+      orbAccent: const Color(0xFF9D6FE8),
+      titleColor: const Color(0xFFF0ECF8),
+      isMoonCard: true,
+    );
+  }
+
+  Widget _dailyEnergyCard(
+    DailyEnergyInfo energy, {
+    required String subtitle,
+  }) {
+    final symbol = energy.symbol;
+    final planet = energy.planet;
+
+    return _cosmicStatusCard(
+      label: 'DAILY ENERGY',
+      mainIcon: symbol,
+      title: planet,
+      subtitle: subtitle,
+      orbAccent: const Color(0xFFF59E0B),
+      titleColor: const Color(0xFFF59E0B),
+      isMoonCard: false,
+    );
+  }
+
+  Widget _cosmicStatusCard({
+    required String label,
+    required String mainIcon,
+    required String title,
+    required String subtitle,
+    required Color orbAccent,
+    required Color titleColor,
+    required bool isMoonCard,
+  }) {
+    final titleWords = title.trim().split(RegExp(r'\s+'));
+
+    Widget titleWidget;
+
+    if (isMoonCard) {
+      titleWidget = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: titleWords.map((word) {
+          return Text(
+            word,
+            style: TextStyle(
+              fontSize: 14,
+              color: titleColor,
+              height: 1.12,
+              fontWeight: FontWeight.w800,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.clip,
+          );
+        }).toList(),
+      );
+    } else {
+      titleWidget = FittedBox(
+        alignment: Alignment.centerLeft,
+        fit: BoxFit.scaleDown,
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: 13,
+            color: titleColor,
+            height: 1.18,
+            fontWeight: FontWeight.w800,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.clip,
+        ),
+      );
+    }
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 178),
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFF1A1630),
+            const Color(0xFF171228).withValues(alpha: 0.92),
+            const Color(0xFF0D0B1E).withValues(alpha: 0.95),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF2E2650)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: AnimatedBuilder(
+        animation: _plasmaController,
+        builder: (context, child) {
+          final pulse = isMoonCard
+              ? 0.55
+              : 0.55 + math.sin(_plasmaController.value * math.pi * 2) * 0.18;
+
+          final glowOpacity = (0.16 + pulse * 0.18).clamp(0.0, 1.0);
+          final softOpacity = (0.08 + pulse * 0.08).clamp(0.0, 1.0);
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Color(0xFF6B6080),
+                  letterSpacing: 1.2,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.clip,
+              ),
+              const SizedBox(height: 11),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFF0B0F19),
+                      border: Border.all(
+                        color: orbAccent.withValues(alpha: 0.45),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: orbAccent.withValues(alpha: glowOpacity),
+                          blurRadius: 18,
+                          spreadRadius: 2,
+                        ),
+                        BoxShadow(
+                          color: const Color(0xFFC7A867)
+                              .withValues(alpha: softOpacity),
+                          blurRadius: 24,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: isMoonCard
+                          ? _MoonPhaseAsset(
+                              phaseIcon: mainIcon,
+                            )
+                          : Text(
+                              mainIcon,
+                              style: const TextStyle(fontSize: 25),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: titleWidget,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 9,
+                  vertical: 9,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D0B1E).withValues(alpha: 0.46),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFFB58E34).withValues(alpha: 0.20),
+                  ),
+                ),
+                child: Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    color: Color(0xFFC7A867),
+                    height: 1.35,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  softWrap: true,
+                  maxLines: 6,
+                  overflow: TextOverflow.clip,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _angelNumberCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1630),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF2E2650)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Text('✨', style: TextStyle(fontSize: 14)),
+              SizedBox(width: 6),
+              Text(
+                'ANGEL NUMBER',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF6B6080),
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _angelNumber['number']!,
+            style: const TextStyle(
+              fontSize: 34,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFFF59E0B),
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: Text(
+              _angelNumber['meaning']!,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFFF0ECF8),
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _bhriguCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1630),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF2E2650)),
+      ),
+      child: Column(
+        children: [
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'ASK BHRIGU',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF6B6080),
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          GestureDetector(
+            onTap: _askBhrigu,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFB58E34)
+                        .withValues(alpha: _bhriguGlowing ? 0.6 : 0.0),
+                    blurRadius: _bhriguGlowing ? 30 : 0,
+                    spreadRadius: _bhriguGlowing ? 8 : 0,
+                  ),
+                ],
+              ),
+              child: AnimatedBuilder(
+                animation: _plasmaController,
+                builder: (context, child) => CustomPaint(
+                  painter: _TeslaGlobePainter(_plasmaController.value),
+                ),
+              ),
+            ),
+          ),
+          const Spacer(),
+          _bhriguAnswer.isEmpty
+              ? const Text(
+                  'TAP TO ASK',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF6B6080),
+                    letterSpacing: 1,
+                  ),
+                )
+              : Text(
+                  _bhriguAnswer,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFE5D5F5),
+                  ),
+                ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dreamCard() {
+    final todayClaimed = _isTodayClaimed();
+    final progressPercent = (_displayedRoadProgress * 100).round();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF1A1630),
+            Color(0xFF211637),
+            Color(0xFF0D0B1E),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: const Color(0xFFB58E34).withValues(alpha: 0.42),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: _streakLoading
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: CircularProgressIndicator(
+                  color: Color(0xFFB58E34),
+                  strokeWidth: 2,
+                ),
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    AnimatedBuilder(
+                      animation: _plasmaController,
+                      builder: (context, child) {
+                        final glow = 0.35 +
+                            math.sin(_plasmaController.value * math.pi * 2) *
+                                0.18;
+
+                        return Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFF2E1065),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFB58E34)
+                                    .withValues(alpha: glow),
+                                blurRadius: 15,
+                                spreadRadius: 1.5,
+                              ),
+                            ],
+                            border: Border.all(
+                              color: const Color(0xFFB58E34)
+                                  .withValues(alpha: 0.62),
+                            ),
+                          ),
+                          child: const Center(
+                            child: Icon(
+                              Icons.local_fire_department_rounded,
+                              color: Color(0xFFF59E0B),
+                              size: 20,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'STREAK REWARDS',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.6,
+                              color: Color(0xFFC7A867),
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Gift unlocks every 4 days',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFF0ECF8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 44,
+                  width: double.infinity,
+                  child: AnimatedBuilder(
+                    animation: _plasmaController,
+                    builder: (context, child) {
+                      final pulse = 0.75 +
+                          math.sin(_plasmaController.value * math.pi * 2) *
+                              0.25;
+
+                      return CustomPaint(
+                        painter: _StreakRoadPainter(
+                          progress: _displayedRoadProgress.clamp(0.0, 1.0),
+                          pulse: pulse,
+                          unlocked: _freeRewardAvailable,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 9),
+                Text(
+                  _freeRewardAvailable
+                      ? 'Your gift contains a free ${_freeRewardType == 'geomancy' ? 'Geomancy' : 'Tarot'} reading.'
+                      : todayClaimed
+                          ? 'Claimed today. Reward path is $progressPercent% complete.'
+                          : 'Claim today to fill the golden path toward your gift.',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.35,
+                    color: Color(0xFFE5D5F5),
+                  ),
+                ),
+                const SizedBox(height: 11),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _openingReward
+                            ? null
+                            : () {
+                                if (_freeRewardAvailable) {
+                                  _openFreeReward();
+                                } else {
+                                  _claimDailyStreak();
+                                }
+                              },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(13),
+                            gradient: LinearGradient(
+                              colors: _freeRewardAvailable
+                                  ? const [
+                                      Color(0xFFB58E34),
+                                      Color(0xFFF59E0B),
+                                    ]
+                                  : todayClaimed
+                                      ? const [
+                                          Color(0xFF2E2650),
+                                          Color(0xFF2E2650),
+                                        ]
+                                      : const [
+                                          Color(0xFF6B21A8),
+                                          Color(0xFF9D6FE8),
+                                        ],
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              _openingReward
+                                  ? 'OPENING...'
+                                  : _claimingStreak
+                                      ? 'CLAIMING...'
+                                      : _freeRewardAvailable
+                                          ? 'OPEN GIFT'
+                                          : todayClaimed
+                                              ? 'CLAIMED TODAY'
+                                              : 'CLAIM TODAY',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.1,
+                                color: todayClaimed && !_freeRewardAvailable
+                                    ? const Color(0xFF6B6080)
+                                    : Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+    );
+  }
+}
