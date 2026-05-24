@@ -465,7 +465,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: 20,
-        vertical: 12,
+        vertical: 10,
       ),
       decoration: BoxDecoration(
         color: const Color(0xFF0D0B1E).withValues(alpha: 0.6),
@@ -499,15 +499,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      _ephemerisTrustLine,
-                      maxLines: 2,
-                      style: GoogleFonts.inter(
-                        color: const Color(0xFFB58E34).withValues(alpha: 0.52),
-                        fontSize: 8.8,
-                        height: 1.25,
-                        fontWeight: FontWeight.w400,
-                        letterSpacing: 0,
+                    SizedBox(
+                      width: double.infinity,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _ephemerisTrustLine,
+                          maxLines: 1,
+                          style: GoogleFonts.inter(
+                            color:
+                                const Color(0xFFB58E34).withValues(alpha: 0.52),
+                            fontSize: 8.8,
+                            height: 1.2,
+                            fontWeight: FontWeight.w400,
+                            letterSpacing: 0,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -560,30 +568,42 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   Widget _emptyState() {
     return IgnorePointer(
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _animatedTeslaGlobe(size: 130),
-            const SizedBox(height: 38),
-            Text(
-              'Ask Bhrigu anything',
-              style: GoogleFonts.cormorantGaramond(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.w600,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxHeight < 280;
+
+          return Center(
+            child: SingleChildScrollView(
+              physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.symmetric(
+                vertical: compact ? 8 : 0,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _animatedTeslaGlobe(size: compact ? 102 : 130),
+                  SizedBox(height: compact ? 22 : 38),
+                  Text(
+                    'Ask Bhrigu anything',
+                    style: GoogleFonts.cormorantGaramond(
+                      color: Colors.white,
+                      fontSize: compact ? 25 : 28,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Your cosmic blueprint guides every answer',
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF9D6FE8),
+                      fontSize: compact ? 12 : 13,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Your cosmic blueprint guides every answer',
-              style: GoogleFonts.inter(
-                color: const Color(0xFF9D6FE8),
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

@@ -1013,11 +1013,49 @@ function currentSkyCacheKey(now = new Date()) {
   return now.toISOString().slice(0, 13).replace("T", "-");
 }
 
+function dateKeyFromUtcDate(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
 function planetSnapshotFromBodyPosition(body) {
   return {
     longitude: roundTo(body.longitude, 6),
     sign: signFromLongitude(body.longitude),
     degree: roundTo(degreeWithinSign(body.longitude), 2),
+  };
+}
+
+function currentSkyFromDailyTransits(dailyTransits = {}, now = new Date()) {
+  const planets = {};
+  const tropicalPlanets = Array.isArray(dailyTransits.tropicalPlanets)
+    ? dailyTransits.tropicalPlanets
+    : [];
+
+  for (const planet of tropicalPlanets) {
+    const longitude = longitudeFromPlacement(planet);
+
+    if (!planet?.name || longitude === null) continue;
+
+    planets[planet.name] = {
+      longitude: roundTo(longitude, 6),
+      sign: planet.sign || signFromLongitude(longitude),
+      degree: typeof planet.degree === "number"
+        ? roundTo(planet.degree, 2)
+        : roundTo(degreeWithinSign(longitude), 2),
+    };
+  }
+
+  if (!hasCompleteCurrentSkyPlanets(planets)) {
+    return null;
+  }
+
+  return {
+    key: currentSkyCacheKey(now),
+    source: dailyTransits.source || "NASA/JPL Horizons API",
+    fallbackSource: "dailyTransits",
+    dateKey: dailyTransits.dateKey || dateKeyFromUtcDate(now),
+    isoTime: now.toISOString(),
+    planets,
   };
 }
 
@@ -1063,15 +1101,19 @@ async function calculateCurrentSkySnapshot(now = new Date()) {
   };
 }
 
+function hasCompleteCurrentSkyPlanets(planets = {}) {
+  return HORIZONS_BODIES.every((body) => {
+    const longitude = Number(planets[body.name]?.longitude);
+    return Number.isFinite(longitude);
+  });
+}
+
 function hasCurrentSkyPlanets(data = {}) {
   const planets = data.planets && typeof data.planets === "object"
     ? data.planets
     : {};
 
-  return HORIZONS_BODIES.every((body) => {
-    const longitude = Number(planets[body.name]?.longitude);
-    return Number.isFinite(longitude);
-  });
+  return hasCompleteCurrentSkyPlanets(planets);
 }
 
 async function getCurrentSkySnapshot(now = new Date()) {
@@ -1090,7 +1132,40 @@ async function getCurrentSkySnapshot(now = new Date()) {
     }
   }
 
-  const snapshot = await calculateCurrentSkySnapshot(now);
+  let snapshot = null;
+
+  try {
+    snapshot = await calculateCurrentSkySnapshot(now);
+  } catch (error) {
+    console.error(
+      "Hourly current sky calculation failed:",
+      error.message || error
+    );
+  }
+
+  if (!snapshot || snapshot.partial) {
+    try {
+      const dailyTransits = await getDailyTransits(dateKeyFromUtcDate(now));
+      const fallbackSnapshot = currentSkyFromDailyTransits(dailyTransits, now);
+
+      if (fallbackSnapshot) {
+        snapshot = fallbackSnapshot;
+      }
+    } catch (error) {
+      console.error(
+        "Current sky daily transit fallback failed:",
+        error.message || error
+      );
+    }
+  }
+
+  if (snapshot?.partial) {
+    throw new Error("Current sky remained incomplete after daily fallback.");
+  }
+
+  if (!snapshot) {
+    throw new Error("Current sky calculation failed.");
+  }
 
   if (!snapshot.partial) {
     await transitRef.set(
@@ -1376,11 +1451,12 @@ function keywordKnowledgeScore(query, data = {}) {
 
 function formatBhriguKnowledgeChunk(chunk = {}) {
   const tags = Array.isArray(chunk.tags) ? chunk.tags.join(", ") : "";
+  const text = String(chunk.text || "").slice(0, 1200);
 
   return `Title: ${chunk.title || "Untitled"}
 Category: ${chunk.category || "general"}
 Tags: ${tags || "none"}
-Knowledge: ${chunk.text}`;
+Knowledge: ${text}`;
 }
 
 let bhriguBookKnowledgeDocsCache = null;
@@ -1810,6 +1886,8 @@ exports.generateBhriguChat = onCall(
   callableRuntimeOptions({
     secrets: [GROQ_API_KEY, GEMINI_API_KEY],
     region: FUNCTION_REGION,
+    timeoutSeconds: 120,
+    memory: "512MiB",
   }),
   async (request) => {
     const idToken = request.data.idToken;
@@ -1877,7 +1955,13 @@ exports.generateBhriguChat = onCall(
 
     function safeJson(value) {
       try {
-        return JSON.stringify(value || {}, null, 2);
+        const json = JSON.stringify(value || {}, null, 2);
+
+        if (json.length > 12000) {
+          return `${json.slice(0, 12000)}\n...truncated for prompt safety...`;
+        }
+
+        return json;
       } catch (error) {
         return "{}";
       }
@@ -1983,36 +2067,44 @@ Place: ${userData.placeOfBirth || "Unknown"}
 
     const currentMomentAnchor = `
 ISO time: ${currentMoment.toISOString()}
-Current sky cache key: ${currentSky?.key || "Not available"}
+Current sky cache key: ${currentSky?.key || "none"}
 Current sky status: ${
   currentSky
-    ? currentSky.partial
-      ? `Partially available; missing ${currentSky.missingPlanets.join(", ")}. Use available current planet positions without pretending the missing planets are known.`
-      : "Available from the hourly global cache or freshly calculated for this hour."
-    : "Not available."
+    ? `Available. Source: ${currentSky.fallbackSource === "dailyTransits" ? "existing daily transit cache" : "hourly global current-sky cache"}.`
+    : "Use saved chart, RAG/book knowledge, and the current date only."
 }
 Use this as the present-time anchor.
-If live transit data is unavailable, do not claim exact live transits are known.
+Never tell the user that planet data is missing or unavailable. If exact transit data is absent, simply avoid transit-specific claims.
 `;
+    const currentSkyPromptContext = currentSky
+      ? {
+          key: currentSky.key,
+          source: currentSky.source,
+          fallbackSource: currentSky.fallbackSource || null,
+          dateKey: currentSky.dateKey || null,
+          isoTime: currentSky.isoTime,
+          planets: currentSky.planets,
+        }
+      : null;
     const currentSkyContext = currentSky
-      ? safeJson(currentSky)
-      : "Not available";
+      ? safeJson(currentSkyPromptContext)
+      : "Use saved chart, RAG/book knowledge, and current date only. Do not mention why transit-specific claims are omitted.";
     const strongestTransitContext = strongestTransitAspects.length
       ? safeJson(strongestTransitAspects)
       : currentSky
         ? "No exact major transit-to-natal aspects were found within the configured orbs. Current sky planet positions are still available above and may be used as today's astrological weather."
-        : "Not available";
+        : "Use saved chart, RAG/book knowledge, and current date only. Do not mention why transit-specific claims are omitted.";
     const ragKnowledgeContext = retrievedKnowledge ||
       "No RAG knowledge retrieved";
     const recentConversationContext = historyWithoutCurrentMessage.length
       ? messageListToPrompt(historyWithoutCurrentMessage)
       : "No prior conversation.";
     const followUpContextText = followUpContext
-      ? safeJson(followUpContext)
+      ? "Provided below in FOLLOW-UP PRIORITY MODE."
       : "Not provided";
     const chartCompletenessContext = chartIsComplete
       ? "Saved chart data is available. Use only placements shown in the provided Western or Vedic chart."
-      : "Saved chart data is incomplete or unavailable. Answer more generally and do not invent placements.";
+      : "Saved chart data is incomplete in this request. Answer more generally and do not invent placements.";
 
     const legacySystemPrompt = `
 You are Bhrigu — an astrologer and spiritual guide with deep mastery of Vedic and Western astrology.
@@ -2121,6 +2213,7 @@ Use Firestore RAG/book knowledge as supporting interpretive wisdom.
 Do not invent placements, houses, aspects, dashas, yogas, or timelines that are not present in the provided context.
 If chart data is incomplete, answer more generally without pretending exact chart certainty.
 If current transit data is missing, do not pretend exact live transits are known.
+Never tell the user that planetary data, transit data, chart data, or backend context is unavailable. Use the strongest available context silently.
 Avoid fake certainty.
 
 INTERPRETIVE PRINCIPLES:
@@ -2180,10 +2273,10 @@ Chart data status:
 ${chartCompletenessContext}
 
 User natal Western chart:
-${userData.westernChart ? safeJson(userData.westernChart) : "Not available"}
+${userData.westernChart ? safeJson(userData.westernChart) : "No saved Western chart in this request. Answer generally and do not name exact Western placements."}
 
 User natal Vedic chart:
-${userData.vedicChart ? safeJson(userData.vedicChart) : "Not available"}
+${userData.vedicChart ? safeJson(userData.vedicChart) : "No saved Vedic chart in this request. Answer generally and do not name exact Vedic placements."}
 
 Saved Cosmic Blueprint summary:
 ${savedChartData}
@@ -2322,7 +2415,29 @@ ${safeJson(userSnapshot)}
         });
       }
     } catch (error) {
-      if (!isDeepFollowUp && isRetryableAiError(error)) {
+      if (isDeepFollowUp) {
+        try {
+          text = await generateGroqReadingText({
+            messages: chatMessages,
+            model: GROQ_BHRIGU_CHAT_MODEL,
+            temperature: 0.65,
+            maxTokens: 512,
+          });
+          providerUsed = "groq";
+          modelUsed = GROQ_BHRIGU_CHAT_MODEL;
+        } catch (fallbackError) {
+          const fallbackAiError = fallbackError.response?.data || {};
+          console.error("Bhrigu follow-up Groq fallback error:", {
+            status: fallbackError.response?.status || null,
+            code: fallbackAiError.error?.code || fallbackAiError.code || null,
+            type: fallbackAiError.error?.type || fallbackAiError.type || null,
+            message:
+              fallbackAiError.error?.message ||
+              fallbackAiError.message ||
+              fallbackError.message,
+          });
+        }
+      } else if (isRetryableAiError(error)) {
         try {
           text = await generateGeminiReadingText({
             systemInstruction: activeSystemPrompt,

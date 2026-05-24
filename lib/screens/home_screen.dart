@@ -487,11 +487,7 @@ class _HomeScreenState extends State<HomeScreen>
     super.build(context);
 
     if (_loading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(color: Color(0xFF9D6FE8)),
-        ),
-      );
+      return _homeLoadingPage();
     }
 
     final now = DateTime.now();
@@ -571,6 +567,81 @@ class _HomeScreenState extends State<HomeScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _homeLoadingPage() {
+    return Scaffold(
+      backgroundColor: const Color(0xFF03010A),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF020008),
+                  Color(0xFF080214),
+                  Color(0xFF17062A),
+                  Color(0xFF07010F),
+                ],
+                stops: [0.0, 0.38, 0.72, 1.0],
+              ),
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(0.18, -0.12),
+                radius: 0.82,
+                colors: [
+                  const Color(0xFF4A148C).withValues(alpha: 0.36),
+                  const Color(0xFF14051F).withValues(alpha: 0.18),
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.46, 1.0],
+              ),
+            ),
+          ),
+          CustomPaint(
+            painter: _CosmicLoadingBackgroundPainter(),
+          ),
+          Center(
+            child: AnimatedBuilder(
+              animation: _plasmaController,
+              builder: (context, child) => Container(
+                width: 112,
+                height: 112,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFE040FB).withValues(alpha: 0.22),
+                      blurRadius: 42,
+                      spreadRadius: 8,
+                    ),
+                    BoxShadow(
+                      color: const Color(0xFF00E5FF).withValues(alpha: 0.10),
+                      blurRadius: 32,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: SizedBox(
+                  width: 76,
+                  height: 76,
+                  child: CustomPaint(
+                    painter: _TeslaGlobePainter(_plasmaController.value),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2329,6 +2400,50 @@ class _RewardGiftPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _RewardGiftPainter oldDelegate) {
     return oldDelegate.unlocked != unlocked || oldDelegate.pulse != pulse;
+  }
+}
+
+class _CosmicLoadingBackgroundPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final random = math.Random(11);
+    final starPaint = Paint()..style = PaintingStyle.fill;
+
+    for (var i = 0; i < 72; i++) {
+      final dx = random.nextDouble() * size.width;
+      final dy = random.nextDouble() * size.height;
+      final radius = 0.45 + random.nextDouble() * 1.05;
+      final alpha = 0.16 + random.nextDouble() * 0.42;
+
+      starPaint.color = Colors.white.withValues(alpha: alpha);
+      canvas.drawCircle(Offset(dx, dy), radius, starPaint);
+    }
+
+    final veilPaint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          const Color(0xFF7B1FA2).withValues(alpha: 0.12),
+          const Color(0xFF1A0632).withValues(alpha: 0.04),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.52, 1.0],
+      ).createShader(
+        Rect.fromCircle(
+          center: Offset(size.width * 0.62, size.height * 0.62),
+          radius: size.shortestSide * 0.82,
+        ),
+      );
+
+    canvas.drawCircle(
+      Offset(size.width * 0.62, size.height * 0.62),
+      size.shortestSide * 0.82,
+      veilPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _CosmicLoadingBackgroundPainter oldDelegate) {
+    return false;
   }
 }
 
