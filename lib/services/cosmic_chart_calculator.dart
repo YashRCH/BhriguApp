@@ -105,10 +105,14 @@ class CosmicChartCalculator {
       daysSinceJ2000: days,
     );
 
-    final siderealBodies = tropicalBodies.map(
-      (name, longitude) =>
-          MapEntry(name, _normalizeDegrees(longitude - ayanamsa)),
-    );
+    final tropicalRahu = _meanLunarNodeLongitude(days);
+    final siderealRahu = _normalizeDegrees(tropicalRahu - ayanamsa);
+    final siderealBodies = <String, double>{
+      for (final entry in tropicalBodies.entries)
+        entry.key: _normalizeDegrees(entry.value - ayanamsa),
+      'Rahu': siderealRahu,
+      'Ketu': _normalizeDegrees(siderealRahu + 180),
+    };
     final vedicPlanets = _planetModels(
       longitudes: siderealBodies,
       ascendantLongitude: siderealAscendant,
@@ -199,6 +203,11 @@ class CosmicChartCalculator {
       'Saturn': '♄',
     };
 
+    const nodeSymbols = {
+      'Rahu': '☊',
+      'Ketu': '☋',
+    };
+
     return longitudes.entries.map((entry) {
       final longitude = entry.value;
       final signIndex = _signIndex(longitude);
@@ -207,7 +216,7 @@ class CosmicChartCalculator {
 
       return PlanetModel(
         name: entry.key,
-        symbol: symbols[entry.key] ?? '*',
+        symbol: symbols[entry.key] ?? nodeSymbols[entry.key] ?? '*',
         sign: signs[signIndex],
         degree: _normalizeDegrees(longitude - signStart),
         house: house,
@@ -255,6 +264,21 @@ class CosmicChartCalculator {
           (0.658 * _sinDeg(2 * elongation)) +
           (0.214 * _sinDeg(2 * meanAnomaly)) -
           (0.186 * _sinDeg(sunAnomaly)),
+    );
+  }
+
+  double _meanLunarNodeLongitude(double daysSinceJ2000) {
+    final t = daysSinceJ2000 / 36525;
+    final t2 = t * t;
+    final t3 = t2 * t;
+    final t4 = t3 * t;
+
+    return _normalizeDegrees(
+      125.04455501 -
+          (1934.1361849 * t) +
+          (0.0020762 * t2) +
+          (t3 / 467410) -
+          (t4 / 60616000),
     );
   }
 
@@ -363,6 +387,7 @@ class CosmicChartCalculator {
     required double daysSinceJ2000,
     required bool sidereal,
   }) {
+    if (planetName == 'Rahu' || planetName == 'Ketu') return true;
     if (planetName == 'Sun' || planetName == 'Moon') return false;
 
     final cycle = switch (planetName) {

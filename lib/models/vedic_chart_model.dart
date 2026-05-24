@@ -20,7 +20,11 @@ class VedicChartModel {
       moonSign: json['moonSign'] ?? '',
       nakshatra: json['nakshatra'] ?? '',
       planets: (json['planets'] as List<dynamic>? ?? [])
-          .map((e) => PlanetModel.fromJson(e))
+          .map(
+            (planet) => PlanetModel.fromJson(
+              Map<String, dynamic>.from(planet),
+            ),
+          )
           .toList(),
     );
   }

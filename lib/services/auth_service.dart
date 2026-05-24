@@ -12,7 +12,7 @@ import 'user_profile_cache_service.dart';
 
 class AuthService {
   static const _currentChartCalculationVersion =
-      'nasa_jpl_horizons_v4_observer_ecliptic';
+      'nasa_jpl_horizons_v5_observer_ecliptic_nodes';
 
   final _auth = FirebaseAuth.instance;
   final _db = FirebaseFirestore.instance;

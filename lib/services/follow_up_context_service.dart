@@ -187,6 +187,10 @@ class FollowUpContextService {
       'westernChart': data['westernChart'],
       'vedicChart': data['vedicChart'],
       'chartGeneratedAt': data['chartGeneratedAt'],
+      'chartGeneratedBy': data['chartGeneratedBy'],
+      'chartCalculationSource': data['chartCalculationSource'],
+      'chartCalculationVersion': data['chartCalculationVersion'],
+      'chartCalculationMeta': data['chartCalculationMeta'],
     };
   }
 

@@ -22,7 +22,7 @@ class UserProfileCacheService {
     }
 
     final inFlight = _userDataInFlight;
-    if (!refresh && inFlight != null) {
+    if (inFlight != null) {
       return inFlight;
     }
 
@@ -43,7 +43,7 @@ class UserProfileCacheService {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return null;
 
-    return userData();
+    return userData(refresh: true);
   }
 
   void primeCurrentUser(Map<String, dynamic> data) {

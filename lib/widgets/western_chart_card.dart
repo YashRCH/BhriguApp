@@ -15,6 +15,9 @@ class WesternChartCard extends StatefulWidget {
 
 class _WesternChartCardState extends State<WesternChartCard>
     with SingleTickerProviderStateMixin {
+  static const double _chartLogicalSize = 300;
+  static const double _chartDisplayMaxSize = 390;
+
   late AnimationController _rotationController;
 
   bool loading = true;
@@ -97,7 +100,7 @@ class _WesternChartCardState extends State<WesternChartCard>
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(34),
@@ -124,7 +127,7 @@ class _WesternChartCardState extends State<WesternChartCard>
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 18),
           child: loading
               ? const Center(
                   child: CircularProgressIndicator(
@@ -138,7 +141,7 @@ class _WesternChartCardState extends State<WesternChartCard>
                       'WESTERN\nBLUEPRINT',
                       style: GoogleFonts.cinzel(
                         color: const Color(0xFFE5D5F5),
-                        fontSize: 28,
+                        fontSize: 26,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 2.0,
                         height: 1.2,
@@ -153,45 +156,48 @@ class _WesternChartCardState extends State<WesternChartCard>
                         fontSize: 16,
                       ),
                     ),
-                    const SizedBox(height: 36),
+                    const SizedBox(height: 24),
                     Expanded(
-                      child: Center(
-                        child: AspectRatio(
-                          aspectRatio: 1,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Container(
-                                width: 200,
-                                height: 200,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFF9D6FE8)
-                                          .withValues(alpha: 0.15),
-                                      blurRadius: 60,
-                                      spreadRadius: 10,
-                                    )
-                                  ],
-                                ),
-                              ),
-                              RotationTransition(
-                                turns: _rotationController,
-                                child: CustomPaint(
-                                  size: const Size(
-                                      double.infinity, double.infinity),
-                                  painter: WesternWheelPainter(
-                                    planets: planets,
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final availableWidth = constraints.maxWidth.isFinite
+                              ? constraints.maxWidth
+                              : _chartDisplayMaxSize;
+                          final availableHeight = constraints.maxHeight.isFinite
+                              ? constraints.maxHeight
+                              : _chartDisplayMaxSize;
+                          final chartSize = min(
+                            _chartDisplayMaxSize,
+                            min(
+                              availableWidth,
+                              availableHeight,
+                            ),
+                          );
+
+                          return Center(
+                            child: SizedBox.square(
+                              dimension: chartSize,
+                              child: FittedBox(
+                                fit: BoxFit.contain,
+                                child: SizedBox(
+                                  width: _chartLogicalSize,
+                                  height: _chartLogicalSize,
+                                  child: RotationTransition(
+                                    turns: _rotationController,
+                                    child: CustomPaint(
+                                      painter: WesternWheelPainter(
+                                        planets: planets,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
+                          );
+                        },
                       ),
                     ),
-                    const SizedBox(height: 36),
+                    const SizedBox(height: 22),
                     Row(
                       children: [
                         Expanded(
@@ -248,7 +254,7 @@ class _WesternChartCardState extends State<WesternChartCard>
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
             color: const Color(0xFF1E1430).withValues(alpha: 0.5),
             border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
@@ -314,6 +320,13 @@ class WesternWheelPainter extends CustomPainter {
     required this.planets,
   });
 
+  static const Color _antiqueGold = Color(0xFFB58E34);
+  static const Color _goldLine = Color(0xFFE0C48F);
+  static const Color _moonlightSilver = Color(0xFFE5D5F5);
+  static const Color _deepCosmicPurple = Color(0xFF2A1B4D);
+  static const Color _spaceBlack = Color(0xFF0F0A18);
+  static const Color _pureWhite = Colors.white;
+
   final List<String> zodiacGlyphs = const [
     '♈',
     '♉',
@@ -344,59 +357,97 @@ class WesternWheelPainter extends CustomPainter {
     'Pisces',
   ];
 
-  final Map<String, Color> planetColors = const {
-    'Sun': Color(0xFFFFD166),
-    'Moon': Color(0xFF4EEBFE),
-    'Mercury': Color(0xFFA7F3D0),
-    'Venus': Color(0xFFFE8CFE),
-    'Mars': Color(0xFFFE4D4D),
-    'Jupiter': Color(0xFFFFD36E),
+  final List<String> houseRoman = const [
+    'I',
+    'II',
+    'III',
+    'IV',
+    'V',
+    'VI',
+    'VII',
+    'VIII',
+    'IX',
+    'X',
+    'XI',
+    'XII',
+  ];
+
+  static const Map<String, Color> _planetColors = {
+    'Sun': _antiqueGold,
+    'Moon': _moonlightSilver,
+    'Mercury': Color(0xFFD7CDE8),
+    'Venus': Color(0xFFCFA7FF),
+    'Mars': Color(0xFFD98F73),
+    'Jupiter': _goldLine,
     'Saturn': Color(0xFFC7C9D9),
+    'Uranus': Color(0xFFBFA6E8),
+    'Neptune': Color(0xFFB7C4D8),
+    'Pluto': Color(0xFFD6B577),
   };
 
-  void _drawNeonLine(Canvas canvas, Offset p1, Offset p2, Color color) {
-    canvas.drawLine(
-      p1,
-      p2,
-      Paint()
-        ..color = color.withValues(alpha: 0.5)
-        ..strokeWidth = 3.0
-        ..style = PaintingStyle.stroke
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
-    );
-    canvas.drawLine(
-      p1,
-      p2,
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.7)
-        ..strokeWidth = 1.0
-        ..style = PaintingStyle.stroke,
-    );
-  }
+  void _drawPremiumLine(
+    Canvas canvas,
+    Offset p1,
+    Offset p2,
+    Color color, {
+    double strokeWidth = 1.0,
+    double glow = 0,
+    double alpha = 0.7,
+  }) {
+    if (glow > 0) {
+      canvas.drawLine(
+        p1,
+        p2,
+        Paint()
+          ..color = color.withValues(alpha: alpha * 0.32)
+          ..strokeWidth = strokeWidth + 2
+          ..style = PaintingStyle.stroke
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, glow),
+      );
+    }
 
-  void _drawNeonCircle(Canvas canvas, Offset center, double radius, Color color,
-      {double strokeWidth = 1.0}) {
-    canvas.drawCircle(
-      center,
-      radius,
+    canvas.drawLine(
+      p1,
+      p2,
       Paint()
-        ..color = color.withValues(alpha: 0.5)
-        ..strokeWidth = strokeWidth * 3
-        ..style = PaintingStyle.stroke
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
-    );
-    canvas.drawCircle(
-      center,
-      radius,
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.6)
+        ..color = color.withValues(alpha: alpha)
         ..strokeWidth = strokeWidth
         ..style = PaintingStyle.stroke,
     );
   }
 
-  // Extracts the absolute angle on the wheel for a given planet
-  double _getPlanetAngle(Map<String, dynamic> planet) {
+  void _drawPremiumCircle(
+    Canvas canvas,
+    Offset center,
+    double radius,
+    Color color, {
+    double strokeWidth = 1.0,
+    double glow = 0,
+    double alpha = 0.75,
+  }) {
+    if (glow > 0) {
+      canvas.drawCircle(
+        center,
+        radius,
+        Paint()
+          ..color = color.withValues(alpha: alpha * 0.28)
+          ..strokeWidth = strokeWidth + 2
+          ..style = PaintingStyle.stroke
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, glow),
+      );
+    }
+
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = color.withValues(alpha: alpha)
+        ..strokeWidth = strokeWidth
+        ..style = PaintingStyle.stroke,
+    );
+  }
+
+  double _getPlanetDegree(Map<String, dynamic> planet) {
     final sign = planet['sign'] ?? '';
     final signIndex = zodiacSigns.indexOf(sign);
 
@@ -407,190 +458,343 @@ class WesternWheelPainter extends CustomPainter {
 
     final safeSignIndex = signIndex == -1 ? 0 : signIndex;
     final totalDegree = safeSignIndex * 30 + degree;
-    return totalDegree * pi / 180 - pi / 2;
+    return (totalDegree % 360 + 360) % 360;
+  }
+
+  // Extracts the absolute angle on the wheel for a given planet
+  double _getPlanetAngle(Map<String, dynamic> planet) {
+    return _angleForDegree(_getPlanetDegree(planet));
+  }
+
+  double _angleForDegree(double degree) {
+    return degree * pi / 180 - pi / 2;
+  }
+
+  double _degreeDistance(double a, double b) {
+    final diff = (a - b).abs() % 360;
+    return diff > 180 ? 360 - diff : diff;
+  }
+
+  List<_WesternPlanetPlot> _planetPlots(double planetTrackRadius) {
+    final plots = <_WesternPlanetPlot>[
+      for (int i = 0; i < planets.length; i++)
+        _WesternPlanetPlot(
+          index: i,
+          planet: planets[i],
+          trueDegree: _getPlanetDegree(planets[i]),
+          trueAngle: _getPlanetAngle(planets[i]),
+        ),
+    ];
+
+    if (plots.length < 2) {
+      return plots;
+    }
+
+    final sorted = [...plots]
+      ..sort((a, b) => a.trueDegree.compareTo(b.trueDegree));
+
+    final clusters = <List<_WesternPlanetPlot>>[];
+    var currentCluster = <_WesternPlanetPlot>[sorted.first];
+
+    for (int i = 1; i < sorted.length; i++) {
+      final previous = sorted[i - 1];
+      final current = sorted[i];
+
+      if (_degreeDistance(previous.trueDegree, current.trueDegree) <= 5) {
+        currentCluster.add(current);
+      } else {
+        clusters.add(currentCluster);
+        currentCluster = <_WesternPlanetPlot>[current];
+      }
+    }
+    clusters.add(currentCluster);
+
+    if (clusters.length > 1 &&
+        _degreeDistance(
+              clusters.first.first.trueDegree,
+              clusters.last.last.trueDegree,
+            ) <=
+            5) {
+      final wrappedCluster = [
+        ...clusters.removeLast(),
+        ...clusters.removeAt(0),
+      ];
+      clusters.insert(0, wrappedCluster);
+    }
+
+    final minSeparation =
+        (22 / planetTrackRadius).clamp(6 * pi / 180, 11 * pi / 180).toDouble();
+
+    for (final cluster in clusters) {
+      if (cluster.length <= 1) {
+        continue;
+      }
+
+      final crossesZero = cluster.any((plot) => plot.trueDegree > 300) &&
+          cluster.any((plot) => plot.trueDegree < 60);
+
+      cluster.sort((a, b) {
+        final aDegree = crossesZero && a.trueDegree < 180
+            ? a.trueDegree + 360
+            : a.trueDegree;
+        final bDegree = crossesZero && b.trueDegree < 180
+            ? b.trueDegree + 360
+            : b.trueDegree;
+        return aDegree.compareTo(bDegree);
+      });
+
+      for (int i = 0; i < cluster.length; i++) {
+        final offset = (i - (cluster.length - 1) / 2) * minSeparation;
+        cluster[i].renderAngle = cluster[i].trueAngle + offset;
+      }
+    }
+
+    plots.sort((a, b) => a.index.compareTo(b.index));
+    return plots;
   }
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2;
+    final radius = min(size.width, size.height) / 2 * 0.94;
 
-    const Color glowCyan = Color(0xFF00E5FF);
-    const Color aspectTrineBlue = Color(0xFF7C3AED);
+    final outerZodiacRadius = radius;
+    final houseRingRadius = radius * 0.82;
+    final innerPlanetRadius = radius * 0.65;
+    final planetTrackRadius = innerPlanetRadius - 18;
+    final zodiacTextRadius = (outerZodiacRadius + houseRingRadius) / 2;
+    final houseTextRadius = (houseRingRadius + innerPlanetRadius) / 2;
 
-    // 1. Draw Outer Zodiac Rings
-    _drawNeonCircle(canvas, center, radius, glowCyan, strokeWidth: 1.5);
-    _drawNeonCircle(canvas, center, radius * 0.75, glowCyan, strokeWidth: 1.0);
+    final starRandom = Random(42);
+    for (int i = 0; i < 260; i++) {
+      final starRadius = starRandom.nextDouble() * innerPlanetRadius * 0.96;
+      final theta = starRandom.nextDouble() * 2 * pi;
 
-    // 2. Draw House Spokes
+      canvas.drawCircle(
+        Offset(
+          center.dx + starRadius * cos(theta),
+          center.dy + starRadius * sin(theta),
+        ),
+        starRandom.nextDouble() * 1.1,
+        Paint()
+          ..color = _pureWhite.withValues(
+            alpha: 0.10 + (starRandom.nextDouble() * 0.55),
+          ),
+      );
+    }
+
+    final zodiacBand = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addOval(Rect.fromCircle(center: center, radius: outerZodiacRadius))
+      ..addOval(Rect.fromCircle(center: center, radius: houseRingRadius));
+
+    canvas.drawPath(
+      zodiacBand,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            _deepCosmicPurple.withValues(alpha: 0.24),
+            _spaceBlack.withValues(alpha: 0.08),
+          ],
+        ).createShader(
+          Rect.fromCircle(center: center, radius: outerZodiacRadius),
+        ),
+    );
+
+    final innerField = Rect.fromCircle(
+      center: center,
+      radius: innerPlanetRadius,
+    );
+    canvas.drawCircle(
+      center,
+      innerPlanetRadius,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            _deepCosmicPurple.withValues(alpha: 0.16),
+            _spaceBlack.withValues(alpha: 0.02),
+          ],
+        ).createShader(innerField),
+    );
+
+    // 1. Draw the three thin instrument rings.
+    _drawPremiumCircle(
+      canvas,
+      center,
+      outerZodiacRadius,
+      _pureWhite,
+      strokeWidth: 1,
+      glow: 2,
+      alpha: 0.62,
+    );
+    _drawPremiumCircle(
+      canvas,
+      center,
+      houseRingRadius,
+      _moonlightSilver,
+      strokeWidth: 0.9,
+      alpha: 0.48,
+    );
+    _drawPremiumCircle(
+      canvas,
+      center,
+      innerPlanetRadius,
+      _pureWhite,
+      strokeWidth: 0.9,
+      alpha: 0.54,
+    );
+
+    // 2. Draw Zodiac and house sections.
     for (int i = 0; i < 12; i++) {
       final angle = (2 * pi / 12) * i - pi / 2;
-      _drawNeonLine(
+      final labelAngle = angle + (pi / 12);
+
+      _drawPremiumLine(
         canvas,
-        Offset(center.dx + cos(angle) * radius * 0.4,
-            center.dy + sin(angle) * radius * 0.4),
         Offset(
-            center.dx + cos(angle) * radius, center.dy + sin(angle) * radius),
-        glowCyan,
-      );
-    }
-
-    // 3. Draw The New Cosmic Compass Center (Replaces the white dot)
-    // Outer core ring
-    _drawNeonCircle(canvas, center, radius * 0.4, const Color(0xFF9D6FE8),
-        strokeWidth: 1.5);
-
-    // Glowing aura behind star
-    canvas.drawCircle(
-        center,
-        12,
-        Paint()
-          ..color = const Color(0xFFE040FB).withValues(alpha: 0.6)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8));
-
-    // 8-Pointed Star
-    final starPath = Path();
-    for (int i = 0; i < 16; i++) {
-      final a = i * pi / 8;
-      // Alternate between long point, short point, inner dip
-      final rStar = i % 2 == 0 ? (i % 4 == 0 ? 14.0 : 8.0) : 3.0;
-      final p = Offset(center.dx + cos(a) * rStar, center.dy + sin(a) * rStar);
-      if (i == 0) {
-        starPath.moveTo(p.dx, p.dy);
-      } else {
-        starPath.lineTo(p.dx, p.dy);
-      }
-    }
-    starPath.close();
-    canvas.drawPath(starPath, Paint()..color = Colors.white);
-
-    // 4. Draw Crisp Zodiac Glyphs inside the track
-    for (int i = 0; i < 12; i++) {
-      final angle = (2 * pi / 12) * i - pi / 2 + (pi / 12);
-
-      final offset = Offset(
-        center.dx + cos(angle) * radius * 0.87,
-        center.dy + sin(angle) * radius * 0.87,
-      );
-
-      final glyphPainter = TextPainter(
-        text: TextSpan(
-          text: zodiacGlyphs[i],
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontFamily: 'Roboto',
-          ),
+          center.dx + cos(angle) * innerPlanetRadius,
+          center.dy + sin(angle) * innerPlanetRadius,
         ),
-        textDirection: TextDirection.ltr,
+        Offset(
+          center.dx + cos(angle) * outerZodiacRadius,
+          center.dy + sin(angle) * outerZodiacRadius,
+        ),
+        _pureWhite,
+        strokeWidth: 0.72,
+        alpha: 0.30,
       );
 
-      glyphPainter.layout();
-      canvas.save();
-      canvas.translate(offset.dx, offset.dy);
-      canvas.rotate(angle + pi / 2);
-      glyphPainter.paint(
-          canvas, Offset(-glyphPainter.width / 2, -glyphPainter.height / 2));
-      canvas.restore();
+      _drawWheelText(
+        canvas,
+        zodiacGlyphs[i],
+        center,
+        zodiacTextRadius,
+        labelAngle,
+        17,
+        _moonlightSilver,
+        fontWeight: FontWeight.w700,
+      );
+
+      final houseLabel = switch (i) {
+        9 => 'ASC',
+        0 => 'MC',
+        _ => houseRoman[i],
+      };
+      _drawWheelText(
+        canvas,
+        houseLabel,
+        center,
+        houseTextRadius,
+        labelAngle,
+        houseLabel.length > 2 ? 9.5 : 10.5,
+        _pureWhite.withValues(alpha: 0.72),
+        fontWeight: FontWeight.w600,
+      );
     }
 
-    // 5. Draw Aspect Lines linking base degrees on the track
-    if (planets.length >= 3) {
-      final aspectPoints = planets.take(3).map((planet) {
-        final a = _getPlanetAngle(planet);
-        // Connect the lines at the edge of the inner circle to keep it clean
-        return Offset(center.dx + cos(a) * radius * 0.4,
-            center.dy + sin(a) * radius * 0.4);
-      }).toList();
+    // 3. Draw the aspect web using true planetary degrees.
+    final aspectPoints = planets.map((planet) {
+      final angle = _getPlanetAngle(planet);
+      return Offset(
+        center.dx + cos(angle) * innerPlanetRadius,
+        center.dy + sin(angle) * innerPlanetRadius,
+      );
+    }).toList();
 
-      if (aspectPoints.length == 3) {
-        _drawNeonLine(
-            canvas, aspectPoints[0], aspectPoints[1], aspectTrineBlue);
-        _drawNeonLine(
-            canvas, aspectPoints[1], aspectPoints[2], aspectTrineBlue);
-        _drawNeonLine(
-            canvas, aspectPoints[2], aspectPoints[0], aspectTrineBlue);
+    for (int i = 0; i < aspectPoints.length; i++) {
+      for (int j = i + 1; j < aspectPoints.length; j++) {
+        _drawPremiumLine(
+          canvas,
+          aspectPoints[i],
+          aspectPoints[j],
+          _goldLine,
+          strokeWidth: 0.55,
+          alpha: 0.26,
+        );
       }
     }
 
-    // 6. Draw Crisp Planets with Collision Detection (Radial Staggering)
-    List<double> placedAngles = [];
-
-    for (final planet in planets) {
-      final baseAngle = _getPlanetAngle(planet);
-      double currentRadius = radius * 0.65; // Base radius for planets
-
-      // Check how many planets are already at a similar angle
-      int overlapDepth = 0;
-      for (var placed in placedAngles) {
-        // If angle difference is less than ~15 degrees
-        double diff = (placed - baseAngle).abs();
-        if (diff > pi) diff = 2 * pi - diff; // Handle circle wrap-around
-        if (diff < (pi / 12)) {
-          overlapDepth++;
-        }
-      }
-      placedAngles.add(baseAngle);
-
-      // Stagger inward by 22 pixels for every collision
-      currentRadius -= (overlapDepth * 22.0);
-
-      // Base anchor point on the wheel
-      final anchorPosition = Offset(
-        center.dx + cos(baseAngle) * radius * 0.70,
-        center.dy + sin(baseAngle) * radius * 0.70,
+    // 4. Draw minimalist planet marks, ticks, and true-degree pointers.
+    for (final plot in _planetPlots(planetTrackRadius)) {
+      final planet = plot.planet;
+      final tickStart = Offset(
+        center.dx + cos(plot.trueAngle) * innerPlanetRadius,
+        center.dy + sin(plot.trueAngle) * innerPlanetRadius,
       );
-
-      // Staggered draw position
+      final tickEnd = Offset(
+        center.dx + cos(plot.trueAngle) * (innerPlanetRadius - 7),
+        center.dy + sin(plot.trueAngle) * (innerPlanetRadius - 7),
+      );
       final position = Offset(
-        center.dx + cos(baseAngle) * currentRadius,
-        center.dy + sin(baseAngle) * currentRadius,
+        center.dx + cos(plot.renderAngle) * planetTrackRadius,
+        center.dy + sin(plot.renderAngle) * planetTrackRadius,
       );
 
       final name = planet['name'] ?? '';
-      final color = planetColors[name] ?? const Color(0xFF9D6FE8);
+      final color = _planetColors[name] ?? _deepCosmicPurple;
 
-      // If it was pushed inward, draw a sleek connector line to its true position
-      if (overlapDepth > 0) {
+      canvas.drawLine(
+        tickStart,
+        tickEnd,
+        Paint()
+          ..color = _pureWhite.withValues(alpha: 0.72)
+          ..strokeWidth = 1.35
+          ..style = PaintingStyle.stroke,
+      );
+
+      if (plot.isStaggered) {
+        final trueDegreePoint = Offset(
+          center.dx + cos(plot.trueAngle) * (innerPlanetRadius - 7),
+          center.dy + sin(plot.trueAngle) * (innerPlanetRadius - 7),
+        );
+
         canvas.drawLine(
-            position,
-            anchorPosition,
-            Paint()
-              ..color = Colors.white.withValues(alpha: 0.3)
-              ..strokeWidth = 1.0
-              ..style = PaintingStyle.stroke);
+          position,
+          trueDegreePoint,
+          Paint()
+            ..color = Colors.white.withValues(alpha: 0.3)
+            ..strokeWidth = 0.8
+            ..style = PaintingStyle.stroke,
+        );
       }
 
-      // Solid dark background for readability
-      canvas.drawCircle(position, 12, Paint()..color = const Color(0xFF0F0A18));
-
-      // Crisp colored border
       canvas.drawCircle(
-          position,
-          12,
-          Paint()
-            ..color = color
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.5);
+        position,
+        8.5,
+        Paint()
+          ..color = color.withValues(alpha: 0.22)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+      );
 
-      // Soft glow behind
       canvas.drawCircle(
-          position,
-          12,
-          Paint()
-            ..color = color.withValues(alpha: 0.4)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+        position,
+        8.5,
+        Paint()..color = _spaceBlack.withValues(alpha: 0.55),
+      );
 
-      // Crisp text
+      canvas.drawCircle(
+        position,
+        8.5,
+        Paint()
+          ..color = _pureWhite.withValues(alpha: 0.22)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.75,
+      );
+
       final tp = TextPainter(
         text: TextSpan(
           text: planet['symbol'] ?? '✦',
           style: TextStyle(
             color: Colors.white,
-            fontSize: 14,
+            fontSize: 13.5,
             fontWeight: FontWeight.bold,
             fontFamily: 'Roboto',
-            shadows: [Shadow(color: color, blurRadius: 4)],
+            shadows: [
+              Shadow(
+                color: color.withValues(alpha: 0.85),
+                blurRadius: 4,
+              ),
+            ],
           ),
         ),
         textDirection: TextDirection.ltr,
@@ -599,15 +803,72 @@ class WesternWheelPainter extends CustomPainter {
       tp.layout();
       canvas.save();
       canvas.translate(position.dx, position.dy);
-      // Counter-rotate text so it stays upright despite the parent container spinning
       canvas.rotate(-pi / 2);
       tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
       canvas.restore();
     }
   }
 
+  void _drawWheelText(
+    Canvas canvas,
+    String text,
+    Offset center,
+    double radius,
+    double angle,
+    double fontSize,
+    Color color, {
+    FontWeight fontWeight = FontWeight.normal,
+  }) {
+    final offset = Offset(
+      center.dx + cos(angle) * radius,
+      center.dy + sin(angle) * radius,
+    );
+
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: fontSize,
+          fontWeight: fontWeight,
+          fontFamily: 'Roboto',
+          shadows: [
+            Shadow(
+              color: _antiqueGold.withValues(alpha: 0.26),
+              blurRadius: 5,
+            ),
+          ],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    canvas.save();
+    canvas.translate(offset.dx, offset.dy);
+    canvas.rotate(angle + pi / 2);
+    painter.paint(canvas, Offset(-painter.width / 2, -painter.height / 2));
+    canvas.restore();
+  }
+
   @override
   bool shouldRepaint(covariant WesternWheelPainter oldDelegate) {
     return oldDelegate.planets != planets;
   }
+}
+
+class _WesternPlanetPlot {
+  _WesternPlanetPlot({
+    required this.index,
+    required this.planet,
+    required this.trueDegree,
+    required this.trueAngle,
+  }) : renderAngle = trueAngle;
+
+  final int index;
+  final Map<String, dynamic> planet;
+  final double trueDegree;
+  final double trueAngle;
+  double renderAngle;
+
+  bool get isStaggered => (renderAngle - trueAngle).abs() > 0.001;
 }

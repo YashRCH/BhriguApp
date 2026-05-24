@@ -4,6 +4,7 @@ import 'package:astrology_guru_app/constants/chat_hints.dart';
 import 'package:astrology_guru_app/constants/firebase_constants.dart';
 import 'package:astrology_guru_app/models/birth_place_suggestion.dart';
 import 'package:astrology_guru_app/models/payment_feature.dart';
+import 'package:astrology_guru_app/models/planet_model.dart';
 import 'package:astrology_guru_app/models/streak_reward_model.dart';
 import 'package:astrology_guru_app/constants/tarot_hints.dart';
 import 'package:astrology_guru_app/models/geomancy_figure_model.dart';
@@ -361,6 +362,21 @@ void main() {
     expect(legacy.longitude, isNull);
   });
 
+  test('planet model reads numeric Firestore values safely', () {
+    final planet = PlanetModel.fromJson({
+      'name': 'Venus',
+      'sign': 'Pisces',
+      'degree': '27.5',
+      'house': '7',
+      'symbol': 'Venus',
+      'retrograde': 'true',
+    });
+
+    expect(planet.degree, 27.5);
+    expect(planet.house, 7);
+    expect(planet.retrograde, isTrue);
+  });
+
   test('vedic match calculator uses birth coordinates in signatures', () {
     const calculator = VedicMatchCalculator();
     final delhiSignature = calculator.signature(
@@ -488,9 +504,13 @@ void main() {
     );
 
     expect(charts.westernChart.planets, hasLength(7));
-    expect(charts.vedicChart.planets, hasLength(7));
+    expect(charts.vedicChart.planets, hasLength(9));
     expect(charts.westernChart.sunSign, 'Capricorn');
     expect(charts.vedicChart.nakshatra, isNotEmpty);
+    expect(
+      charts.westernChart.planets.map((planet) => planet.name),
+      isNot(contains(anyOf('Rahu', 'Ketu'))),
+    );
     expect(
       charts.westernChart.planets.every(
         (planet) => planet.degree >= 0 && planet.degree < 30,
@@ -503,6 +523,24 @@ void main() {
       ),
       isTrue,
     );
+    expect(
+      charts.vedicChart.planets.map((planet) => planet.name),
+      containsAll(['Rahu', 'Ketu']),
+    );
+
+    final rahu =
+        charts.vedicChart.planets.firstWhere((planet) => planet.name == 'Rahu');
+    final ketu =
+        charts.vedicChart.planets.firstWhere((planet) => planet.name == 'Ketu');
+    final rahuLongitude =
+        (CosmicChartCalculator.signs.indexOf(rahu.sign) * 30) + rahu.degree;
+    final ketuLongitude =
+        (CosmicChartCalculator.signs.indexOf(ketu.sign) * 30) + ketu.degree;
+    final nodeSeparation = (ketuLongitude - rahuLongitude + 360) % 360;
+
+    expect(rahu.retrograde, isTrue);
+    expect(ketu.retrograde, isTrue);
+    expect(nodeSeparation, closeTo(180, 0.000001));
 
     final repeatedCharts = calculator.calculate(
       birthDate: DateTime(1998, 1, 2),

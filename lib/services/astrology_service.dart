@@ -54,16 +54,25 @@ class AstrologyService {
       final data = Map<String, dynamic>.from(result.data as Map);
       final westernChart = data['westernChart'];
       final vedicChart = data['vedicChart'];
+      final calculationMeta = data['calculationMeta'];
 
       if (westernChart is Map && vedicChart is Map) {
-        await _firestore.collection('users').doc(uid).update({
+        final chartUpdate = <String, dynamic>{
           'westernChart': Map<String, dynamic>.from(westernChart),
           'vedicChart': Map<String, dynamic>.from(vedicChart),
           'chartGeneratedBy': 'nasa_jpl_horizons',
           'chartGeneratedAt': FieldValue.serverTimestamp(),
           'chartCalculationSource': 'NASA/JPL Horizons API',
-          'chartCalculationVersion': 'nasa_jpl_horizons_v4_observer_ecliptic',
-        });
+          'chartCalculationVersion':
+              'nasa_jpl_horizons_v5_observer_ecliptic_nodes',
+        };
+
+        if (calculationMeta is Map) {
+          chartUpdate['chartCalculationMeta'] =
+              Map<String, dynamic>.from(calculationMeta);
+        }
+
+        await _firestore.collection('users').doc(uid).update(chartUpdate);
       }
 
       return;
@@ -108,7 +117,18 @@ class AstrologyService {
       'chartGeneratedBy': 'local_ephemeris_engine_fallback',
       'chartGeneratedAt': FieldValue.serverTimestamp(),
       'chartCalculationSource': 'Local fallback ephemeris engine',
-      'chartCalculationVersion': 'local_ephemeris_engine_fallback_v1',
+      'chartCalculationVersion': 'local_ephemeris_engine_fallback_v2_nodes',
+      'chartCalculationMeta': {
+        'birthDate': birthDate.toIso8601String(),
+        'timeOfBirth': timeOfBirth,
+        'placeOfBirth': placeOfBirth,
+        'latitude': latitude,
+        'longitude': longitude,
+        'planetSource': 'Local deterministic fallback formulas',
+        'houseSystem': 'Whole sign houses',
+        'ayanamsa': 'Lahiri approximation',
+        'lunarNodeSource': 'Mean lunar ascending node; Ketu opposite Rahu',
+      },
     });
   }
 

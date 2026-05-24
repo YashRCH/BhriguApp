@@ -35,7 +35,7 @@ const HORIZONS_TIMEOUT_MS = 18000;
 const MILLISECONDS_PER_DAY = 86400000;
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
-const CHART_CALCULATION_VERSION = "nasa_jpl_horizons_v4_observer_ecliptic";
+const CHART_CALCULATION_VERSION = "nasa_jpl_horizons_v5_observer_ecliptic_nodes";
 const HOME_HOROSCOPE_CONTENT_VERSION = "home_signal_v6_complete_sentences";
 
 const ZODIAC_SIGNS = [
@@ -587,6 +587,40 @@ function calculateLahiriAyanamsa(utcDate) {
   return 23.8531 + ((daysSinceJ2000(utcDate) / 36525) * 1.396);
 }
 
+function calculateMeanLunarNodeLongitude(utcDate) {
+  const t = julianCenturiesSinceJ2000(utcDate);
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const t4 = t3 * t;
+
+  return normalizeDegrees(
+    125.04455501 -
+    (1934.1361849 * t) +
+    (0.0020762 * t2) +
+    (t3 / 467410) -
+    (t4 / 60616000)
+  );
+}
+
+function siderealLunarNodeBodies(utcDate, ayanamsa) {
+  const rahuLongitude = normalizeDegrees(calculateMeanLunarNodeLongitude(utcDate) - ayanamsa);
+
+  return [
+    {
+      name: "Rahu",
+      symbol: "☊",
+      longitude: rahuLongitude,
+      retrograde: true,
+    },
+    {
+      name: "Ketu",
+      symbol: "☋",
+      longitude: normalizeDegrees(rahuLongitude + 180),
+      retrograde: true,
+    },
+  ];
+}
+
 function meanObliquityDegrees(utcDate) {
   const t = julianCenturiesSinceJ2000(utcDate);
   const seconds = 21.448 - (t * (46.8150 + (t * (0.00059 - (t * 0.001813)))));
@@ -865,11 +899,15 @@ function buildVedicChart({
   tropicalBodies,
   siderealAscendantLongitude,
   ayanamsa,
+  utcDate,
 }) {
-  const siderealBodies = tropicalBodies.map((body) => ({
-    ...body,
-    longitude: normalizeDegrees(body.longitude - ayanamsa),
-  }));
+  const siderealBodies = [
+    ...tropicalBodies.map((body) => ({
+      ...body,
+      longitude: normalizeDegrees(body.longitude - ayanamsa),
+    })),
+    ...siderealLunarNodeBodies(utcDate, ayanamsa),
+  ];
   const bodyMap = Object.fromEntries(
     siderealBodies.map((body) => [body.name, body])
   );
@@ -919,6 +957,7 @@ async function calculateNatalChartForBirthData({
       tropicalBodies,
       siderealAscendantLongitude: siderealAscendant,
       ayanamsa,
+      utcDate: utcBirth,
     }),
     calculationMeta: {
       utcBirthIso: utcBirth.toISOString(),
@@ -927,6 +966,7 @@ async function calculateNatalChartForBirthData({
       timezoneSource: birthTime.timezoneSource,
       eclipticLongitudeSource: "NASA/JPL Horizons OBSERVER quantity 31",
       retrogradeSource: "NASA/JPL Horizons apparent ecliptic longitude one-day motion",
+      lunarNodeSource: "Mean lunar ascending node with Lahiri ayanamsa; Ketu opposite Rahu",
       ayanamsa: roundTo(ayanamsa),
       tropicalAscendant: roundTo(tropicalAscendant),
       siderealAscendant: roundTo(siderealAscendant),
@@ -963,10 +1003,13 @@ async function calculateDailyTransitsForDateKey(dateKey) {
 
   const ayanamsa = calculateLahiriAyanamsa(utcNoon);
   const tropicalPlanets = planetModelsFromLongitudes(tropicalBodies, 0);
-  const siderealBodies = tropicalBodies.map((body) => ({
-    ...body,
-    longitude: normalizeDegrees(body.longitude - ayanamsa),
-  }));
+  const siderealBodies = [
+    ...tropicalBodies.map((body) => ({
+      ...body,
+      longitude: normalizeDegrees(body.longitude - ayanamsa),
+    })),
+    ...siderealLunarNodeBodies(utcNoon, ayanamsa),
+  ];
   const siderealPlanets = planetModelsFromLongitudes(siderealBodies, 0);
   const siderealMoon = siderealBodies.find((body) => body.name === "Moon");
 
@@ -1190,12 +1233,10 @@ function transitPlanetListFromCurrentSky(currentSky = {}) {
 }
 
 function selectNatalChartForTransits(userData = {}) {
+  // Current-sky snapshots are tropical, so transit aspects must use the
+  // Western natal chart instead of mixing in sidereal Vedic placements.
   if (Array.isArray(userData?.westernChart?.planets)) {
     return userData.westernChart;
-  }
-
-  if (Array.isArray(userData?.vedicChart?.planets)) {
-    return userData.vedicChart;
   }
 
   return null;
@@ -1871,6 +1912,7 @@ exports.calculateNatalChart = onCall(
       return {
         westernChart: charts.westernChart,
         vedicChart: charts.vedicChart,
+        calculationMeta: charts.calculationMeta,
       };
     } catch (error) {
       console.error("calculateNatalChart failed:", error);
@@ -1967,16 +2009,28 @@ exports.generateBhriguChat = onCall(
       }
     }
 
+    function hasUsableChart(chart) {
+      return Array.isArray(chart?.planets) && chart.planets.length > 0;
+    }
+
     function chartPlanetLine(chart) {
       const planets = Array.isArray(chart?.planets) ? chart.planets : [];
       return planets
         .map((planet) => {
-          const degree =
-            typeof planet.degree === "number"
-              ? planet.degree.toFixed(2)
-              : planet.degree || "0";
+          const degreeValue = Number(planet.degree);
+          const degree = Number.isFinite(degreeValue)
+            ? degreeValue.toFixed(2)
+            : "0.00";
+          const houseValue = Number(planet.house);
+          const house = Number.isFinite(houseValue)
+            ? Math.round(houseValue)
+            : "unknown";
+          const longitude = longitudeFromPlacement(planet);
+          const longitudeText = longitude === null
+            ? "absolute longitude unknown"
+            : `absolute longitude ${roundTo(longitude, 2).toFixed(2)} degrees`;
           const retrograde = planet.retrograde ? " retrograde" : "";
-          return `${planet.name || "Planet"} in ${planet.sign || "Unknown"} ${degree} degrees, house ${planet.house || "unknown"}${retrograde}`;
+          return `${planet.name || "Planet"} in ${planet.sign || "Unknown"} ${degree} degrees, ${longitudeText}, house ${house}${retrograde}`;
         })
         .join("; ");
     }
@@ -2022,9 +2076,9 @@ Place: ${userData.placeOfBirth || "Unknown"}
     const questionCategory = detectQuestionCategory(message);
     const questionFocus = categoryFocus(questionCategory);
     const currentMoment = new Date();
-    const chartIsComplete =
-      Array.isArray(userData?.westernChart?.planets) ||
-      Array.isArray(userData?.vedicChart?.planets);
+    const hasWesternChart = hasUsableChart(userData?.westernChart);
+    const hasVedicChart = hasUsableChart(userData?.vedicChart);
+    const chartIsComplete = hasWesternChart && hasVedicChart;
     let currentSky = null;
     let strongestTransitAspects = [];
     let retrievedKnowledge = "";
@@ -2103,8 +2157,12 @@ Never tell the user that planet data is missing or unavailable. If exact transit
       ? "Provided below in FOLLOW-UP PRIORITY MODE."
       : "Not provided";
     const chartCompletenessContext = chartIsComplete
-      ? "Saved chart data is available. Use only placements shown in the provided Western or Vedic chart."
-      : "Saved chart data is incomplete in this request. Answer more generally and do not invent placements.";
+      ? "Saved Western tropical and Vedic sidereal charts are both available. Use only placements shown in the provided charts."
+      : hasWesternChart
+        ? "Saved Western tropical chart is available, but Vedic chart data is incomplete. Use Western placements for natal and transit logic; do not invent Vedic placements."
+        : hasVedicChart
+          ? "Saved Vedic sidereal chart is available, but Western tropical chart data is incomplete. Use Vedic placements for natal interpretation only; do not compute tropical transit aspects from them."
+          : "Saved chart data is incomplete in this request. Answer more generally and do not invent placements.";
 
     const legacySystemPrompt = `
 You are Bhrigu — an astrologer and spiritual guide with deep mastery of Vedic and Western astrology.
@@ -2260,6 +2318,9 @@ ${currentSkyContext}
 
 Strongest active transits:
 ${strongestTransitContext}
+
+Transit math rule:
+Current-sky transits are tropical. Use computed transit-to-natal aspects only against the Western tropical natal chart. Use Vedic placements for sidereal natal interpretation, not tropical transit aspect math.
 
 User profile:
 ${birthData}

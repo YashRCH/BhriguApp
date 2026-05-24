@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../services/cosmic_chart_calculator.dart';
 import '../services/user_profile_cache_service.dart';
 
 class VedicChartCard extends StatefulWidget {
@@ -14,6 +15,12 @@ class VedicChartCard extends StatefulWidget {
 
 class _VedicChartCardState extends State<VedicChartCard>
     with SingleTickerProviderStateMixin {
+  static const double _chartLogicalSize = 300;
+  static const double _chartDisplayMaxSize = 330;
+  static const double _planetDiameter = 28;
+
+  final CosmicChartCalculator _chartCalculator = const CosmicChartCalculator();
+
   late AnimationController _animationController;
   late Animation<double> _lineAnimation;
   late Animation<double> _planetAnimation;
@@ -79,6 +86,11 @@ class _VedicChartCardState extends State<VedicChartCard>
         planets = rawPlanets
             .map((planet) => Map<String, dynamic>.from(planet))
             .toList();
+        planets = _withCalculatedLunarNodes(
+          planets,
+          data,
+          vedicChart,
+        );
       }
 
       ascendant = vedicChart['ascendant'] ?? '—';
@@ -107,6 +119,98 @@ class _VedicChartCardState extends State<VedicChartCard>
 
     if (chart is Map) {
       return Map<String, dynamic>.from(chart);
+    }
+
+    return null;
+  }
+
+  List<Map<String, dynamic>> _withCalculatedLunarNodes(
+    List<Map<String, dynamic>> chartPlanets,
+    Map<String, dynamic>? userData,
+    Map<String, dynamic> vedicChart,
+  ) {
+    final hasRahu = chartPlanets.any((planet) => planet['name'] == 'Rahu');
+    final hasKetu = chartPlanets.any((planet) => planet['name'] == 'Ketu');
+
+    if (hasRahu && hasKetu) {
+      return chartPlanets;
+    }
+
+    final birthDate = _dateFromUserData(userData?['dob']);
+    if (birthDate == null) {
+      return chartPlanets;
+    }
+
+    final calculatedChart = _chartCalculator.calculate(
+      birthDate: birthDate,
+      timeOfBirth: userData?['timeOfBirth']?.toString() ?? '',
+      placeOfBirth: userData?['placeOfBirth']?.toString() ?? '',
+      latitude: _doubleOrNull(userData?['latitude']),
+      longitude: _doubleOrNull(userData?['longitude']),
+    );
+
+    final augmentedPlanets = [...chartPlanets];
+    final chartAscendant = vedicChart['ascendant']?.toString();
+    for (final node in calculatedChart.vedicChart.planets.where(
+      (planet) => planet.name == 'Rahu' || planet.name == 'Ketu',
+    )) {
+      final alreadyPresent =
+          augmentedPlanets.any((planet) => planet['name'] == node.name);
+      if (!alreadyPresent) {
+        final nodeJson = node.toJson();
+        nodeJson['house'] = _houseFromAscendantSign(
+          node.sign,
+          chartAscendant,
+          fallback: node.house,
+        );
+        augmentedPlanets.add(nodeJson);
+      }
+    }
+
+    return augmentedPlanets;
+  }
+
+  int _houseFromAscendantSign(
+    String planetSign,
+    String? ascendantSign, {
+    required int fallback,
+  }) {
+    final planetSignIndex = CosmicChartCalculator.signs.indexOf(planetSign);
+    final ascendantSignIndex =
+        CosmicChartCalculator.signs.indexOf(ascendantSign ?? '');
+
+    if (planetSignIndex == -1 || ascendantSignIndex == -1) {
+      return fallback;
+    }
+
+    return ((planetSignIndex - ascendantSignIndex + 12) % 12) + 1;
+  }
+
+  DateTime? _dateFromUserData(dynamic value) {
+    if (value is DateTime) {
+      return value;
+    }
+
+    try {
+      final dynamic timestamp = value;
+      final converted = timestamp?.toDate();
+      if (converted is DateTime) {
+        return converted;
+      }
+    } catch (_) {
+      // Firestore Timestamp is optional here; string dates are the common path.
+    }
+
+    return DateTime.tryParse(value?.toString() ?? '');
+  }
+
+  double? _doubleOrNull(dynamic value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    if (value is String) {
+      return double.tryParse(value);
     }
 
     return null;
@@ -227,10 +331,7 @@ class _VedicChartCardState extends State<VedicChartCard>
     final sameHousePlanets =
         allPlanets.where((item) => _planetHouse(item) == house).toList();
 
-    final positionInHouse = sameHousePlanets.indexWhere(
-      (item) => item['name'] == planet['name'],
-    );
-
+    final positionInHouse = sameHousePlanets.indexOf(planet);
     final safePosition = positionInHouse == -1 ? 0 : positionInHouse;
     final totalInHouse = sameHousePlanets.length;
 
@@ -238,13 +339,55 @@ class _VedicChartCardState extends State<VedicChartCard>
       return base;
     }
 
-    const double spreadRadius = 22;
-
-    final angle = -math.pi / 2 + safePosition * 2 * math.pi / totalInHouse;
+    const edgePadding = (_planetDiameter / 2) + 2;
+    final offset = _planetGridOffset(safePosition, totalInHouse);
 
     return Offset(
-      base.dx + spreadRadius * math.cos(angle),
-      base.dy + spreadRadius * math.sin(angle),
+      (base.dx + offset.dx)
+          .clamp(edgePadding, _chartLogicalSize - edgePadding)
+          .toDouble(),
+      (base.dy + offset.dy)
+          .clamp(edgePadding, _chartLogicalSize - edgePadding)
+          .toDouble(),
+    );
+  }
+
+  Offset _planetGridOffset(int index, int total) {
+    const tightX = 13.0;
+    const tightY = 11.0;
+
+    if (total == 2) {
+      return [const Offset(-tightX, 0), const Offset(tightX, 0)][index];
+    }
+
+    if (total == 3) {
+      return [
+        const Offset(0, -tightY),
+        const Offset(-tightX, tightY),
+        const Offset(tightX, tightY),
+      ][index];
+    }
+
+    if (total == 4) {
+      return [
+        const Offset(-tightX, -tightY),
+        const Offset(tightX, -tightY),
+        const Offset(-tightX, tightY),
+        const Offset(tightX, tightY),
+      ][index];
+    }
+
+    const wrapColumns = 3;
+    const wrapX = 17.0;
+    const wrapY = 17.0;
+    final row = index ~/ wrapColumns;
+    final rows = (total / wrapColumns).ceil();
+    final itemsInRow = math.min(wrapColumns, total - row * wrapColumns);
+    final col = index % wrapColumns;
+
+    return Offset(
+      (col - (itemsInRow - 1) / 2) * wrapX,
+      (row - (rows - 1) / 2) * wrapY,
     );
   }
 
@@ -313,40 +456,57 @@ class _VedicChartCardState extends State<VedicChartCard>
                         ),
                       ),
                       const SizedBox(height: 30),
-                      Center(
-                        child: SizedBox(
-                          width: 300,
-                          height: 300,
-                          child: AnimatedBuilder(
-                            animation: _animationController,
-                            builder: (context, child) {
-                              return CustomPaint(
-                                painter: _NorthIndianChartPainter(
-                                  progress: _lineAnimation.value,
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final chartSize = math.min(
+                            _chartDisplayMaxSize,
+                            constraints.maxWidth,
+                          );
+
+                          return Center(
+                            child: SizedBox.square(
+                              dimension: chartSize,
+                              child: FittedBox(
+                                fit: BoxFit.contain,
+                                child: SizedBox(
+                                  width: _chartLogicalSize,
+                                  height: _chartLogicalSize,
+                                  child: AnimatedBuilder(
+                                    animation: _animationController,
+                                    builder: (context, child) {
+                                      return CustomPaint(
+                                        painter: _NorthIndianChartPainter(
+                                          progress: _lineAnimation.value,
+                                        ),
+                                        child: Stack(
+                                          clipBehavior: Clip.none,
+                                          children: [
+                                            for (int i = 0;
+                                                i < displayPlanets.length;
+                                                i++)
+                                              _animatedPlanet(
+                                                _planetShortName(
+                                                  displayPlanets[i],
+                                                ),
+                                                _planetPosition(
+                                                  displayPlanets[i],
+                                                  displayPlanets,
+                                                ).dx,
+                                                _planetPosition(
+                                                  displayPlanets[i],
+                                                  displayPlanets,
+                                                ).dy,
+                                              ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
                                 ),
-                                child: Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    for (int i = 0;
-                                        i < displayPlanets.length;
-                                        i++)
-                                      _animatedPlanet(
-                                        _planetShortName(displayPlanets[i]),
-                                        _planetPosition(
-                                          displayPlanets[i],
-                                          displayPlanets,
-                                        ).dx,
-                                        _planetPosition(
-                                          displayPlanets[i],
-                                          displayPlanets,
-                                        ).dy,
-                                      ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ),
+                              ),
+                            ),
+                          );
+                        },
                       ),
                       const SizedBox(height: 28),
                       _infoTile(
@@ -382,8 +542,8 @@ class _VedicChartCardState extends State<VedicChartCard>
     double top,
   ) {
     return Positioned(
-      left: left - 14,
-      top: top - 14,
+      left: left - (_planetDiameter / 2),
+      top: top - (_planetDiameter / 2),
       child: ScaleTransition(
         scale: _planetAnimation,
         child: FadeTransition(
@@ -395,19 +555,25 @@ class _VedicChartCardState extends State<VedicChartCard>
   }
 
   Widget _planet(String text) {
+    final isShadowPlanet = text == 'Ra' || text == 'Ke';
+    final accentColor =
+        isShadowPlanet ? const Color(0xFFE5D5F5) : const Color(0xFFE0C48F);
+
     return Container(
-      width: 28,
-      height: 28,
+      width: _planetDiameter,
+      height: _planetDiameter,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: const Color(0xFF2B1D47),
+        color: isShadowPlanet
+            ? const Color(0xFF4A3B69).withValues(alpha: 0.78)
+            : const Color(0xFF2B1D47),
         border: Border.all(
-          color: const Color(0xFFE0C48F).withValues(alpha: 0.55),
+          color: accentColor.withValues(alpha: isShadowPlanet ? 0.78 : 0.55),
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFE0C48F).withValues(alpha: 0.20),
-            blurRadius: 10,
+            color: accentColor.withValues(alpha: isShadowPlanet ? 0.34 : 0.20),
+            blurRadius: isShadowPlanet ? 13 : 10,
           ),
         ],
       ),
@@ -415,7 +581,7 @@ class _VedicChartCardState extends State<VedicChartCard>
         child: Text(
           text,
           style: GoogleFonts.inter(
-            color: const Color(0xFFE0C48F),
+            color: accentColor,
             fontWeight: FontWeight.w900,
             fontSize: 10.5,
             height: 1,
@@ -475,10 +641,33 @@ class _NorthIndianChartPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final stars = math.Random(42);
+    for (int i = 0; i < 120; i++) {
+      canvas.drawCircle(
+        Offset(
+          stars.nextDouble() * size.width,
+          stars.nextDouble() * size.height,
+        ),
+        stars.nextDouble() * 0.9,
+        Paint()
+          ..color = Colors.white.withValues(
+            alpha: 0.08 + (stars.nextDouble() * 0.22),
+          ),
+      );
+    }
+
+    final glowPaint = Paint()
+      ..color = const Color(0xFFE0C48F).withValues(alpha: 0.22)
+      ..strokeWidth = 6
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
+
     final paint = Paint()
       ..color = const Color(0xFFE0C48F)
       ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round;
 
     final path = Path();
 
@@ -507,6 +696,11 @@ class _NorthIndianChartPainter extends CustomPainter {
       final extractPath = metric.extractPath(
         0.0,
         metric.length * progress,
+      );
+
+      canvas.drawPath(
+        extractPath,
+        glowPaint,
       );
 
       canvas.drawPath(

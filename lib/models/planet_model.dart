@@ -19,11 +19,30 @@ class PlanetModel {
     return PlanetModel(
       name: json['name'] ?? '',
       sign: json['sign'] ?? '',
-      degree: (json['degree'] ?? 0).toDouble(),
-      house: json['house'] ?? 0,
+      degree: _doubleFromJson(json['degree']),
+      house: _intFromJson(json['house']),
       symbol: json['symbol'] ?? '',
-      retrograde: json['retrograde'] ?? false,
+      retrograde: _boolFromJson(json['retrograde']),
     );
+  }
+
+  static double _doubleFromJson(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  static int _intFromJson(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.round();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  static bool _boolFromJson(dynamic value) {
+    if (value is bool) return value;
+    if (value is String) return value.toLowerCase() == 'true';
+    return false;
   }
 
   Map<String, dynamic> toJson() {
