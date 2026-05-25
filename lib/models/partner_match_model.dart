@@ -1,3 +1,5 @@
+import '../constants/ai_response_language.dart';
+
 class PartnerBirthProfile {
   final String name;
   final DateTime dob;
@@ -198,6 +200,7 @@ class PartnerMatchReading {
   final String verdict;
   final String summary;
   final DateTime createdAt;
+  final String aiResponseLanguage;
 
   const PartnerMatchReading({
     required this.user,
@@ -212,6 +215,7 @@ class PartnerMatchReading {
     required this.verdict,
     required this.summary,
     required this.createdAt,
+    this.aiResponseLanguage = englishAiResponseLanguage,
   });
 
   Map<String, dynamic> toJson() => {
@@ -227,6 +231,7 @@ class PartnerMatchReading {
         'verdict': verdict,
         'summary': summary,
         'createdAt': createdAt.toIso8601String(),
+        'aiResponseLanguage': normalizeAiResponseLanguage(aiResponseLanguage),
       };
 
   factory PartnerMatchReading.fromJson(Map<String, dynamic> json) {
@@ -254,6 +259,9 @@ class PartnerMatchReading {
       summary: json['summary'] as String? ?? '',
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.now(),
+      aiResponseLanguage: normalizeAiResponseLanguage(
+        json['aiResponseLanguage'],
+      ),
     );
   }
 }

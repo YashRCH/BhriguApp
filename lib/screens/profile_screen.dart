@@ -4,7 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../constants/ai_response_language.dart';
 import '../services/auth_service.dart';
+import '../services/user_profile_cache_service.dart';
 import 'cosmic_blueprint_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -19,6 +21,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   Map<String, dynamic>? _userData;
   bool _loading = true;
   bool _deletingAccount = false;
+  bool _updatingLanguage = false;
   String _version = '';
 
   late final AnimationController _blueprintController;
@@ -73,6 +76,48 @@ class _ProfileScreenState extends State<ProfileScreen>
         _version = 'v${info.version}';
         _loading = false;
       });
+    }
+  }
+
+  String get _currentAiResponseLanguage {
+    return normalizeAiResponseLanguage(_userData?['aiResponseLanguage']);
+  }
+
+  Future<void> _setAiResponseLanguage(String language) async {
+    final normalized = normalizeAiResponseLanguage(language);
+    if (_updatingLanguage || normalized == _currentAiResponseLanguage) return;
+
+    setState(() {
+      _updatingLanguage = true;
+    });
+
+    try {
+      await UserProfileCacheService.instance.updateAiResponseLanguage(
+        normalized,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _userData = {
+          ...?_userData,
+          'aiResponseLanguage': normalized,
+        };
+        _updatingLanguage = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _updatingLanguage = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not update response language: $e'),
+          backgroundColor: const Color(0xFF1A1630),
+        ),
+      );
     }
   }
 
@@ -390,6 +435,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                           _sectionLabel('PLAN'),
                           const SizedBox(height: 12),
                           _planCard(),
+                          const SizedBox(height: 28),
+                          _sectionLabel('AI RESPONSE'),
+                          const SizedBox(height: 12),
+                          _languageCard(),
                           const SizedBox(height: 14),
                           TextButton.icon(
                             onPressed: _deletingAccount
@@ -745,6 +794,113 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _languageCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0xFF3A2D50),
+        ),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF1A1630),
+            Color(0xFF151126),
+          ],
+        ),
+      ),
+      child: Column(
+        children: [
+          _languageRow(
+            language: englishAiResponseLanguage,
+            title: 'English',
+            subtitle: 'AI readings and chat replies stay in English.',
+          ),
+          const SizedBox(height: 10),
+          _languageRow(
+            language: hinglishAiResponseLanguage,
+            title: 'Hinglish',
+            subtitle: 'AI replies use natural Roman-script Hinglish.',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _languageRow({
+    required String language,
+    required String title,
+    required String subtitle,
+  }) {
+    final selected = _currentAiResponseLanguage == language;
+
+    return InkWell(
+      onTap: _updatingLanguage ? null : () => _setAiResponseLanguage(language),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFF0F0A18).withValues(alpha: 0.72)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected
+                ? const Color(0xFFB58E34).withValues(alpha: 0.45)
+                : const Color(0xFF2E2650),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_off,
+              color:
+                  selected ? const Color(0xFFB58E34) : const Color(0xFF6B6080),
+              size: 21,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFFE5D5F5),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF6B6080),
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_updatingLanguage && selected)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Color(0xFFB58E34),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

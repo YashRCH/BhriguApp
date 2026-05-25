@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:astrology_guru_app/constants/ai_response_language.dart';
 import 'package:astrology_guru_app/constants/app_messages.dart';
 import 'package:astrology_guru_app/constants/chat_hints.dart';
 import 'package:astrology_guru_app/constants/firebase_constants.dart';
@@ -62,7 +63,29 @@ void main() {
     expect(map['placeOfBirth'], 'Delhi');
     expect(map['latitude'], 28.6139);
     expect(map['longitude'], 77.2090);
+    expect(map['aiResponseLanguage'], englishAiResponseLanguage);
     expect(map['createdAt'], isA<String>());
+  });
+
+  test('AI response language defaults to English unless Hinglish is explicit',
+      () {
+    expect(normalizeAiResponseLanguage(null), englishAiResponseLanguage);
+    expect(normalizeAiResponseLanguage(''), englishAiResponseLanguage);
+    expect(normalizeAiResponseLanguage('hindi'), englishAiResponseLanguage);
+    expect(
+      normalizeAiResponseLanguage(hinglishAiResponseLanguage),
+      hinglishAiResponseLanguage,
+    );
+
+    final user = UserModel(
+      name: 'Bhrigu',
+      dob: DateTime(2000, 1, 2),
+      timeOfBirth: '08:30',
+      placeOfBirth: 'Delhi',
+      aiResponseLanguage: 'hindi',
+    );
+
+    expect(user.toMap()['aiResponseLanguage'], englishAiResponseLanguage);
   });
 
   test('shared date keys are stable and zero padded', () {
@@ -297,6 +320,7 @@ void main() {
       verdict: 'Promising with patience',
       summary: 'This match has warmth and lessons.',
       createdAt: DateTime(2026, 5, 19),
+      aiResponseLanguage: hinglishAiResponseLanguage,
     );
 
     var flow = PartnerMatchFlow.initial();
@@ -321,6 +345,7 @@ void main() {
     expect(partner['longitude'], 72.8777);
     expect((sourceData['scores'] as Map<String, dynamic>)['overall'], 82);
     expect(sourceData['freshReadingOnly'], isTrue);
+    expect(reading.toJson()['aiResponseLanguage'], hinglishAiResponseLanguage);
   });
 
   test('partner birth profile preserves coordinates across json', () {

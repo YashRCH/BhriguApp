@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../constants/ai_response_language.dart';
 import '../services/chart_ai_service.dart';
 import '../services/user_profile_cache_service.dart';
 
@@ -87,8 +88,15 @@ class _CompatibilitySignatureCardState extends State<CompatibilitySignatureCard>
 
     final calculatedSignature = _calculateSignature(data);
 
-    String insight =
-        data['compatibilityAiInsight'] ?? data['compatibilityInsight'] ?? '';
+    final aiResponseLanguage = normalizeAiResponseLanguage(
+      data['aiResponseLanguage'],
+    );
+    final insightLanguage = normalizeAiResponseLanguage(
+      data['compatibilityAiInsightLanguage'],
+    );
+    String insight = insightLanguage == aiResponseLanguage
+        ? data['compatibilityAiInsight'] ?? data['compatibilityInsight'] ?? ''
+        : '';
 
     if (insight.trim().isEmpty) {
       insight = await _chartAiService.generateCompatibilityInsight(uid);

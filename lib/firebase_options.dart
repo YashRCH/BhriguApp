@@ -55,7 +55,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '91676554553',
     projectId: 'astrology-guru-app',
     storageBucket: 'astrology-guru-app.firebasestorage.app',
-    iosClientId: '91676554553-ronjnn2stfgvj657j28aog81h3t0j612.apps.googleusercontent.com',
+    iosClientId:
+        '91676554553-ronjnn2stfgvj657j28aog81h3t0j612.apps.googleusercontent.com',
     iosBundleId: 'com.example.astrologyGuruApp',
   );
 
@@ -74,7 +75,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '91676554553',
     projectId: 'astrology-guru-app',
     storageBucket: 'astrology-guru-app.firebasestorage.app',
-    iosClientId: '91676554553-ronjnn2stfgvj657j28aog81h3t0j612.apps.googleusercontent.com',
+    iosClientId:
+        '91676554553-ronjnn2stfgvj657j28aog81h3t0j612.apps.googleusercontent.com',
     iosBundleId: 'com.example.astrologyGuruApp',
   );
 
@@ -85,5 +87,4 @@ class DefaultFirebaseOptions {
     projectId: 'astrology-guru-app',
     storageBucket: 'astrology-guru-app.firebasestorage.app',
   );
-
 }

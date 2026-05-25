@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../constants/ai_response_language.dart';
 import '../models/follow_up_context_model.dart';
 import 'user_profile_cache_service.dart';
 
@@ -16,9 +17,14 @@ class FollowUpContextService {
     required String presentCard,
     required String futureCard,
     required String fullReading,
+    String? aiResponseLanguage,
   }) async {
     final uid = _requireUid();
     final userSnapshot = await _loadUserSnapshot(uid);
+    final contextLanguage = _contextLanguage(
+      userSnapshot,
+      aiResponseLanguage,
+    );
 
     final docRef = _firestore
         .collection('users')
@@ -42,6 +48,7 @@ class FollowUpContextService {
       },
       userSnapshot: userSnapshot,
       createdAt: DateTime.now(),
+      aiResponseLanguage: contextLanguage,
     );
 
     await docRef.set({
@@ -57,9 +64,14 @@ class FollowUpContextService {
     required String selectedFollowUpQuestion,
     required String readingSummary,
     required Map<String, dynamic> sourceData,
+    String? aiResponseLanguage,
   }) async {
     final uid = _requireUid();
     final userSnapshot = await _loadUserSnapshot(uid);
+    final contextLanguage = _contextLanguage(
+      userSnapshot,
+      aiResponseLanguage,
+    );
 
     final docRef = _firestore
         .collection('users')
@@ -78,6 +90,7 @@ class FollowUpContextService {
       sourceData: sourceData,
       userSnapshot: userSnapshot,
       createdAt: DateTime.now(),
+      aiResponseLanguage: contextLanguage,
     );
 
     await docRef.set({
@@ -93,9 +106,14 @@ class FollowUpContextService {
     required String selectedFollowUpQuestion,
     required String readingSummary,
     required Map<String, dynamic> sourceData,
+    String? aiResponseLanguage,
   }) async {
     final uid = _requireUid();
     final userSnapshot = await _loadUserSnapshot(uid);
+    final contextLanguage = _contextLanguage(
+      userSnapshot,
+      aiResponseLanguage,
+    );
 
     final docRef = _firestore
         .collection('users')
@@ -114,6 +132,7 @@ class FollowUpContextService {
       sourceData: sourceData,
       userSnapshot: userSnapshot,
       createdAt: DateTime.now(),
+      aiResponseLanguage: contextLanguage,
     );
 
     await docRef.set({
@@ -129,9 +148,14 @@ class FollowUpContextService {
     required String selectedFollowUpQuestion,
     required String readingSummary,
     required Map<String, dynamic> sourceData,
+    String? aiResponseLanguage,
   }) async {
     final uid = _requireUid();
     final userSnapshot = await _loadUserSnapshot(uid);
+    final contextLanguage = _contextLanguage(
+      userSnapshot,
+      aiResponseLanguage,
+    );
 
     final docRef = _firestore
         .collection('users')
@@ -150,6 +174,7 @@ class FollowUpContextService {
       sourceData: sourceData,
       userSnapshot: userSnapshot,
       createdAt: DateTime.now(),
+      aiResponseLanguage: contextLanguage,
     );
 
     await docRef.set({
@@ -175,6 +200,15 @@ class FollowUpContextService {
     return FollowUpContext.fromFirestore(doc);
   }
 
+  String _contextLanguage(
+    Map<String, dynamic> userSnapshot,
+    String? aiResponseLanguage,
+  ) {
+    return normalizeAiResponseLanguage(
+      aiResponseLanguage ?? userSnapshot['aiResponseLanguage'],
+    );
+  }
+
   Future<Map<String, dynamic>> _loadUserSnapshot(String uid) async {
     final data =
         await UserProfileCacheService.instance.userDataWithFreshCharts() ?? {};
@@ -191,6 +225,9 @@ class FollowUpContextService {
       'chartCalculationSource': data['chartCalculationSource'],
       'chartCalculationVersion': data['chartCalculationVersion'],
       'chartCalculationMeta': data['chartCalculationMeta'],
+      'aiResponseLanguage': normalizeAiResponseLanguage(
+        data['aiResponseLanguage'],
+      ),
     };
   }
 

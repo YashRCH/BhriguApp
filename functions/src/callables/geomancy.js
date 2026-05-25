@@ -40,6 +40,10 @@ const {
   messageListToPrompt,
   stableStringify,
   cacheKeyForReading,
+  normalizeAiResponseLanguage,
+  resolveAiResponseLanguage,
+  languageInstruction,
+  ensureHinglishText,
   userReadingCacheRef,
   readCachedReading,
   writeCachedReading,
@@ -165,6 +169,10 @@ exports.generateGeomancyReading = onCall(
       typeof request.data.question === "string"
         ? request.data.question.trim()
         : "";
+    const aiResponseLanguage = await resolveAiResponseLanguage(
+      decodedToken.uid,
+      request.data.aiResponseLanguage
+    );
     const birthData = request.data.birthData || "Birth data not available.";
     const answer = request.data.answer || "Mixed result";
     const chart = request.data.chart || {};
@@ -182,15 +190,42 @@ exports.generateGeomancyReading = onCall(
       birthData,
       answer,
       chart,
+      aiResponseLanguage,
     });
 
     const cachedText = await readCachedReading(
       decodedToken.uid,
       cacheKey,
-      GEOMANCY_READING_CONTENT_VERSION
+      GEOMANCY_READING_CONTENT_VERSION,
+      aiResponseLanguage
     );
 
     if (cachedText) {
+      const safeCachedText = await ensureHinglishText({
+        text: cachedText,
+        aiResponseLanguage,
+        preserveFormatInstruction:
+          "Preserve THE JUDGEMENT, THE WITNESSES, THE RECONCILER, and EARTH'S COUNSEL headings exactly.",
+        maxTokens: GEOMANCY_MAX_OUTPUT_TOKENS,
+      });
+
+      if (safeCachedText !== cachedText) {
+        try {
+          await writeCachedReading(
+            decodedToken.uid,
+            cacheKey,
+            GEOMANCY_READING_CONTENT_VERSION,
+            safeCachedText,
+            aiResponseLanguage
+          );
+        } catch (repairError) {
+          console.warn(
+            "Failed to persist repaired geomancy cache text.",
+            repairError
+          );
+        }
+      }
+
       await recordUsageEvent(decodedToken.uid, {
         feature: "geomancy_reading",
         provider: "firestore_cache",
@@ -199,13 +234,14 @@ exports.generateGeomancyReading = onCall(
       });
 
       return {
-        text: cachedText,
+        text: safeCachedText,
         cached: true,
         deduped: true,
+        aiResponseLanguage,
       };
     }
 
-    const geminiPrompt = `
+    const geminiPrompt = `${languageInstruction(aiResponseLanguage)}
 Give one short symbolic context paragraph for this geomancy chart in relation to the user's question.
 
 User question:
@@ -257,7 +293,7 @@ Keep it under 70 words. Stay in the user's question domain. No markdown.
         ? "The user did not type a question. Give a general reading from the pattern."
         : question;
 
-    const prompt = `
+    const prompt = `${languageInstruction(aiResponseLanguage)}
 You are Bhrigu Geomancer inside the BHR1GU astrology app.
 You are interpreting a geomancy shield chart created by the user's sixteen hand-drawn ritual marks.
 
@@ -311,20 +347,29 @@ RULES:
 - Do not add extra headings or rename the headings.
 - Never ask a question at the end.
 - Use the exact all-caps headings shown above.
-
 `;
 
     try {
-      const text = await generateGeminiReadingText({
+      let text = await generateGeminiReadingText({
+        systemInstruction: `${languageInstruction(aiResponseLanguage)}
+Follow the geomancy reading structure exactly. Preserve the required all-caps headings. Return only the reading.`,
         prompt,
         maxTokens: GEOMANCY_MAX_OUTPUT_TOKENS,
         temperature: GEOMANCY_READING_TEMPERATURE,
+      });
+      text = await ensureHinglishText({
+        text,
+        aiResponseLanguage,
+        preserveFormatInstruction:
+          "Preserve THE JUDGEMENT, THE WITNESSES, THE RECONCILER, and EARTH'S COUNSEL headings exactly.",
+        maxTokens: GEOMANCY_MAX_OUTPUT_TOKENS,
       });
       await writeCachedReading(
         decodedToken.uid,
         cacheKey,
         GEOMANCY_READING_CONTENT_VERSION,
-        text
+        text,
+        aiResponseLanguage
       );
 
       await recordUsageEvent(decodedToken.uid, {
@@ -337,6 +382,7 @@ RULES:
       return {
         text: text,
         cached: false,
+        aiResponseLanguage,
       };
     } catch (error) {
       console.error(

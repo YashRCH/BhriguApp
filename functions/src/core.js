@@ -37,6 +37,8 @@ const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
 const CHART_CALCULATION_VERSION = "nasa_jpl_horizons_v5_observer_ecliptic_nodes";
 const HOME_HOROSCOPE_CONTENT_VERSION = "home_signal_v6_complete_sentences";
+const ENGLISH_AI_RESPONSE_LANGUAGE = "english";
+const HINGLISH_AI_RESPONSE_LANGUAGE = "hinglish";
 
 const ZODIAC_SIGNS = [
   "Aries",
@@ -135,6 +137,129 @@ function cacheKeyForReading(type, payload) {
   return `${type}_${hash}`;
 }
 
+function normalizeAiResponseLanguage(value) {
+  return value === HINGLISH_AI_RESPONSE_LANGUAGE
+    ? HINGLISH_AI_RESPONSE_LANGUAGE
+    : ENGLISH_AI_RESPONSE_LANGUAGE;
+}
+
+function languageInstruction(aiResponseLanguage) {
+  if (normalizeAiResponseLanguage(aiResponseLanguage) !== HINGLISH_AI_RESPONSE_LANGUAGE) {
+    return "";
+  }
+
+  return `
+RESPONSE LANGUAGE:
+This is mandatory: all user-facing prose must be in natural Indian Hinglish using Roman script.
+Do not answer in full English when this instruction is present.
+Mix simple Hindi and English naturally, like a thoughtful Indian astrology guide speaking to an Indian user.
+Use examples of this tone: "Aapke chart ka signal yeh kehta hai..." and "abhi clarity force karne ki zarurat nahi hai."
+Do not use Devanagari.
+Do not translate required headings, JSON keys, labels, section names, card names, figure names, sign names, or formatting markers.
+Keep astrology terms accurate: Lagna, graha, dasha, nakshatra, Rahu, Ketu, Shani, karma, transit.
+Explain Sanskrit terms simply when useful.
+Avoid filmy, exaggerated, childish, or preachy Hindi.
+Preserve every existing safety rule, structure rule, and accuracy rule above this instruction.
+`;
+}
+
+function looksLikeHinglish(text) {
+  const source = String(text || "").toLowerCase();
+  const markers = [
+    "aap",
+    "aapke",
+    "aapka",
+    "hai",
+    "hain",
+    "nahi",
+    "nahin",
+    "abhi",
+    "yeh",
+    "isse",
+    "iska",
+    "isliye",
+    "lekin",
+    "agar",
+    "toh",
+    "mat",
+    "zarurat",
+    "samjho",
+    "dikhata",
+    "dikhati",
+    "karta",
+    "karti",
+    "mein",
+    "ki",
+    "ka",
+    "ko",
+    "se",
+    "par",
+  ];
+
+  return markers.filter((marker) => {
+    return new RegExp(`\\b${marker}\\b`).test(source);
+  }).length >= 3;
+}
+
+async function ensureHinglishText({
+  text,
+  aiResponseLanguage,
+  preserveFormatInstruction = "",
+  maxTokens = 1200,
+}) {
+  if (normalizeAiResponseLanguage(aiResponseLanguage) !== HINGLISH_AI_RESPONSE_LANGUAGE) {
+    return text;
+  }
+
+  if (looksLikeHinglish(text)) {
+    return text;
+  }
+
+  try {
+    return await generateGeminiReadingText({
+      systemInstruction: `${languageInstruction(aiResponseLanguage)}
+Rewrite the supplied text into natural Indian Hinglish using Roman script.
+Preserve all headings, labels, section order, names, numbers, punctuation style, and line breaks.
+Do not add new sections. Do not remove information. Do not use Devanagari.
+Return only the rewritten text.
+${preserveFormatInstruction}`,
+      prompt: String(text || ""),
+      maxTokens,
+      temperature: 0.25,
+    });
+  } catch (error) {
+    console.error(
+      "Hinglish rewrite failed:",
+      error.response?.data || error.message
+    );
+    return text;
+  }
+}
+
+async function resolveAiResponseLanguage(uid, requestValue, userData = null) {
+  if (userData && Object.prototype.hasOwnProperty.call(userData, "aiResponseLanguage")) {
+    return normalizeAiResponseLanguage(userData.aiResponseLanguage);
+  }
+
+  try {
+    const snap = await admin.firestore().collection("users").doc(uid).get();
+    const data = snap.data() || {};
+
+    if (Object.prototype.hasOwnProperty.call(data, "aiResponseLanguage")) {
+      return normalizeAiResponseLanguage(data.aiResponseLanguage);
+    }
+  } catch (error) {
+    console.error("AI response language lookup error:", error.message);
+  }
+
+  if (requestValue) {
+    console.warn(
+      "Ignoring client-only aiResponseLanguage because no stored user preference was found."
+    );
+  }
+  return ENGLISH_AI_RESPONSE_LANGUAGE;
+}
+
 function userReadingCacheRef(uid, cacheKey) {
   return admin
     .firestore()
@@ -144,7 +269,12 @@ function userReadingCacheRef(uid, cacheKey) {
     .doc(cacheKey);
 }
 
-async function readCachedReading(uid, cacheKey, contentVersion) {
+async function readCachedReading(
+  uid,
+  cacheKey,
+  contentVersion,
+  aiResponseLanguage = null
+) {
   let snap;
 
   try {
@@ -164,15 +294,30 @@ async function readCachedReading(uid, cacheKey, contentVersion) {
     return null;
   }
 
+  if (
+    aiResponseLanguage &&
+    normalizeAiResponseLanguage(cached.aiResponseLanguage) !==
+      normalizeAiResponseLanguage(aiResponseLanguage)
+  ) {
+    return null;
+  }
+
   return String(cached.text);
 }
 
-async function writeCachedReading(uid, cacheKey, contentVersion, text) {
+async function writeCachedReading(
+  uid,
+  cacheKey,
+  contentVersion,
+  text,
+  aiResponseLanguage = ENGLISH_AI_RESPONSE_LANGUAGE
+) {
   try {
     await userReadingCacheRef(uid, cacheKey).set(
       {
         contentVersion,
         text,
+        aiResponseLanguage: normalizeAiResponseLanguage(aiResponseLanguage),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true }
@@ -2107,6 +2252,10 @@ module.exports = {
   messageListToPrompt,
   stableStringify,
   cacheKeyForReading,
+  normalizeAiResponseLanguage,
+  resolveAiResponseLanguage,
+  languageInstruction,
+  ensureHinglishText,
   userReadingCacheRef,
   readCachedReading,
   writeCachedReading,

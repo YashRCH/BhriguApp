@@ -2,10 +2,12 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 import '../constants/app_messages.dart';
+import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
 import '../models/chat_message.dart';
 import '../models/follow_up_context_model.dart';
 import 'firebase_session_service.dart';
+import 'user_profile_cache_service.dart';
 
 class GroqService {
   final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
@@ -56,6 +58,8 @@ class GroqService {
             )
             .content
         : '';
+    final aiResponseLanguage = await UserProfileCacheService.instance
+        .aiResponseLanguage(refresh: true);
 
     if (lastUserMessage.trim().isEmpty) {
       debugPrint('Bhrigu chat blocked: last user message is empty');
@@ -65,10 +69,12 @@ class GroqService {
 
     final safeHistory = history
         .where((m) => m.content.trim().isNotEmpty)
+        .where((m) => m.aiResponseLanguage == aiResponseLanguage)
         .map(
           (m) => {
             'role': m.role,
             'content': m.content,
+            'aiResponseLanguage': m.aiResponseLanguage,
           },
         )
         .toList();
@@ -77,6 +83,7 @@ class GroqService {
       'idToken': idToken,
       'message': lastUserMessage,
       'history': safeHistory,
+      'aiResponseLanguage': aiResponseLanguage,
     };
 
     if (followUpContext != null) {
@@ -147,6 +154,9 @@ class GroqService {
       'sourceData': _sanitizeMap(context.sourceData),
       'userSnapshot': _sanitizeMap(context.userSnapshot),
       'createdAt': context.createdAt.toIso8601String(),
+      'aiResponseLanguage': normalizeAiResponseLanguage(
+        context.aiResponseLanguage,
+      ),
     };
   }
 

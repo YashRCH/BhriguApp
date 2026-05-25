@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../constants/app_messages.dart';
+import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
 import 'firebase_session_service.dart';
 import 'user_profile_cache_service.dart';
@@ -24,6 +25,9 @@ class ChartAiService {
 
     final westernChart = data['westernChart'];
     final vedicChart = data['vedicChart'];
+    final aiResponseLanguage = normalizeAiResponseLanguage(
+      data['aiResponseLanguage'],
+    );
 
     try {
       final idToken = await _session.idToken();
@@ -41,6 +45,7 @@ class ChartAiService {
           'idToken': idToken,
           'westernChart': westernChart,
           'vedicChart': vedicChart,
+          'aiResponseLanguage': aiResponseLanguage,
         },
       );
 
@@ -52,11 +57,16 @@ class ChartAiService {
 
       await FirebaseFirestore.instance.collection('users').doc(uid).update({
         'compatibilityAiInsight': text.trim(),
+        'compatibilityAiInsightLanguage': aiResponseLanguage,
         'compatibilityAiGeneratedAt': FieldValue.serverTimestamp(),
       });
 
       return text.trim();
     } catch (_) {
+      if (aiResponseLanguage == hinglishAiResponseLanguage) {
+        return 'Aapka chart intense emotional selectiveness aur steady, mature, spiritually grounded logon ki taraf attraction dikhata hai. Bond powerful ho sakta hai, lekin caution yeh hai ki trust earn hone se pehle depth expect mat kijiye.';
+      }
+
       return 'Your chart shows intense emotional selectiveness and strong attraction to people who feel steady, mature, and spiritually grounded. The bond can become powerful, but the caution is expecting depth too quickly before trust has been earned.';
     }
   }

@@ -99,6 +99,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
         selectedFollowUpQuestion: question,
         readingSummary: reading.summary,
         sourceData: _flow.followUpSourceData(),
+        aiResponseLanguage: reading.aiResponseLanguage,
       );
 
       if (!mounted) return;

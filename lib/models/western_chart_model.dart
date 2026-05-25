@@ -19,9 +19,7 @@ class WesternChartModel {
       'sunSign': sunSign,
       'moonSign': moonSign,
       'risingSign': risingSign,
-      'planets': planets
-          .map((planet) => planet.toJson())
-          .toList(),
+      'planets': planets.map((planet) => planet.toJson()).toList(),
     };
   }
 

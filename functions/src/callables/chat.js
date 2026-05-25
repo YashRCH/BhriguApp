@@ -40,6 +40,10 @@ const {
   messageListToPrompt,
   stableStringify,
   cacheKeyForReading,
+  normalizeAiResponseLanguage,
+  resolveAiResponseLanguage,
+  languageInstruction,
+  ensureHinglishText,
   userReadingCacheRef,
   readCachedReading,
   writeCachedReading,
@@ -175,26 +179,6 @@ exports.generateBhriguChat = onCall(
       throw new HttpsError("invalid-argument", "Message is too long.");
     }
 
-    const safeHistory = Array.isArray(history)
-      ? history
-          .filter((m) => {
-            return (
-              m &&
-              typeof m.role === "string" &&
-              typeof m.content === "string" &&
-              ["user", "assistant"].includes(m.role)
-            );
-          })
-          .slice(-12)
-      : [];
-    const historyWithoutCurrentMessage = safeHistory.filter((m, index) => {
-      return !(
-        index === safeHistory.length - 1 &&
-        m.role === "user" &&
-        m.content.trim() === message.trim()
-      );
-    });
-
     let userData = {};
 
     try {
@@ -208,6 +192,41 @@ exports.generateBhriguChat = onCall(
     } catch (error) {
       console.error("Bhrigu chat user document read error:", error.message);
     }
+
+    const aiResponseLanguage = await resolveAiResponseLanguage(
+      uid,
+      request.data.aiResponseLanguage,
+      userData
+    );
+    const activeFollowUpContext =
+      followUpContext &&
+      normalizeAiResponseLanguage(followUpContext.aiResponseLanguage) === aiResponseLanguage
+        ? followUpContext
+        : null;
+    const safeHistory = Array.isArray(history)
+      ? history
+          .filter((m) => {
+            return (
+              m &&
+              typeof m.role === "string" &&
+              typeof m.content === "string" &&
+              normalizeAiResponseLanguage(m.aiResponseLanguage) === aiResponseLanguage &&
+              ["user", "assistant"].includes(m.role)
+            );
+          })
+          .map((m) => ({
+            role: m.role,
+            content: m.content,
+          }))
+          .slice(-12)
+      : [];
+    const historyWithoutCurrentMessage = safeHistory.filter((m, index) => {
+      return !(
+        index === safeHistory.length - 1 &&
+        m.role === "user" &&
+        m.content.trim() === message.trim()
+      );
+    });
 
     function safeJson(value) {
       try {
@@ -367,7 +386,7 @@ Never tell the user that planet data is missing or unavailable. If exact transit
     const recentConversationContext = historyWithoutCurrentMessage.length
       ? messageListToPrompt(historyWithoutCurrentMessage)
       : "No prior conversation.";
-    const followUpContextText = followUpContext
+    const followUpContextText = activeFollowUpContext
       ? "Provided below in FOLLOW-UP PRIORITY MODE."
       : "Not provided";
     const chartCompletenessContext = chartIsComplete
@@ -645,10 +664,10 @@ ${safeJson(userSnapshot)}
 `;
     }
 
-    const activeSystemPrompt = buildFollowUpSystemPrompt(
+    const activeSystemPrompt = `${buildFollowUpSystemPrompt(
       systemPrompt,
-      followUpContext
-    );
+      activeFollowUpContext
+    )}${languageInstruction(aiResponseLanguage)}`;
 
     const chatMessages = [
       {
@@ -657,7 +676,9 @@ ${safeJson(userSnapshot)}
       },
       {
         role: "assistant",
-        content: "Understood. I am Bhrigu. How can I help you?",
+        content: aiResponseLanguage === "hinglish"
+          ? "Samjha. Main Bhrigu hoon. Aapki madad kaise kar sakta hoon?"
+          : "Understood. I am Bhrigu. How can I help you?",
       },
       ...historyWithoutCurrentMessage,
       {
@@ -666,7 +687,7 @@ ${safeJson(userSnapshot)}
       },
     ];
 
-    const isDeepFollowUp = Boolean(followUpContext);
+    const isDeepFollowUp = Boolean(activeFollowUpContext);
     let text;
     let providerUsed = isDeepFollowUp ? "gemini" : "groq";
     let modelUsed = isDeepFollowUp
@@ -757,6 +778,14 @@ ${safeJson(userSnapshot)}
       }
     }
 
+    text = await ensureHinglishText({
+      text: text.trim(),
+      aiResponseLanguage,
+      preserveFormatInstruction:
+        "Preserve paragraph breaks and plain-text format. Do not add markdown.",
+      maxTokens: 700,
+    });
+
     await recordUsageEvent(uid, {
       feature: isDeepFollowUp ? "chat_follow_up" : "bhrigu_chat",
       provider: providerUsed,
@@ -766,6 +795,7 @@ ${safeJson(userSnapshot)}
 
     return {
       text: text.trim(),
+      aiResponseLanguage,
     };
   }
 );

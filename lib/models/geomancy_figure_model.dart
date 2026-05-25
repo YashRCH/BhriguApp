@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../constants/ai_response_language.dart';
+
 class GeomancyFigureModel {
   final String name;
   final String latinName;
@@ -119,12 +121,14 @@ class GeomancyReadingModel {
   final GeomancyChartModel chart;
   final String answer;
   final String interpretation;
+  final String aiResponseLanguage;
 
   const GeomancyReadingModel({
     required this.question,
     required this.chart,
     required this.answer,
     required this.interpretation,
+    this.aiResponseLanguage = englishAiResponseLanguage,
   });
 
   Map<String, dynamic> toJson() => {
@@ -132,6 +136,7 @@ class GeomancyReadingModel {
         'chart': chart.toJson(),
         'answer': answer,
         'interpretation': interpretation,
+        'aiResponseLanguage': normalizeAiResponseLanguage(aiResponseLanguage),
       };
 
   factory GeomancyReadingModel.fromJson(Map<String, dynamic> json) {
@@ -142,6 +147,9 @@ class GeomancyReadingModel {
       ),
       answer: json['answer'] as String? ?? '',
       interpretation: json['interpretation'] as String? ?? '',
+      aiResponseLanguage: normalizeAiResponseLanguage(
+        json['aiResponseLanguage'],
+      ),
     );
   }
 }
@@ -151,12 +159,14 @@ class GeomancySavedReading {
   final GeomancyReadingModel reading;
   final List<int> lineValues;
   final DateTime createdAt;
+  final String aiResponseLanguage;
 
   const GeomancySavedReading({
     required this.id,
     required this.reading,
     required this.lineValues,
     required this.createdAt,
+    this.aiResponseLanguage = englishAiResponseLanguage,
   });
 
   Map<String, dynamic> toJson() {
@@ -167,6 +177,7 @@ class GeomancySavedReading {
       'interpretation': reading.interpretation,
       'lineValues': lineValues,
       'createdAt': Timestamp.fromDate(createdAt),
+      'aiResponseLanguage': normalizeAiResponseLanguage(aiResponseLanguage),
     };
   }
 
@@ -181,6 +192,9 @@ class GeomancySavedReading {
           .map((e) => (e as num).toInt())
           .toList(),
       createdAt: _dateFromValue(json['createdAt']),
+      aiResponseLanguage: normalizeAiResponseLanguage(
+        json['aiResponseLanguage'],
+      ),
     );
   }
 

@@ -12,6 +12,7 @@ import '../models/chat_message.dart';
 import '../models/follow_up_context_model.dart';
 import '../services/groq_service.dart';
 import '../services/follow_up_context_service.dart';
+import '../services/user_profile_cache_service.dart';
 import '../providers/chat_provider.dart';
 import '../widgets/ai_report_button.dart';
 import 'cosmic_blueprint_screen.dart';
@@ -80,6 +81,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     )..repeat();
 
     _loadFollowUpContextIfNeeded();
+    _syncChatLanguage();
 
     _hintTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (!mounted) return;
@@ -89,6 +91,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _hintIndex = (_hintIndex + 1) % chatHints.length;
       });
     });
+  }
+
+  Future<void> _syncChatLanguage() async {
+    await ref.read(chatProvider.notifier).ensureActiveLanguage();
+
+    if (!mounted) return;
+    _scrollToBottom(force: true);
   }
 
   @override
@@ -123,11 +132,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
 
     try {
+      final currentLanguage =
+          await UserProfileCacheService.instance.aiResponseLanguage();
       final followUpContext = await _followUpService.getFollowUpContext(
         contextId.trim(),
       );
 
       if (!mounted) return;
+
+      if (followUpContext != null &&
+          followUpContext.aiResponseLanguage != currentLanguage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'This reading was created in another response language. Switch back to continue it, or create a new reading.',
+              style: GoogleFonts.inter(),
+            ),
+            backgroundColor: const Color(0xFF1A1630),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+        setState(() {
+          _loadingFollowUpContext = false;
+        });
+        return;
+      }
 
       setState(() {
         _activeFollowUpContext = followUpContext;
@@ -156,11 +186,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     if (text.isEmpty || _isTyping) return;
 
     _stickToBottom = true;
+    final language =
+        await ref.read(chatProvider.notifier).ensureActiveLanguage();
+    if (!mounted) return;
+
+    if (_activeFollowUpContext != null &&
+        _activeFollowUpContext!.aiResponseLanguage != language) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'This reading was created in another response language. Switch back to continue it, or create a new reading.',
+            style: GoogleFonts.inter(),
+          ),
+          backgroundColor: const Color(0xFF1A1630),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      setState(() {
+        _activeFollowUpContext = null;
+      });
+      return;
+    }
 
     ref.read(chatProvider.notifier).addMessage(
           ChatMessage(
             role: 'user',
             content: text,
+            aiResponseLanguage: language,
           ),
         );
 
@@ -175,6 +227,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           ChatMessage(
             role: 'assistant',
             content: '',
+            aiResponseLanguage: language,
           ),
         );
 

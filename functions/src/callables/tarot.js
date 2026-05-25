@@ -40,6 +40,10 @@ const {
   messageListToPrompt,
   stableStringify,
   cacheKeyForReading,
+  normalizeAiResponseLanguage,
+  resolveAiResponseLanguage,
+  languageInstruction,
+  ensureHinglishText,
   userReadingCacheRef,
   readCachedReading,
   writeCachedReading,
@@ -220,6 +224,10 @@ exports.generateTarotReading = onCall(
     }
 
     const birthData = request.data.birthData || "Birth data not available.";
+    const aiResponseLanguage = await resolveAiResponseLanguage(
+      decodedToken.uid,
+      request.data.aiResponseLanguage
+    );
     const question =
       typeof request.data.question === "string"
         ? request.data.question.trim()
@@ -250,15 +258,42 @@ exports.generateTarotReading = onCall(
       pastKeywords,
       presentKeywords,
       futureKeywords,
+      aiResponseLanguage,
     });
 
     const cachedText = await readCachedReading(
       decodedToken.uid,
       cacheKey,
-      TAROT_READING_CONTENT_VERSION
+      TAROT_READING_CONTENT_VERSION,
+      aiResponseLanguage
     );
 
     if (cachedText) {
+      const safeCachedText = await ensureHinglishText({
+        text: cachedText,
+        aiResponseLanguage,
+        preserveFormatInstruction:
+          "Preserve PAST, PRESENT, FUTURE headings and all card names exactly.",
+        maxTokens: TAROT_MAX_OUTPUT_TOKENS,
+      });
+
+      if (safeCachedText !== cachedText) {
+        try {
+          await writeCachedReading(
+            decodedToken.uid,
+            cacheKey,
+            TAROT_READING_CONTENT_VERSION,
+            safeCachedText,
+            aiResponseLanguage
+          );
+        } catch (repairError) {
+          console.warn(
+            "Failed to persist repaired tarot cache text.",
+            repairError
+          );
+        }
+      }
+
       await recordUsageEvent(decodedToken.uid, {
         feature: "tarot_reading",
         provider: "firestore_cache",
@@ -267,9 +302,10 @@ exports.generateTarotReading = onCall(
       });
 
       return {
-        text: cachedText,
+        text: safeCachedText,
         cached: true,
         deduped: true,
+        aiResponseLanguage,
       };
     }
 
@@ -335,6 +371,7 @@ Present card knowledge: ${presentKnowledge}
 
 FUTURE CARD: ${futureName}
 Future card knowledge: ${futureKnowledge}
+${languageInstruction(aiResponseLanguage)}
 `;
 
     function cleanText(value) {
@@ -368,6 +405,18 @@ Future card knowledge: ${futureKnowledge}
     }
 
     function buildFallbackText() {
+      if (aiResponseLanguage === "hinglish") {
+        return `PAST - ${pastName}
+Is card ka core signal yeh hai: ${cleanText(pastKnowledge)} Isse past energy ka pata chalta hai, lekin answer ko abhi simple rakhna better hai.
+
+PRESENT - ${presentName}
+Abhi present mein ${cleanText(presentKnowledge)} Yeh aapke sawaal ke around current mood aur choice ko dikhata hai.
+
+FUTURE - ${futureName}
+Aage ka signal ${cleanText(futureKnowledge)} Future fixed nahi hai, par direction yeh keh raha hai ki patience aur clear action zaruri hai.
+
+Yeh teen cards ek movement dikhate hain: jo aapko shape kar chuka hai, jo abhi test kar raha hai, aur jo dheere dheere form ho raha hai.`;
+      }
       return `PAST — ${pastName}
 ${cleanText(pastKnowledge)}
 
@@ -401,7 +450,7 @@ ${closing}`.trim();
     try {
       const rawText = await generateGeminiReadingText({
         systemInstruction:
-          "You are generating tarot reading content for an app. Return only valid JSON. Follow the user's tarot enquiry exactly. Every JSON value must answer the enquiry directly, stay in the enquiry's domain, and avoid generic card meanings. Do not include markdown, headings, labels, conclusion headings, or a question at the end.",
+          `You are generating tarot reading content for an app. Return only valid JSON. Follow the user's tarot enquiry exactly. Every JSON value must answer the enquiry directly, stay in the enquiry's domain, and avoid generic card meanings. Do not include markdown, headings, labels, conclusion headings, or a question at the end.\n${languageInstruction(aiResponseLanguage)}`,
         prompt: `${prompt}
 
 Return only valid JSON in this exact structure:
@@ -444,16 +493,30 @@ Hard constraints:
         });
 
         return {
-          text: buildFallbackText(),
+          text: await ensureHinglishText({
+            text: buildFallbackText(),
+            aiResponseLanguage,
+            preserveFormatInstruction:
+              "Preserve PAST, PRESENT, FUTURE headings and all card names exactly.",
+            maxTokens: TAROT_MAX_OUTPUT_TOKENS,
+          }),
+          aiResponseLanguage,
         };
       }
 
-      const finalText = buildFinalText(parsed);
+      const finalText = await ensureHinglishText({
+        text: buildFinalText(parsed),
+        aiResponseLanguage,
+        preserveFormatInstruction:
+          "Preserve PAST, PRESENT, FUTURE headings and all card names exactly.",
+        maxTokens: TAROT_MAX_OUTPUT_TOKENS,
+      });
       await writeCachedReading(
         decodedToken.uid,
         cacheKey,
         TAROT_READING_CONTENT_VERSION,
-        finalText
+        finalText,
+        aiResponseLanguage
       );
 
       await recordUsageEvent(decodedToken.uid, {
@@ -466,6 +529,7 @@ Hard constraints:
       return {
         text: finalText,
         cached: false,
+        aiResponseLanguage,
       };
     } catch (error) {
       console.error(
@@ -481,9 +545,16 @@ Hard constraints:
       });
 
       return {
-        text: buildFallbackText(),
+        text: await ensureHinglishText({
+          text: buildFallbackText(),
+          aiResponseLanguage,
+          preserveFormatInstruction:
+            "Preserve PAST, PRESENT, FUTURE headings and all card names exactly.",
+          maxTokens: TAROT_MAX_OUTPUT_TOKENS,
+        }),
         fallback: true,
         timeout: isTimeoutError(error),
+        aiResponseLanguage,
       };
     }
   }

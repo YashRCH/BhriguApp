@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../constants/ai_response_language.dart';
 import '../constants/app_messages.dart';
 import '../constants/firebase_constants.dart';
 import '../models/birth_place_suggestion.dart';
@@ -30,6 +31,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   String _place = '';
   double? _latitude;
   double? _longitude;
+  String _aiResponseLanguage = englishAiResponseLanguage;
 
   int _step = 0;
 
@@ -261,7 +263,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   Future<void> _next() async {
-    if (_step < 4) {
+    if (_step < 5) {
       setState(() {
         _step++;
       });
@@ -275,6 +277,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       placeOfBirth: _place.trim(),
       latitude: _latitude,
       longitude: _longitude,
+      aiResponseLanguage: _aiResponseLanguage,
     );
 
     await AuthService().saveUserData(user);
@@ -290,12 +293,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     if (_step == 2) return _dob != null;
     if (_step == 3) return _tob != null;
     if (_step == 4) return _place.trim().isNotEmpty;
+    if (_step == 5) return true;
     return false;
   }
 
   String get _buttonText {
     if (_step == 0) return 'BEGIN THE JOURNEY';
-    if (_step == 4) return 'ENTER THE COSMOS';
+    if (_step == 5) return 'ENTER THE COSMOS';
     return 'CONTINUE';
   }
 
@@ -353,7 +357,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       Expanded(
                         child: Row(
                           children: List.generate(
-                            4,
+                            5,
                             (i) => Expanded(
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 300),
@@ -486,6 +490,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       'WHEN WERE YOU BORN?',
       'AT WHAT HOUR?',
       'WHERE WERE YOU BORN?',
+      'HOW SHOULD BHRIGU RESPOND?',
     ];
 
     return titles[_step];
@@ -719,9 +724,127 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
         );
 
+      case 5:
+        return _buildLanguageStep(key: key);
+
       default:
         return SizedBox(key: key);
     }
+  }
+
+  Widget _buildLanguageStep({required Key key}) {
+    return SingleChildScrollView(
+      key: key,
+      physics: const BouncingScrollPhysics(),
+      child: Column(
+        children: [
+          _languageOption(
+            language: englishAiResponseLanguage,
+            title: 'English',
+            subtitle: 'Bhrigu replies in polished English.',
+          ),
+          const SizedBox(height: 14),
+          _languageOption(
+            language: hinglishAiResponseLanguage,
+            title: 'Hinglish',
+            subtitle: 'Bhrigu replies in natural Roman-script Hinglish.',
+          ),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  color: const Color(0xFFB58E34).withValues(alpha: 0.3),
+                  width: 2,
+                ),
+              ),
+            ),
+            child: Text(
+              'This only changes AI-generated readings and chat replies. The app interface stays in English.',
+              style: GoogleFonts.cormorantGaramond(
+                fontSize: 18,
+                color: const Color(0xFFC7A867).withValues(alpha: 0.8),
+                fontStyle: FontStyle.italic,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _languageOption({
+    required String language,
+    required String title,
+    required String subtitle,
+  }) {
+    final selected = _aiResponseLanguage == language;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _aiResponseLanguage = normalizeAiResponseLanguage(language);
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0A0812).withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? const Color(0xFFB58E34) : const Color(0xFF3A2D50),
+            width: selected ? 1.4 : 1,
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFFB58E34).withValues(alpha: 0.16),
+                    blurRadius: 18,
+                  ),
+                ]
+              : [],
+        ),
+        child: Row(
+          children: [
+            Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_off,
+              color:
+                  selected ? const Color(0xFFB58E34) : const Color(0xFF6B6080),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.cinzel(
+                      fontSize: 16,
+                      color: const Color(0xFFE5D5F5),
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.cormorantGaramond(
+                      fontSize: 17,
+                      color: const Color(0xFFC7A867).withValues(alpha: 0.85),
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildIntroStep({required Key key}) {

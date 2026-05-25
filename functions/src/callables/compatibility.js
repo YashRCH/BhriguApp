@@ -40,6 +40,10 @@ const {
   messageListToPrompt,
   stableStringify,
   cacheKeyForReading,
+  normalizeAiResponseLanguage,
+  resolveAiResponseLanguage,
+  languageInstruction,
+  ensureHinglishText,
   userReadingCacheRef,
   readCachedReading,
   writeCachedReading,
@@ -321,6 +325,11 @@ exports.generatePartnerMatchReading = onCall(
       .doc(decodedToken.uid)
       .get();
     const userData = userDoc.data() || {};
+    const aiResponseLanguage = await resolveAiResponseLanguage(
+      decodedToken.uid,
+      request.data.aiResponseLanguage,
+      userData
+    );
     const userNatalChart = {
       westernChart: userData.westernChart || null,
       vedicChart: userData.vedicChart || null,
@@ -432,15 +441,16 @@ Do not ask the user anything at the end.
 Do not end with a question.
 Do not be overly positive.
 Keep the tone mystical, direct, and emotionally intelligent.
+${languageInstruction(aiResponseLanguage)}
 `;
 
     const systemInstruction =
-      "Follow the compatibility reading format exactly. Do not use markdown. Do not use bullet points. Do not ask a question at the end. Do not write percentage numbers.";
+      `Follow the compatibility reading format exactly. Do not use markdown. Do not use bullet points. Do not ask a question at the end. Do not write percentage numbers.\n${languageInstruction(aiResponseLanguage)}`;
     let providerUsed = "groq";
     let modelUsed = GROQ_PARTNER_MATCH_MODEL;
 
     try {
-      const text = await generateGroqReadingText({
+      let text = await generateGroqReadingText({
         messages: [
           {
             role: "system",
@@ -455,6 +465,13 @@ Keep the tone mystical, direct, and emotionally intelligent.
         maxTokens: 620,
         temperature: 0.35,
       });
+      text = await ensureHinglishText({
+        text,
+        aiResponseLanguage,
+        preserveFormatInstruction:
+          "Preserve Verdict, Heart Signal, Emotional Bond, Attraction, Long-Term Potential, and Bhrigu Warning labels exactly.",
+        maxTokens: 620,
+      });
 
       await recordUsageEvent(decodedToken.uid, {
         feature: "partner_match",
@@ -465,6 +482,7 @@ Keep the tone mystical, direct, and emotionally intelligent.
 
       return {
         text: text.trim(),
+        aiResponseLanguage,
       };
     } catch (error) {
       console.error(
@@ -474,11 +492,18 @@ Keep the tone mystical, direct, and emotionally intelligent.
 
       if (isRetryableAiError(error)) {
         try {
-          const text = await generateGeminiReadingText({
+          let text = await generateGeminiReadingText({
             systemInstruction,
             prompt,
             maxTokens: 620,
             temperature: 0.35,
+          });
+          text = await ensureHinglishText({
+            text,
+            aiResponseLanguage,
+            preserveFormatInstruction:
+              "Preserve Verdict, Heart Signal, Emotional Bond, Attraction, Long-Term Potential, and Bhrigu Warning labels exactly.",
+            maxTokens: 620,
           });
 
           providerUsed = "gemini";
@@ -493,6 +518,7 @@ Keep the tone mystical, direct, and emotionally intelligent.
 
           return {
             text: text.trim(),
+            aiResponseLanguage,
           };
         } catch (fallbackError) {
           console.error(
@@ -533,6 +559,10 @@ exports.generateCompatibilityInsight = onCall(
 
     const westernChart = request.data.westernChart;
     const vedicChart = request.data.vedicChart;
+    const aiResponseLanguage = await resolveAiResponseLanguage(
+      decodedToken.uid,
+      request.data.aiResponseLanguage
+    );
 
     const prompt = `
 You are BHR1GU, a premium Vedic and Western astrology guide.
@@ -552,14 +582,22 @@ Rules:
 - Include one honest caution
 - No markdown
 - Do not claim certainty
+${languageInstruction(aiResponseLanguage)}
 `;
 
     try {
-      const text = await generateUserReadingText({
+      let text = await generateUserReadingText({
         requestData: request.data,
         prompt,
         temperature: 0.75,
         maxTokens: 160,
+      });
+      text = await ensureHinglishText({
+        text,
+        aiResponseLanguage,
+        preserveFormatInstruction:
+          "Preserve names, sign names, and relationship meaning. Return one short paragraph.",
+        maxTokens: 180,
       });
 
       await recordUsageEvent(decodedToken.uid, {
@@ -573,6 +611,7 @@ Rules:
 
       return {
         text: text.trim(),
+        aiResponseLanguage,
       };
     } catch (error) {
       console.error(

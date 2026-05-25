@@ -1,5 +1,6 @@
 import 'payment_feature.dart';
 import 'tarot_card.dart';
+import '../constants/ai_response_language.dart';
 
 class TarotReadingFlow {
   final List<TarotCard>? cards;
@@ -10,6 +11,7 @@ class TarotReadingFlow {
   final bool followUpLoading;
   final bool isFreshReading;
   final bool readingStarted;
+  final String aiResponseLanguage;
 
   const TarotReadingFlow({
     required this.cards,
@@ -20,6 +22,7 @@ class TarotReadingFlow {
     required this.followUpLoading,
     required this.isFreshReading,
     required this.readingStarted,
+    this.aiResponseLanguage = englishAiResponseLanguage,
   });
 
   factory TarotReadingFlow.initial() {
@@ -44,6 +47,7 @@ class TarotReadingFlow {
     required TarotCard past,
     required TarotCard present,
     required TarotCard future,
+    String aiResponseLanguage = englishAiResponseLanguage,
   }) {
     return TarotReadingFlow(
       cards: [past, present, future],
@@ -54,6 +58,7 @@ class TarotReadingFlow {
       followUpLoading: false,
       isFreshReading: false,
       readingStarted: true,
+      aiResponseLanguage: normalizeAiResponseLanguage(aiResponseLanguage),
     );
   }
 
@@ -85,6 +90,7 @@ class TarotReadingFlow {
     bool? followUpLoading,
     bool? isFreshReading,
     bool? readingStarted,
+    String? aiResponseLanguage,
   }) {
     return TarotReadingFlow(
       cards: cards ?? this.cards,
@@ -95,6 +101,7 @@ class TarotReadingFlow {
       followUpLoading: followUpLoading ?? this.followUpLoading,
       isFreshReading: isFreshReading ?? this.isFreshReading,
       readingStarted: readingStarted ?? this.readingStarted,
+      aiResponseLanguage: aiResponseLanguage ?? this.aiResponseLanguage,
     );
   }
 
@@ -120,11 +127,17 @@ class TarotReadingFlow {
     );
   }
 
-  TarotReadingFlow completeReading(String result) {
+  TarotReadingFlow completeReading(
+    String result, {
+    String? aiResponseLanguage,
+  }) {
     return copyWith(
       reading: result,
       readingLoading: false,
       isFreshReading: true,
+      aiResponseLanguage: aiResponseLanguage == null
+          ? null
+          : normalizeAiResponseLanguage(aiResponseLanguage),
     );
   }
 

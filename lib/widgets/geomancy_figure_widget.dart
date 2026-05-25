@@ -21,9 +21,7 @@ class GeomancyFigureWidget extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(compact ? 6 : 14),
       decoration: BoxDecoration(
-        color: highlighted
-            ? const Color(0xFF2A1848)
-            : const Color(0xFF151126),
+        color: highlighted ? const Color(0xFF2A1848) : const Color(0xFF151126),
         borderRadius: BorderRadius.circular(compact ? 14 : 18),
         border: Border.all(
           color: highlighted

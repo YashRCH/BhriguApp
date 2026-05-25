@@ -268,6 +268,7 @@ class _GeomancyScreenState extends State<GeomancyScreen>
         selectedFollowUpQuestion: selectedQuestion,
         readingSummary: reading.interpretation,
         sourceData: _flow.followUpSourceData(_lineValues),
+        aiResponseLanguage: reading.aiResponseLanguage,
       );
 
       if (!mounted) return;

@@ -3,12 +3,23 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 import '../constants/app_messages.dart';
+import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
 import '../models/partner_match_model.dart';
 import 'compatibility_rag_service.dart';
 import 'firebase_session_service.dart';
 import 'user_profile_cache_service.dart';
 import 'vedic_match_calculator.dart';
+
+class _PartnerMatchReadingResult {
+  final String text;
+  final String aiResponseLanguage;
+
+  const _PartnerMatchReadingResult({
+    required this.text,
+    required this.aiResponseLanguage,
+  });
+}
 
 class PartnerMatchService {
   final CompatibilityRagService _ragService = CompatibilityRagService();
@@ -25,6 +36,8 @@ class PartnerMatchService {
     required PartnerBirthProfile partner,
   }) async {
     final user = await _getUserProfile();
+    final aiResponseLanguage = await UserProfileCacheService.instance
+        .aiResponseLanguage(refresh: true);
 
     final baseScores = _calculateScores(user, partner);
     final marriageGunaMatch = _calculateMarriageGunaMatch(user, partner);
@@ -67,7 +80,7 @@ class PartnerMatchService {
         ? 'No specific compatibility knowledge retrieved.'
         : retrievedChunks.map((chunk) => chunk.formatted).join('\n---\n');
 
-    final summary = await _generateBhriguReading(
+    final summaryResult = await _generateBhriguReading(
       user: user,
       partner: partner,
       scores: scores,
@@ -79,6 +92,7 @@ class PartnerMatchService {
       connectionType: connectionType,
       verdict: verdict,
       retrievedKnowledge: retrievedKnowledge,
+      aiResponseLanguage: aiResponseLanguage,
     );
 
     final reading = PartnerMatchReading(
@@ -92,8 +106,9 @@ class PartnerMatchService {
       partnerMoonStyle: partnerMoon,
       connectionType: connectionType,
       verdict: verdict,
-      summary: summary,
+      summary: summaryResult.text,
       createdAt: DateTime.now(),
+      aiResponseLanguage: summaryResult.aiResponseLanguage,
     );
 
     await _saveReading(reading);
@@ -118,6 +133,8 @@ class PartnerMatchService {
           .orderBy('createdAt', descending: true)
           .limit(limit)
           .get();
+      final aiResponseLanguage = await UserProfileCacheService.instance
+          .aiResponseLanguage(refresh: true);
 
       final readings = <PartnerMatchReading>[];
 
@@ -125,7 +142,10 @@ class PartnerMatchService {
         try {
           final data = Map<String, dynamic>.from(doc.data());
           final normalized = _normalizeReadingData(data);
-          readings.add(PartnerMatchReading.fromJson(normalized));
+          final reading = PartnerMatchReading.fromJson(normalized);
+          if (reading.aiResponseLanguage == aiResponseLanguage) {
+            readings.add(reading);
+          }
         } catch (e) {
           debugPrint('Partner match history parse error: $e');
         }
@@ -394,7 +414,7 @@ Retrieve astrology compatibility knowledge about:
 ''';
   }
 
-  Future<String> _generateBhriguReading({
+  Future<_PartnerMatchReadingResult> _generateBhriguReading({
     required PartnerBirthProfile user,
     required PartnerBirthProfile partner,
     required CompatibilityScores scores,
@@ -406,6 +426,7 @@ Retrieve astrology compatibility knowledge about:
     required String connectionType,
     required String verdict,
     required String retrievedKnowledge,
+    required String aiResponseLanguage,
   }) async {
     try {
       final idToken = await _session.idToken();
@@ -457,6 +478,7 @@ Retrieve astrology compatibility knowledge about:
           'connectionType': connectionType,
           'verdict': verdict,
           'retrievedKnowledge': retrievedKnowledge,
+          'aiResponseLanguage': aiResponseLanguage,
         },
       );
 
@@ -464,15 +486,102 @@ Retrieve astrology compatibility knowledge about:
         response.data as Map,
       );
 
-      return data['text'] as String;
+      final responseLanguage = normalizeAiResponseLanguage(
+        data['aiResponseLanguage'] ?? aiResponseLanguage,
+      );
+
+      return _PartnerMatchReadingResult(
+        text: data['text'] as String? ??
+            _fallbackReading(
+              user: user,
+              partner: partner,
+              marriageGunaMatch: marriageGunaMatch,
+              connectionType: connectionType,
+              verdict: verdict,
+              aiResponseLanguage: responseLanguage,
+            ),
+        aiResponseLanguage: responseLanguage,
+      );
     } catch (e) {
       debugPrint('Partner match Groq error: $e');
 
-      return '''Verdict:
+      return _PartnerMatchReadingResult(
+        text: normalizeAiResponseLanguage(aiResponseLanguage) ==
+                hinglishAiResponseLanguage
+            ? _fallbackReading(
+                user: user,
+                partner: partner,
+                marriageGunaMatch: marriageGunaMatch,
+                connectionType: connectionType,
+                verdict: verdict,
+                aiResponseLanguage: aiResponseLanguage,
+              )
+            : '''Verdict:
 ${partner.name} and ${user.name} show $verdict through a $connectionType pattern. This bond has a clear emotional shape rather than being random.
 
 36 Guna Marriage Match:
-${marriageGunaMatch.totalScore}/${marriageGunaMatch.maxScore} — ${marriageGunaMatch.level}
+${marriageGunaMatch.totalScore}/${marriageGunaMatch.maxScore} - ${marriageGunaMatch.level}
+${marriageGunaMatch.summary}
+
+Heart Signal:
+"${partner.emotionalPrompt}"
+These exact words show what your heart is reacting to before your mind fully explains the connection.
+
+Emotional Bond:
+The emotional pattern suggests that both people may feel a real pull, but the ease of understanding depends on patience and emotional clarity. If the bond feels intense, both people need to slow down enough to understand what is actually being felt.
+
+Attraction:
+The attraction pattern shows that chemistry is present in the connection. Strong pull can create closeness, but it should not be mistaken for emotional safety by itself.
+
+Long-Term Potential:
+The long-term potential depends on communication, consistency, and how both people behave under real pressure. This connection needs honesty more than fantasy.
+
+Bhrigu Warning:
+Do not confuse intensity with peace, because a bond can feel powerful and still require maturity before it becomes safe.''',
+        aiResponseLanguage: aiResponseLanguage,
+      );
+    }
+  }
+
+  String _fallbackReading({
+    required PartnerBirthProfile user,
+    required PartnerBirthProfile partner,
+    required MarriageGunaMatch marriageGunaMatch,
+    required String connectionType,
+    required String verdict,
+    required String aiResponseLanguage,
+  }) {
+    if (normalizeAiResponseLanguage(aiResponseLanguage) ==
+        hinglishAiResponseLanguage) {
+      return '''Verdict:
+${partner.name} aur ${user.name} ka connection $verdict dikhata hai, $connectionType pattern ke through. Yeh bond random nahi lagta; isme ek clear emotional shape hai.
+
+36 Guna Marriage Match:
+${marriageGunaMatch.totalScore}/${marriageGunaMatch.maxScore} - ${marriageGunaMatch.level}
+${marriageGunaMatch.summary}
+
+Heart Signal:
+"${partner.emotionalPrompt}"
+Yeh exact words dikhate hain ki aapka heart kis cheez par react kar raha hai, mind ke fully explain karne se pehle.
+
+Emotional Bond:
+Emotional pattern real pull dikhata hai, lekin samajh aur comfort patience par depend karega. Agar bond intense feel ho raha hai, dono logon ko slow down karke actual feelings samajhni hongi.
+
+Attraction:
+Attraction present hai. Strong pull closeness create kar sakta hai, lekin usse emotional safety ka proof mat samjhiye.
+
+Long-Term Potential:
+Long-term potential communication, consistency, aur pressure ke time behavior par depend karta hai. Is connection ko fantasy se zyada honesty chahiye.
+
+Bhrigu Warning:
+Intensity ko peace samajhne ki mistake mat kijiye; powerful bond bhi mature hone se pehle safe nahi hota.''';
+    }
+
+    return '''Verdict:
+${partner.name} and ${user.name} show $verdict through a $connectionType pattern. This bond has a clear emotional shape rather than being random.
+
+36 Guna Marriage Match:
+${marriageGunaMatch.totalScore}/${marriageGunaMatch.maxScore} - ${marriageGunaMatch.level}
 ${marriageGunaMatch.summary}
 
 Heart Signal:
@@ -490,6 +599,5 @@ The long-term potential depends on communication, consistency, and how both peop
 
 Bhrigu Warning:
 Do not confuse intensity with peace, because a bond can feel powerful and still require maturity before it becomes safe.''';
-    }
   }
 }

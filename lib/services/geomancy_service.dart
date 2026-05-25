@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
+import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
 import '../models/geomancy_figure_model.dart';
 import 'firebase_session_service.dart';
@@ -9,6 +10,16 @@ import 'user_profile_cache_service.dart';
 
 const int _savedReadingLimit = 5;
 const int _firestoreBatchWriteLimit = 500;
+
+class _GeomancyInterpretationResult {
+  final String text;
+  final String aiResponseLanguage;
+
+  const _GeomancyInterpretationResult({
+    required this.text,
+    required this.aiResponseLanguage,
+  });
+}
 
 class GeomancyService {
   final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
@@ -189,12 +200,15 @@ class GeomancyService {
     required String question,
     required List<int> lineValues,
   }) async {
+    final aiResponseLanguage = await UserProfileCacheService.instance
+        .aiResponseLanguage(refresh: true);
     final chart = buildChart(lineValues);
     final answer = _answerFromJudge(chart.judge);
-    final interpretation = await _generateBhriguReading(
+    final interpretationResult = await _generateBhriguReading(
       question: question,
       chart: chart,
       answer: answer,
+      aiResponseLanguage: aiResponseLanguage,
     );
 
     final reading = GeomancyReadingModel(
@@ -203,12 +217,14 @@ class GeomancyService {
           : question.trim(),
       chart: chart,
       answer: answer,
-      interpretation: interpretation,
+      interpretation: interpretationResult.text,
+      aiResponseLanguage: interpretationResult.aiResponseLanguage,
     );
 
     await saveReading(
       reading: reading,
       lineValues: lineValues,
+      aiResponseLanguage: interpretationResult.aiResponseLanguage,
     );
 
     return reading;
@@ -335,10 +351,11 @@ class GeomancyService {
     }
   }
 
-  Future<String> _generateBhriguReading({
+  Future<_GeomancyInterpretationResult> _generateBhriguReading({
     required String question,
     required GeomancyChartModel chart,
     required String answer,
+    required String aiResponseLanguage,
   }) async {
     final birthData = await _getBirthData();
 
@@ -346,7 +363,15 @@ class GeomancyService {
       final idToken = await _session.idToken();
 
       if (idToken == null) {
-        return _fallbackReading(question, chart, answer);
+        return _GeomancyInterpretationResult(
+          text: _fallbackReading(
+            question,
+            chart,
+            answer,
+            aiResponseLanguage: aiResponseLanguage,
+          ),
+          aiResponseLanguage: aiResponseLanguage,
+        );
       }
 
       final callable = _functions.httpsCallable(
@@ -381,18 +406,38 @@ class GeomancyService {
               'meaning': chart.reconciler.meaning,
             },
           },
+          'aiResponseLanguage': aiResponseLanguage,
         },
       );
 
       final data = Map<String, dynamic>.from(
         response.data as Map,
       );
+      final responseLanguage = normalizeAiResponseLanguage(
+        data['aiResponseLanguage'] ?? aiResponseLanguage,
+      );
 
-      return data['text'] as String? ??
-          _fallbackReading(question, chart, answer);
+      return _GeomancyInterpretationResult(
+        text: data['text'] as String? ??
+            _fallbackReading(
+              question,
+              chart,
+              answer,
+              aiResponseLanguage: responseLanguage,
+            ),
+        aiResponseLanguage: responseLanguage,
+      );
     } catch (e) {
       debugPrint('Geomancy Groq error: $e');
-      return _fallbackReading(question, chart, answer);
+      return _GeomancyInterpretationResult(
+        text: _fallbackReading(
+          question,
+          chart,
+          answer,
+          aiResponseLanguage: aiResponseLanguage,
+        ),
+        aiResponseLanguage: aiResponseLanguage,
+      );
     }
   }
 
@@ -410,6 +455,7 @@ class GeomancyService {
   Future<void> saveReading({
     required GeomancyReadingModel reading,
     required List<int> lineValues,
+    String aiResponseLanguage = englishAiResponseLanguage,
   }) async {
     try {
       final uid = await _session.userId();
@@ -419,7 +465,7 @@ class GeomancyService {
       }
 
       final signature =
-          '${reading.question}|${lineValues.join(',')}|${reading.chart.judge.name}|${reading.answer}';
+          '${normalizeAiResponseLanguage(aiResponseLanguage)}|${reading.question}|${lineValues.join(',')}|${reading.chart.judge.name}|${reading.answer}';
 
       if (_lastSavedSignature == signature) {
         return;
@@ -432,6 +478,7 @@ class GeomancyService {
         reading: reading,
         lineValues: List<int>.from(lineValues),
         createdAt: DateTime.now(),
+        aiResponseLanguage: aiResponseLanguage,
       );
 
       final ref = _firestore
@@ -440,7 +487,10 @@ class GeomancyService {
           .collection('geomancy_readings');
 
       await ref.add(savedReading.toJson());
-      await _pruneSavedReadings(ref);
+      await _pruneSavedReadings(
+        ref,
+        aiResponseLanguage: aiResponseLanguage,
+      );
     } catch (e) {
       debugPrint('Save geomancy reading error: $e');
     }
@@ -461,14 +511,26 @@ class GeomancyService {
 
       final snap = await ref.orderBy('createdAt', descending: true).get();
 
-      await _pruneSavedReadings(ref, orderedDocs: snap.docs);
+      final aiResponseLanguage = await UserProfileCacheService.instance
+          .aiResponseLanguage(refresh: true);
+      await _pruneSavedReadings(
+        ref,
+        orderedDocs: snap.docs,
+        aiResponseLanguage: aiResponseLanguage,
+      );
 
-      return snap.docs.take(_savedReadingLimit).map((doc) {
-        return GeomancySavedReading.fromJson(
-          id: doc.id,
-          json: doc.data(),
-        );
-      }).toList();
+      return snap.docs
+          .map((doc) {
+            return GeomancySavedReading.fromJson(
+              id: doc.id,
+              json: doc.data(),
+            );
+          })
+          .where(
+            (reading) => reading.aiResponseLanguage == aiResponseLanguage,
+          )
+          .take(_savedReadingLimit)
+          .toList();
     } catch (e) {
       debugPrint('Get geomancy readings error: $e');
       return [];
@@ -499,11 +561,17 @@ class GeomancyService {
   Future<void> _pruneSavedReadings(
     CollectionReference<Map<String, dynamic>> ref, {
     Iterable<QueryDocumentSnapshot<Map<String, dynamic>>>? orderedDocs,
+    String aiResponseLanguage = englishAiResponseLanguage,
   }) async {
     try {
       final docs = orderedDocs ??
           (await ref.orderBy('createdAt', descending: true).get()).docs;
-      final oldDocs = docs.skip(_savedReadingLimit);
+      final normalizedLanguage =
+          normalizeAiResponseLanguage(aiResponseLanguage);
+      final oldDocs = docs.where((doc) {
+        return normalizeAiResponseLanguage(doc.data()['aiResponseLanguage']) ==
+            normalizedLanguage;
+      }).skip(_savedReadingLimit);
 
       var batch = _firestore.batch();
       var writes = 0;
@@ -530,9 +598,31 @@ class GeomancyService {
   String _fallbackReading(
     String question,
     GeomancyChartModel chart,
-    String answer,
-  ) {
+    String answer, {
+    String aiResponseLanguage = englishAiResponseLanguage,
+  }) {
     final q = question.trim().isEmpty ? 'your question' : question.trim();
+
+    if (normalizeAiResponseLanguage(aiResponseLanguage) ==
+        hinglishAiResponseLanguage) {
+      return '''
+DIRECT ANSWER
+$q ke liye Judge ${chart.judge.name} hai, isliye answer hai: $answer. Yeh random sign nahi hai; aapki sixteen lines se bana hua final signal hai.
+
+THE JUDGE
+${chart.judge.name}, ${chart.judge.latinName}, matter ki main force dikhata hai. ${chart.judge.meaning} Isse main verdict samjho, poori kahani nahi.
+
+THE WITNESSES
+Left Witness, ${chart.leftWitness.name}, situation mein already active force dikhata hai. Right Witness, ${chart.rightWitness.name}, batata hai ki kya approach kar raha hai ya abhi form ho raha hai. Dono milkar answer ke peeche ki movement explain karte hain.
+
+THE RECONCILER
+Reconciler, ${chart.reconciler.name}, deeper lesson dikhata hai: ${chart.reconciler.meaning} Is answer ko impulse se nahi, steady judgement se use karo.
+
+CLOSING
+Pattern ne itna clearly bol diya hai ki aap next step zyada grounded tareeke se le sakte ho.
+'''
+          .trim();
+    }
 
     return '''
 DIRECT ANSWER

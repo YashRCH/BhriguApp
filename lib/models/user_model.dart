@@ -1,3 +1,5 @@
+import '../constants/ai_response_language.dart';
+
 class UserModel {
   final String name;
   final DateTime dob;
@@ -5,6 +7,7 @@ class UserModel {
   final String placeOfBirth;
   final double? latitude;
   final double? longitude;
+  final String aiResponseLanguage;
 
   UserModel({
     required this.name,
@@ -13,6 +16,7 @@ class UserModel {
     required this.placeOfBirth,
     this.latitude,
     this.longitude,
+    this.aiResponseLanguage = englishAiResponseLanguage,
   });
 
   Map<String, dynamic> toMap() => {
@@ -22,6 +26,7 @@ class UserModel {
         'placeOfBirth': placeOfBirth,
         'latitude': latitude,
         'longitude': longitude,
+        'aiResponseLanguage': normalizeAiResponseLanguage(aiResponseLanguage),
         'createdAt': DateTime.now().toIso8601String(),
       };
 }

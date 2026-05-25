@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../constants/ai_response_language.dart';
+
 class TarotCard {
   final String name;
   final String asset;
@@ -40,6 +42,7 @@ class TarotSavedReading {
   final TarotCard future;
   final String reading;
   final DateTime createdAt;
+  final String aiResponseLanguage;
 
   const TarotSavedReading({
     required this.id,
@@ -49,6 +52,7 @@ class TarotSavedReading {
     required this.future,
     required this.reading,
     required this.createdAt,
+    this.aiResponseLanguage = englishAiResponseLanguage,
   });
 
   Map<String, dynamic> toJson() {
@@ -59,6 +63,7 @@ class TarotSavedReading {
       'future': future.toJson(),
       'reading': reading,
       'createdAt': Timestamp.fromDate(createdAt),
+      'aiResponseLanguage': normalizeAiResponseLanguage(aiResponseLanguage),
     };
   }
 
@@ -80,6 +85,9 @@ class TarotSavedReading {
       ),
       reading: json['reading'] as String? ?? '',
       createdAt: _dateFromValue(json['createdAt']),
+      aiResponseLanguage: normalizeAiResponseLanguage(
+        json['aiResponseLanguage'],
+      ),
     );
   }
 

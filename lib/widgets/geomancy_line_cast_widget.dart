@@ -171,7 +171,8 @@ class _GeomancyLinePainter extends CustomPainter {
     final points = <Offset>[];
     for (int i = 0; i < 8; i++) {
       final angle = -math.pi / 2 + i * math.pi / 4;
-      points.add(center + Offset(math.cos(angle), math.sin(angle)) * radius * 0.45);
+      points.add(
+          center + Offset(math.cos(angle), math.sin(angle)) * radius * 0.45);
     }
 
     for (int i = 0; i < points.length; i++) {
@@ -245,7 +246,7 @@ class _GeomancyLinePainter extends CustomPainter {
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
 
       canvas.drawCircle(line.end, 3.5, nodeGlow);
-      
+
       final nodeCore = Paint()
         ..color = Colors.white
         ..style = PaintingStyle.fill;
@@ -256,7 +257,8 @@ class _GeomancyLinePainter extends CustomPainter {
   void _drawCurrentLine(Canvas canvas) {
     if (!isHolding || currentStart == null || currentControl == null) return;
 
-    final curved = Curves.easeOutQuart.transform(currentProgress.clamp(0.0, 1.0));
+    final curved =
+        Curves.easeOutQuart.transform(currentProgress.clamp(0.0, 1.0));
     final rawEnd = currentStart! +
         Offset(math.cos(currentAngle), math.sin(currentAngle)) *
             currentLength *
@@ -323,27 +325,30 @@ class _GeomancyLinePainter extends CustomPainter {
     final center = Offset(size.width - 40, 40);
     const radius = 18.0;
     const totalSegments = 16;
-    
+
     // Background dial
     canvas.drawCircle(
-      center, 
-      radius + 6, 
-      Paint()..color = const Color(0xFF090712).withAlpha(180)..style = PaintingStyle.fill
-    );
+        center,
+        radius + 6,
+        Paint()
+          ..color = const Color(0xFF090712).withAlpha(180)
+          ..style = PaintingStyle.fill);
 
     for (int i = 0; i < totalSegments; i++) {
       final angle = -math.pi / 2 + (i * 2 * math.pi / totalSegments);
       final isCompleted = i < lineCount;
       final isActive = i == lineCount && isHolding;
 
-      final start = center + Offset(math.cos(angle), math.sin(angle)) * (radius - 2.5);
-      final end = center + Offset(math.cos(angle), math.sin(angle)) * (radius + 2.5);
+      final start =
+          center + Offset(math.cos(angle), math.sin(angle)) * (radius - 2.5);
+      final end =
+          center + Offset(math.cos(angle), math.sin(angle)) * (radius + 2.5);
 
       final segmentPaint = Paint()
-        ..color = isCompleted 
-            ? const Color(0xFFFFD88A) 
-            : isActive 
-                ? const Color(0xFF9D6FE8) 
+        ..color = isCompleted
+            ? const Color(0xFFFFD88A)
+            : isActive
+                ? const Color(0xFF9D6FE8)
                 : const Color(0xFF2E2650)
         ..strokeWidth = 2.5
         ..strokeCap = StrokeCap.round
@@ -351,7 +356,9 @@ class _GeomancyLinePainter extends CustomPainter {
 
       if (isCompleted || isActive) {
         final glowPaint = Paint()
-          ..color = isCompleted ? const Color(0xFFF59E0B).withAlpha(120) : const Color(0xFF9D6FE8).withAlpha(120)
+          ..color = isCompleted
+              ? const Color(0xFFF59E0B).withAlpha(120)
+              : const Color(0xFF9D6FE8).withAlpha(120)
           ..strokeWidth = 4.0
           ..strokeCap = StrokeCap.round
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
@@ -366,7 +373,9 @@ class _GeomancyLinePainter extends CustomPainter {
       text: TextSpan(
         text: '$lineCount',
         style: TextStyle(
-          color: lineCount == 16 ? const Color(0xFFFFD88A) : const Color(0xFFD8B4E2),
+          color: lineCount == 16
+              ? const Color(0xFFFFD88A)
+              : const Color(0xFFD8B4E2),
           fontSize: 12,
           fontWeight: FontWeight.w900,
         ),

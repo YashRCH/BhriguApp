@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../constants/ai_response_language.dart';
+
 class UserProfileCacheService {
   UserProfileCacheService._();
 
@@ -44,6 +46,29 @@ class UserProfileCacheService {
     if (uid == null) return null;
 
     return userData(refresh: true);
+  }
+
+  Future<String> aiResponseLanguage({bool refresh = false}) async {
+    final data = await userData(refresh: refresh);
+    return normalizeAiResponseLanguage(data?['aiResponseLanguage']);
+  }
+
+  Future<void> updateAiResponseLanguage(String language) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    final normalized = normalizeAiResponseLanguage(language);
+    await _db.collection('users').doc(uid).set(
+      {'aiResponseLanguage': normalized},
+      SetOptions(merge: true),
+    );
+
+    if (_cachedUid == uid && _cachedData != null) {
+      _cachedData = {
+        ..._cachedData!,
+        'aiResponseLanguage': normalized,
+      };
+    }
   }
 
   void primeCurrentUser(Map<String, dynamic> data) {

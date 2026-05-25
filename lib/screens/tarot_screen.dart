@@ -132,7 +132,10 @@ class _TarotScreenState extends State<TarotScreen>
     );
     if (mounted) {
       setState(() {
-        _flow = _flow.completeReading(result);
+        _flow = _flow.completeReading(
+          result.text,
+          aiResponseLanguage: result.aiResponseLanguage,
+        );
       });
     }
   }
@@ -159,6 +162,7 @@ class _TarotScreenState extends State<TarotScreen>
                 past: savedReading.past,
                 present: savedReading.present,
                 future: savedReading.future,
+                aiResponseLanguage: savedReading.aiResponseLanguage,
               );
             });
           },
@@ -190,6 +194,7 @@ class _TarotScreenState extends State<TarotScreen>
         presentCard: _cards![1].name,
         futureCard: _cards![2].name,
         fullReading: _reading.trim(),
+        aiResponseLanguage: _flow.aiResponseLanguage,
       );
 
       if (!mounted) return;

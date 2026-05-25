@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../constants/ai_response_language.dart';
+
 class FollowUpContext {
   final String id;
   final String uid;
@@ -15,6 +17,7 @@ class FollowUpContext {
   final Map<String, dynamic> userSnapshot;
 
   final DateTime createdAt;
+  final String aiResponseLanguage;
 
   const FollowUpContext({
     required this.id,
@@ -27,6 +30,7 @@ class FollowUpContext {
     required this.sourceData,
     required this.userSnapshot,
     required this.createdAt,
+    this.aiResponseLanguage = englishAiResponseLanguage,
   });
 
   factory FollowUpContext.fromFirestore(
@@ -45,6 +49,9 @@ class FollowUpContext {
       sourceData: Map<String, dynamic>.from(data['sourceData'] ?? {}),
       userSnapshot: Map<String, dynamic>.from(data['userSnapshot'] ?? {}),
       createdAt: _parseDate(data['createdAt']),
+      aiResponseLanguage: normalizeAiResponseLanguage(
+        data['aiResponseLanguage'],
+      ),
     );
   }
 
@@ -59,6 +66,7 @@ class FollowUpContext {
       'sourceData': sourceData,
       'userSnapshot': userSnapshot,
       'createdAt': Timestamp.fromDate(createdAt),
+      'aiResponseLanguage': normalizeAiResponseLanguage(aiResponseLanguage),
     };
   }
 

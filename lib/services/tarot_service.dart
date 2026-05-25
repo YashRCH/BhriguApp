@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 import '../constants/app_messages.dart';
+import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
 import '../models/tarot_card.dart';
 import 'firebase_session_service.dart';
@@ -10,6 +11,16 @@ import 'user_profile_cache_service.dart';
 
 const int _savedReadingLimit = 5;
 const int _firestoreBatchWriteLimit = 500;
+
+class TarotInterpretationResult {
+  final String text;
+  final String aiResponseLanguage;
+
+  const TarotInterpretationResult({
+    required this.text,
+    required this.aiResponseLanguage,
+  });
+}
 
 class TarotService {
   final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
@@ -29,13 +40,16 @@ class TarotService {
         {};
   }
 
-  Future<String> interpretReading({
+  Future<TarotInterpretationResult> interpretReading({
     required String question,
     required TarotCard past,
     required TarotCard present,
     required TarotCard future,
   }) async {
     final userData = await _getUserData();
+    final aiResponseLanguage = normalizeAiResponseLanguage(
+      userData['aiResponseLanguage'],
+    );
 
     final birthData = userData.isEmpty
         ? 'Birth data not available.'
@@ -46,7 +60,10 @@ class TarotService {
       final idToken = await _session.idToken();
 
       if (idToken == null) {
-        return cosmicConnectionLostMessage;
+        return TarotInterpretationResult(
+          text: cosmicConnectionLostMessage,
+          aiResponseLanguage: aiResponseLanguage,
+        );
       }
 
       final callable = _functions.httpsCallable(
@@ -70,6 +87,7 @@ class TarotService {
           'pastKnowledge': past.uprightMeaning,
           'presentKnowledge': present.uprightMeaning,
           'futureKnowledge': future.uprightMeaning,
+          'aiResponseLanguage': aiResponseLanguage,
         },
       );
 
@@ -78,6 +96,9 @@ class TarotService {
       );
 
       final text = data['text'] as String? ?? '';
+      final responseLanguage = normalizeAiResponseLanguage(
+        data['aiResponseLanguage'] ?? aiResponseLanguage,
+      );
 
       if (text.trim().isNotEmpty) {
         await saveReading(
@@ -86,13 +107,20 @@ class TarotService {
           present: present,
           future: future,
           reading: text.trim(),
+          aiResponseLanguage: responseLanguage,
         );
       }
 
-      return text.trim().isEmpty ? cosmicConnectionLostMessage : text.trim();
+      return TarotInterpretationResult(
+        text: text.trim().isEmpty ? cosmicConnectionLostMessage : text.trim(),
+        aiResponseLanguage: responseLanguage,
+      );
     } catch (e) {
       debugPrint('Tarot error: $e');
-      return cosmicConnectionLostMessage;
+      return TarotInterpretationResult(
+        text: cosmicConnectionLostMessage,
+        aiResponseLanguage: aiResponseLanguage,
+      );
     }
   }
 
@@ -102,6 +130,7 @@ class TarotService {
     required TarotCard present,
     required TarotCard future,
     required String reading,
+    String aiResponseLanguage = englishAiResponseLanguage,
   }) async {
     try {
       final uid = await _session.userId();
@@ -124,12 +153,19 @@ class TarotService {
           .where('past.name', isEqualTo: past.name)
           .where('present.name', isEqualTo: present.name)
           .where('future.name', isEqualTo: future.name)
+          .where(
+            'aiResponseLanguage',
+            isEqualTo: normalizeAiResponseLanguage(aiResponseLanguage),
+          )
           .limit(1)
           .get();
 
       if (duplicateSnap.docs.isNotEmpty) {
         debugPrint('Tarot save skipped: duplicate reading already exists');
-        await _pruneSavedReadings(ref);
+        await _pruneSavedReadings(
+          ref,
+          aiResponseLanguage: aiResponseLanguage,
+        );
         return;
       }
 
@@ -141,10 +177,14 @@ class TarotService {
         future: future,
         reading: reading.trim(),
         createdAt: DateTime.now(),
+        aiResponseLanguage: aiResponseLanguage,
       );
 
       await ref.add(savedReading.toJson());
-      await _pruneSavedReadings(ref);
+      await _pruneSavedReadings(
+        ref,
+        aiResponseLanguage: aiResponseLanguage,
+      );
     } catch (e) {
       debugPrint('Save tarot reading error: $e');
     }
@@ -165,14 +205,26 @@ class TarotService {
 
       final snap = await ref.orderBy('createdAt', descending: true).get();
 
-      await _pruneSavedReadings(ref, orderedDocs: snap.docs);
+      final aiResponseLanguage = await UserProfileCacheService.instance
+          .aiResponseLanguage(refresh: true);
+      await _pruneSavedReadings(
+        ref,
+        orderedDocs: snap.docs,
+        aiResponseLanguage: aiResponseLanguage,
+      );
 
-      return snap.docs.take(_savedReadingLimit).map((doc) {
-        return TarotSavedReading.fromJson(
-          id: doc.id,
-          json: doc.data(),
-        );
-      }).toList();
+      return snap.docs
+          .map((doc) {
+            return TarotSavedReading.fromJson(
+              id: doc.id,
+              json: doc.data(),
+            );
+          })
+          .where(
+            (reading) => reading.aiResponseLanguage == aiResponseLanguage,
+          )
+          .take(_savedReadingLimit)
+          .toList();
     } catch (e) {
       debugPrint('Get tarot readings error: $e');
       return [];
@@ -205,11 +257,17 @@ class TarotService {
   Future<void> _pruneSavedReadings(
     CollectionReference<Map<String, dynamic>> ref, {
     Iterable<QueryDocumentSnapshot<Map<String, dynamic>>>? orderedDocs,
+    String aiResponseLanguage = englishAiResponseLanguage,
   }) async {
     try {
       final docs = orderedDocs ??
           (await ref.orderBy('createdAt', descending: true).get()).docs;
-      final oldDocs = docs.skip(_savedReadingLimit);
+      final normalizedLanguage =
+          normalizeAiResponseLanguage(aiResponseLanguage);
+      final oldDocs = docs.where((doc) {
+        return normalizeAiResponseLanguage(doc.data()['aiResponseLanguage']) ==
+            normalizedLanguage;
+      }).skip(_savedReadingLimit);
 
       var batch = FirebaseFirestore.instance.batch();
       var writes = 0;

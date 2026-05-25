@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
 import '../utils/date_keys.dart';
 import 'user_profile_cache_service.dart';
@@ -29,12 +30,17 @@ class HoroscopeService {
 
     final today = DateTime.now();
     final dateKey = formatDateKey(today);
+    final aiResponseLanguage = await UserProfileCacheService.instance
+        .aiResponseLanguage(refresh: true);
+    final horoscopeDocId = aiResponseLanguage == hinglishAiResponseLanguage
+        ? '${dateKey}_$hinglishAiResponseLanguage'
+        : dateKey;
 
     final horoscopeRef = FirebaseFirestore.instance
         .collection('users')
         .doc(resolvedUid)
         .collection('horoscopes')
-        .doc(dateKey);
+        .doc(horoscopeDocId);
 
     try {
       final cachedDoc = await horoscopeRef.get();
@@ -71,6 +77,10 @@ class HoroscopeService {
           );
 
           if (contentVersion == _homeHoroscopeContentVersion &&
+              normalizeAiResponseLanguage(
+                    cachedData['aiResponseLanguage'],
+                  ) ==
+                  aiResponseLanguage &&
               (morning.isNotEmpty || evening.isNotEmpty)) {
             return {
               'morning': morning,
@@ -204,6 +214,7 @@ Do not ask questions at the end. Do not sound like a newspaper horoscope. Do not
           'prompt': prompt,
           'dateKey': dateKey,
           'contentVersion': _homeHoroscopeContentVersion,
+          'aiResponseLanguage': aiResponseLanguage,
           'moonPhaseLine': moonPhaseLine,
           'dailyEnergyLine': dailyEnergyLine,
           'horoscopeMeta': {

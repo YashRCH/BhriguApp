@@ -40,6 +40,9 @@ const {
   messageListToPrompt,
   stableStringify,
   cacheKeyForReading,
+  normalizeAiResponseLanguage,
+  resolveAiResponseLanguage,
+  languageInstruction,
   userReadingCacheRef,
   readCachedReading,
   writeCachedReading,
@@ -162,6 +165,10 @@ exports.generateDailyHoroscope = onCall(
     }
 
     let prompt = request.data.prompt;
+    const aiResponseLanguage = await resolveAiResponseLanguage(
+      decodedToken.uid,
+      request.data.aiResponseLanguage
+    );
 
     if (!prompt || typeof prompt !== "string") {
       throw new HttpsError("invalid-argument", "Prompt is required.");
@@ -172,6 +179,8 @@ exports.generateDailyHoroscope = onCall(
     }
 
     const dateKey = String(request.data.dateKey || "").trim();
+    const horoscopeDocId =
+      aiResponseLanguage === "hinglish" ? `${dateKey}_hinglish` : dateKey;
     const contentVersion = String(
       request.data.contentVersion || HOME_HOROSCOPE_CONTENT_VERSION
     );
@@ -185,15 +194,16 @@ exports.generateDailyHoroscope = onCall(
       .collection("users")
       .doc(decodedToken.uid)
       .collection("horoscopes")
-      .doc(dateKey);
+      .doc(horoscopeDocId);
     const horoscopeDoc = await horoscopeRef.get();
 
     if (horoscopeDoc.exists) {
       const cached = horoscopeDoc.data() || {};
 
       if (
-        cached.contentVersion === contentVersion &&
-        (cached.todayLine || cached.morning || cached.evening)
+          cached.contentVersion === contentVersion &&
+          normalizeAiResponseLanguage(cached.aiResponseLanguage) === aiResponseLanguage &&
+          (cached.todayLine || cached.morning || cached.evening)
       ) {
         await recordUsageEvent(decodedToken.uid, {
           feature: "daily_horoscope",
@@ -205,6 +215,7 @@ exports.generateDailyHoroscope = onCall(
         return {
           ...dailyHoroscopePayload(cached),
           cached: true,
+          aiResponseLanguage,
         };
       }
     }
@@ -253,6 +264,7 @@ If you cannot use a real transit or aspect, say the lunar context plainly instea
     } catch (transitError) {
       console.error("Daily transit cache error:", transitError);
     }
+    prompt = `${prompt}${languageInstruction(aiResponseLanguage)}`;
 
     try {
       const text = await generateGeminiReadingText({
@@ -268,6 +280,7 @@ If you cannot use a real transit or aspect, say the lunar context plainly instea
       const storedHoroscope = {
         dateKey,
         contentVersion,
+        aiResponseLanguage,
         ...parsed,
         moonPhase: horoscopeMeta.moonPhase || null,
         moonAge:
@@ -300,6 +313,7 @@ If you cannot use a real transit or aspect, say the lunar context plainly instea
           generatedAt: undefined,
         }),
         cached: false,
+        aiResponseLanguage,
       };
     } catch (error) {
       console.error("Daily horoscope Gemini error:", error.response?.data || error.message);
