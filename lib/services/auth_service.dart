@@ -40,10 +40,14 @@ class AuthService {
       password: password,
     );
 
-    unawaited(_storage.write(
-      key: 'user_id',
-      value: cred.user!.uid,
-    ));
+    try {
+      await cred.user?.sendEmailVerification();
+    } catch (e) {
+      debugPrint('Verification email request failed: $e');
+      await signOut();
+      rethrow;
+    }
+    unawaited(_storage.delete(key: 'user_id'));
 
     return cred;
   }
@@ -57,10 +61,23 @@ class AuthService {
       password: password,
     );
 
-    unawaited(_storage.write(
-      key: 'user_id',
-      value: cred.user!.uid,
-    ));
+    await cred.user?.reload();
+    final user = _auth.currentUser ?? cred.user;
+
+    if (user != null && !user.emailVerified) {
+      try {
+        await user.sendEmailVerification();
+      } catch (e) {
+        debugPrint('Verification email resend skipped: $e');
+      }
+      await signOut();
+      throw FirebaseAuthException(
+        code: 'email-not-verified',
+        message: 'Please verify your email before signing in.',
+      );
+    }
+
+    unawaited(_storage.delete(key: 'user_id'));
 
     _generateChartsAfterLogin(cred.user!.uid);
 
@@ -83,10 +100,7 @@ class AuthService {
       credential,
     );
 
-    unawaited(_storage.write(
-      key: 'user_id',
-      value: cred.user!.uid,
-    ));
+    unawaited(_storage.delete(key: 'user_id'));
 
     _generateChartsAfterLogin(cred.user!.uid);
 
@@ -98,10 +112,7 @@ class AuthService {
 
     if (uid == null) return;
 
-    await _storage.write(
-      key: 'user_id',
-      value: uid,
-    );
+    unawaited(_storage.delete(key: 'user_id'));
 
     await _db.collection('users').doc(uid).set(
           user.toMap(),
@@ -251,18 +262,19 @@ class AuthService {
     return 'onboarding_completed_$uid';
   }
 
-  Future<void> signOut() async {
-    final uid = _auth.currentUser?.uid;
+  Future<void> sendPasswordResetEmail(String email) {
+    return _auth.sendPasswordResetEmail(email: email);
+  }
 
-    await _googleSignIn.signOut();
-
-    await _auth.signOut();
-
+  Future<void> clearLocalSession({String? uid}) async {
     await _storage.delete(
       key: 'user_id',
     );
 
     if (uid != null) {
+      await _storage.delete(
+        key: _onboardingStorageKey(uid),
+      );
       _onboardingCache.remove(uid);
       _onboardingInFlight.remove(uid);
     } else {
@@ -271,5 +283,19 @@ class AuthService {
     }
 
     UserProfileCacheService.instance.clear();
+  }
+
+  Future<void> signOut() async {
+    final uid = _auth.currentUser?.uid;
+
+    try {
+      await _googleSignIn.signOut();
+    } catch (e) {
+      debugPrint('Google sign-out skipped: $e');
+    }
+
+    await _auth.signOut();
+
+    await clearLocalSession(uid: uid);
   }
 }

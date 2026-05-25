@@ -6,5 +6,7 @@ Object.assign(
   require("./src/callables/tarot"),
   require("./src/callables/geomancy"),
   require("./src/callables/compatibility"),
-  require("./src/callables/places")
+  require("./src/callables/places"),
+  require("./src/callables/account"),
+  require("./src/callables/rewards")
 );

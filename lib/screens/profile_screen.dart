@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../constants/ai_response_language.dart';
+import '../constants/firebase_constants.dart';
 import '../services/auth_service.dart';
 import '../services/user_profile_cache_service.dart';
 import 'cosmic_blueprint_screen.dart';
@@ -268,35 +271,64 @@ class _ProfileScreenState extends State<ProfileScreen>
     });
 
     try {
-      final firestore = FirebaseFirestore.instance;
-      final userRef = firestore.collection('users').doc(uid);
+      await _reauthenticateForDeletion(user);
 
-      const subcollections = [
-        'chat',
-        'follow_up_contexts',
-        'partner_matches',
-        'partner_match_readings',
-        'match_readings',
-        'compatibility_readings',
-        'tarot_readings',
-        'geomancy_readings',
-        'rewards',
-        'horoscopes',
-        'aiReadingCache',
-        'entitlements',
-        'usage',
-      ];
+      await auth.currentUser?.reload();
+      final refreshedUser = auth.currentUser;
+      if (refreshedUser == null || refreshedUser.uid != uid) {
+        throw FirebaseAuthException(
+          code: 'requires-recent-login',
+          message: 'Signed-in account changed during reauthentication.',
+        );
+      }
+      await refreshedUser.getIdToken(true);
 
-      for (final collectionId in subcollections) {
-        await _deleteCollection(userRef.collection(collectionId));
+      final callable = FirebaseFunctions.instanceFor(
+        region: firebaseFunctionsRegion,
+      ).httpsCallable(
+        'deleteAccount',
+        options: HttpsCallableOptions(
+          timeout: const Duration(seconds: 540),
+        ),
+      );
+
+      await callable.call();
+      await AuthService().clearLocalSession(uid: uid);
+
+      try {
+        await GoogleSignIn().signOut();
+      } catch (e) {
+        debugPrint('Google sign-out after deletion skipped: $e');
       }
 
-      await userRef.delete();
-      await user.delete();
+      try {
+        await auth.signOut();
+      } catch (e) {
+        debugPrint('Firebase sign-out after deletion skipped: $e');
+      }
 
       if (!mounted) return;
 
       context.go('/login');
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _deletingAccount = false;
+      });
+
+      debugPrint(
+        'deleteAccount function failed: ${e.code} ${e.message} ${e.details}',
+      );
+
+      final message = _deleteAccountFunctionMessage(e);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: const Color(0xFF1A1630),
+        ),
+      );
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
 
@@ -306,7 +338,9 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       final message = e.code == 'requires-recent-login'
           ? 'For security, please sign out and sign in again before deleting your account.'
-          : 'Could not delete account: ${e.message ?? e.code}';
+          : e.code == 'operation-cancelled'
+              ? 'Account deletion cancelled.'
+              : 'Could not confirm your identity. Please try again.';
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -321,34 +355,159 @@ class _ProfileScreenState extends State<ProfileScreen>
         _deletingAccount = false;
       });
 
+      debugPrint('Account deletion failed before completion: $e');
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not delete account: $e'),
-          backgroundColor: const Color(0xFF1A1630),
+        const SnackBar(
+          content: Text('Could not delete account. Please try again.'),
+          backgroundColor: Color(0xFF1A1630),
         ),
       );
     }
   }
 
-  Future<void> _deleteCollection(
-    CollectionReference<Map<String, dynamic>> collection,
-  ) async {
-    const batchSize = 100;
+  String _deleteAccountFunctionMessage(FirebaseFunctionsException e) {
+    if (e.code == 'failed-precondition') {
+      return 'For security, please sign in again before deleting your account.';
+    }
+    if (e.code == 'unauthenticated') {
+      return 'Your session expired. Please sign in again before deleting your account.';
+    }
+    if (e.code == 'not-found') {
+      return 'Delete account service is not deployed yet. Deploy functions, then try again.';
+    }
+    if (e.code == 'unavailable' || e.code == 'deadline-exceeded') {
+      return 'Could not reach delete account service. Check your connection and try again.';
+    }
+    return 'Could not delete account. Please try again.';
+  }
 
-    while (true) {
-      final snapshot = await collection.limit(batchSize).get();
+  Future<void> _reauthenticateForDeletion(User user) async {
+    final providers = user.providerData.map((info) => info.providerId).toSet();
 
-      if (snapshot.docs.isEmpty) break;
+    if (providers.contains(EmailAuthProvider.PROVIDER_ID)) {
+      await _reauthenticateWithPassword(user);
+      return;
+    }
 
-      final batch = FirebaseFirestore.instance.batch();
+    if (providers.contains(GoogleAuthProvider.PROVIDER_ID)) {
+      await _reauthenticateWithGoogle(user);
+      return;
+    }
 
-      for (final doc in snapshot.docs) {
-        batch.delete(doc.reference);
-      }
+    throw FirebaseAuthException(
+      code: 'requires-recent-login',
+      message: 'No supported sign-in provider found for reauthentication.',
+    );
+  }
 
-      await batch.commit();
+  Future<void> _reauthenticateWithPassword(User user) async {
+    final email = user.email;
+    if (email == null || email.isEmpty) {
+      throw FirebaseAuthException(
+        code: 'requires-recent-login',
+        message: 'Email is required to confirm this account.',
+      );
+    }
 
-      if (snapshot.docs.length < batchSize) break;
+    final password = await _promptForPassword();
+    if (password == null) {
+      throw FirebaseAuthException(
+        code: 'operation-cancelled',
+        message: 'Account deletion cancelled.',
+      );
+    }
+
+    final credential = EmailAuthProvider.credential(
+      email: email,
+      password: password,
+    );
+
+    await user.reauthenticateWithCredential(credential);
+  }
+
+  Future<void> _reauthenticateWithGoogle(User user) async {
+    final googleUser = await GoogleSignIn().signIn();
+    if (googleUser == null) {
+      throw FirebaseAuthException(
+        code: 'operation-cancelled',
+        message: 'Account deletion cancelled.',
+      );
+    }
+
+    final googleAuth = await googleUser.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+
+    await user.reauthenticateWithCredential(credential);
+  }
+
+  Future<String?> _promptForPassword() async {
+    final controller = TextEditingController();
+
+    try {
+      return showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF151126),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            title: const Text(
+              'Confirm password',
+              style: TextStyle(
+                color: Color(0xFFFFD88A),
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              obscureText: true,
+              style: const TextStyle(color: Color(0xFFE5D5F5)),
+              decoration: const InputDecoration(
+                hintText: 'Password',
+                hintStyle: TextStyle(color: Color(0xFF6B6080)),
+              ),
+              onSubmitted: (_) {
+                final password = controller.text.trim();
+                if (password.isNotEmpty) Navigator.pop(ctx, password);
+              },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: Color(0xFF8E83B5),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  final password = controller.text.trim();
+                  if (password.isNotEmpty) Navigator.pop(ctx, password);
+                },
+                child: const Text(
+                  'Confirm',
+                  style: TextStyle(
+                    color: Color(0xFFFF6B6B),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      controller.dispose();
     }
   }
 

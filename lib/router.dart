@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +18,7 @@ final _routerAuth = AuthService();
 
 final appRouter = GoRouter(
   initialLocation: '/login',
+  refreshListenable: GoRouterRefreshStream(_routerAuth.authStateChanges),
   redirect: (context, state) async {
     final user = _routerAuth.currentUser;
     final loc = state.uri.toString();
@@ -89,6 +91,22 @@ final appRouter = GoRouter(
     ),
   ],
 );
+
+class GoRouterRefreshStream extends ChangeNotifier {
+  late final StreamSubscription<dynamic> _subscription;
+
+  GoRouterRefreshStream(Stream<dynamic> stream) {
+    _subscription = stream.asBroadcastStream().listen((_) {
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+}
 
 class MainShell extends StatefulWidget {
   final Widget child;

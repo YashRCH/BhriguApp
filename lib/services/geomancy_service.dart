@@ -360,9 +360,7 @@ class GeomancyService {
     final birthData = await _getBirthData();
 
     try {
-      final idToken = await _session.idToken();
-
-      if (idToken == null) {
+      if (await _session.currentUserOrWait() == null) {
         return _GeomancyInterpretationResult(
           text: _fallbackReading(
             question,
@@ -383,7 +381,6 @@ class GeomancyService {
 
       final response = await callable.call(
         {
-          'idToken': idToken,
           'question': question,
           'birthData': birthData,
           'answer': answer,

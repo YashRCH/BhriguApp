@@ -44,6 +44,7 @@ const {
   readCachedReading,
   writeCachedReading,
   callableRuntimeOptions,
+  requireCallableAuth,
   cleanMetricKey,
   recordUsageEvent,
   isTimeoutError,
@@ -146,20 +147,8 @@ exports.calculateNatalChart = onCall(
   }),
   async (request) => {
     const data = request.data || {};
-    const idToken = data.idToken;
-
-    if (!idToken || typeof idToken !== "string") {
-      throw new HttpsError("unauthenticated", "Missing Firebase ID token.");
-    }
-
-    let decodedToken;
-
-    try {
-      decodedToken = await admin.auth().verifyIdToken(idToken);
-    } catch (error) {
-      console.error("Natal chart token verification failed:", error);
-      throw new HttpsError("unauthenticated", "Invalid Firebase ID token.");
-    }
+    const auth = requireCallableAuth(request);
+    const decodedToken = { uid: auth.uid };
 
     const birthDate = data.birthDate;
     const timeOfBirth = String(data.timeOfBirth || "");

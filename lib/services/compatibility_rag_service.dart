@@ -42,9 +42,7 @@ class CompatibilityRagService {
     int limit = 5,
   }) async {
     try {
-      final idToken = await _session.idToken();
-
-      if (idToken == null) {
+      if (await _session.currentUserOrWait() == null) {
         return [];
       }
 
@@ -57,7 +55,6 @@ class CompatibilityRagService {
 
       final response = await callable.call(
         {
-          'idToken': idToken,
           'query': query,
           'limit': limit,
         },

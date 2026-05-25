@@ -26,6 +26,8 @@ const GEOMANCY_MAX_OUTPUT_TOKENS = 1200;
 const MYSTIC_READING_TEMPERATURE = 0.9;
 const TAROT_READING_TEMPERATURE = 0.55;
 const GEOMANCY_READING_TEMPERATURE = 0.55;
+// Keep client App Check active, but do not enforce it on callable functions
+// until debug/release builds are confirmed to send valid App Check tokens.
 const APP_CHECK_ENFORCEMENT_ENABLED = false;
 const KNOWLEDGE_CACHE_TTL_MS = 10 * 60 * 1000;
 const BHRIGU_CHAT_KNOWLEDGE_LIMIT = 5;
@@ -331,6 +333,16 @@ function callableRuntimeOptions(options = {}) {
   return APP_CHECK_ENFORCEMENT_ENABLED
     ? { ...options, enforceAppCheck: true }
     : options;
+}
+
+function requireCallableAuth(request) {
+  const auth = request.auth;
+
+  if (!auth || !auth.uid) {
+    throw new HttpsError("unauthenticated", "Please sign in again.");
+  }
+
+  return auth;
 }
 
 function cleanMetricKey(value) {
@@ -2260,6 +2272,7 @@ module.exports = {
   readCachedReading,
   writeCachedReading,
   callableRuntimeOptions,
+  requireCallableAuth,
   cleanMetricKey,
   recordUsageEvent,
   isTimeoutError,

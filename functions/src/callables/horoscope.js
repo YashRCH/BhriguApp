@@ -47,6 +47,7 @@ const {
   readCachedReading,
   writeCachedReading,
   callableRuntimeOptions,
+  requireCallableAuth,
   cleanMetricKey,
   recordUsageEvent,
   isTimeoutError,
@@ -149,20 +150,8 @@ exports.generateDailyHoroscope = onCall(
     memory: "512MiB",
   }),
   async (request) => {
-    const idToken = request.data.idToken;
-
-    if (!idToken || typeof idToken !== "string") {
-      throw new HttpsError("unauthenticated", "Missing Firebase ID token.");
-    }
-
-    let decodedToken;
-
-    try {
-      decodedToken = await admin.auth().verifyIdToken(idToken);
-    } catch (error) {
-      console.error("Horoscope token verification failed:", error);
-      throw new HttpsError("unauthenticated", "Invalid Firebase ID token.");
-    }
+    const auth = requireCallableAuth(request);
+    const decodedToken = { uid: auth.uid };
 
     let prompt = request.data.prompt;
     const aiResponseLanguage = await resolveAiResponseLanguage(

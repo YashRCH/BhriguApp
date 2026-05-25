@@ -1,7 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
-import '../constants/app_messages.dart';
 import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
 import 'firebase_session_service.dart';
@@ -30,10 +28,8 @@ class ChartAiService {
     );
 
     try {
-      final idToken = await _session.idToken();
-
-      if (idToken == null) {
-        throw Exception(missingFirebaseIdTokenMessage);
+      if (await _session.currentUserOrWait() == null) {
+        throw Exception('User not signed in');
       }
 
       final callable = _functions.httpsCallable(
@@ -42,7 +38,6 @@ class ChartAiService {
 
       final response = await callable.call(
         {
-          'idToken': idToken,
           'westernChart': westernChart,
           'vedicChart': vedicChart,
           'aiResponseLanguage': aiResponseLanguage,
@@ -54,12 +49,6 @@ class ChartAiService {
       );
 
       final text = resultData['text'] as String;
-
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'compatibilityAiInsight': text.trim(),
-        'compatibilityAiInsightLanguage': aiResponseLanguage,
-        'compatibilityAiGeneratedAt': FieldValue.serverTimestamp(),
-      });
 
       return text.trim();
     } catch (_) {

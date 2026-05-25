@@ -1,19 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../constants/firebase_constants.dart';
 import '../models/vedic_chart_model.dart';
 import '../models/western_chart_model.dart';
 import 'cosmic_chart_calculator.dart';
+import 'firebase_session_service.dart';
 
 class AstrologyService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
     region: firebaseFunctionsRegion,
   );
+  final FirebaseSessionService _session =
+      FirebaseSessionService(debugLabel: 'Natal chart');
   final CosmicChartCalculator _calculator = const CosmicChartCalculator();
 
   Future<void> generateAndSaveCharts({
@@ -25,10 +26,9 @@ class AstrologyService {
     double? longitude,
   }) async {
     try {
-      final user = _auth.currentUser;
-      final idToken = await user?.getIdToken();
+      final user = await _session.currentUserOrWait();
 
-      if (idToken == null || idToken.isEmpty) {
+      if (user == null || user.uid != uid) {
         throw StateError('Firebase ID token is unavailable.');
       }
 
@@ -42,7 +42,6 @@ class AstrologyService {
       );
       final result = await callable.call(
         {
-          'idToken': idToken,
           'birthDate': birthDate.toIso8601String(),
           'timeOfBirth': timeOfBirth,
           'placeOfBirth': placeOfBirth,
@@ -54,26 +53,8 @@ class AstrologyService {
       final data = Map<String, dynamic>.from(result.data as Map);
       final westernChart = data['westernChart'];
       final vedicChart = data['vedicChart'];
-      final calculationMeta = data['calculationMeta'];
 
-      if (westernChart is Map && vedicChart is Map) {
-        final chartUpdate = <String, dynamic>{
-          'westernChart': Map<String, dynamic>.from(westernChart),
-          'vedicChart': Map<String, dynamic>.from(vedicChart),
-          'chartGeneratedBy': 'nasa_jpl_horizons',
-          'chartGeneratedAt': FieldValue.serverTimestamp(),
-          'chartCalculationSource': 'NASA/JPL Horizons API',
-          'chartCalculationVersion':
-              'nasa_jpl_horizons_v5_observer_ecliptic_nodes',
-        };
-
-        if (calculationMeta is Map) {
-          chartUpdate['chartCalculationMeta'] =
-              Map<String, dynamic>.from(calculationMeta);
-        }
-
-        await _firestore.collection('users').doc(uid).update(chartUpdate);
-      }
+      if (westernChart is Map && vedicChart is Map) return;
 
       return;
     } on FirebaseFunctionsException catch (e) {
@@ -85,8 +66,7 @@ class AstrologyService {
       debugPrint('Stack: $stack');
     }
 
-    await _generateAndSaveFallbackCharts(
-      uid: uid,
+    _generateFallbackCharts(
       birthDate: birthDate,
       timeOfBirth: timeOfBirth,
       placeOfBirth: placeOfBirth,
@@ -95,8 +75,7 @@ class AstrologyService {
     );
   }
 
-  Future<void> _generateAndSaveFallbackCharts({
-    required String uid,
+  void _generateFallbackCharts({
     required DateTime birthDate,
     required String timeOfBirth,
     required String placeOfBirth,
@@ -111,25 +90,10 @@ class AstrologyService {
       longitude: longitude,
     );
 
-    await _firestore.collection('users').doc(uid).update({
-      'westernChart': charts.westernChart.toJson(),
-      'vedicChart': charts.vedicChart.toJson(),
-      'chartGeneratedBy': 'local_ephemeris_engine_fallback',
-      'chartGeneratedAt': FieldValue.serverTimestamp(),
-      'chartCalculationSource': 'Local fallback ephemeris engine',
-      'chartCalculationVersion': 'local_ephemeris_engine_fallback_v2_nodes',
-      'chartCalculationMeta': {
-        'birthDate': birthDate.toIso8601String(),
-        'timeOfBirth': timeOfBirth,
-        'placeOfBirth': placeOfBirth,
-        'latitude': latitude,
-        'longitude': longitude,
-        'planetSource': 'Local deterministic fallback formulas',
-        'houseSystem': 'Whole sign houses',
-        'ayanamsa': 'Lahiri approximation',
-        'lunarNodeSource': 'Mean lunar ascending node; Ketu opposite Rahu',
-      },
-    });
+    debugPrint(
+      'Local fallback chart calculated but not persisted; chart fields are server-owned. '
+      'Western=${charts.westernChart.sunSign}, Vedic=${charts.vedicChart.moonSign}',
+    );
   }
 
   Future<WesternChartModel?> getWesternChart(String uid) async {

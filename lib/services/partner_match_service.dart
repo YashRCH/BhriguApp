@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
-import '../constants/app_messages.dart';
 import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
 import '../models/partner_match_model.dart';
@@ -429,10 +428,8 @@ Retrieve astrology compatibility knowledge about:
     required String aiResponseLanguage,
   }) async {
     try {
-      final idToken = await _session.idToken();
-
-      if (idToken == null) {
-        throw Exception(missingFirebaseIdTokenMessage);
+      if (await _session.currentUserOrWait() == null) {
+        throw Exception('User not signed in');
       }
 
       final callable = _functions.httpsCallable(
@@ -444,7 +441,6 @@ Retrieve astrology compatibility knowledge about:
 
       final response = await callable.call(
         {
-          'idToken': idToken,
           'user': {
             'name': user.name,
             'dob': user.dob.toIso8601String(),

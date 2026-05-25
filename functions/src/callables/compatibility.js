@@ -48,6 +48,7 @@ const {
   readCachedReading,
   writeCachedReading,
   callableRuntimeOptions,
+  requireCallableAuth,
   cleanMetricKey,
   recordUsageEvent,
   isTimeoutError,
@@ -148,20 +149,8 @@ exports.generateCompatibilityEmbedding = onCall(
     region: FUNCTION_REGION,
   }),
   async (request) => {
-    const idToken = request.data.idToken;
-
-    if (!idToken || typeof idToken !== "string") {
-      throw new HttpsError("unauthenticated", "Missing Firebase ID token.");
-    }
-
-    let decodedToken;
-
-    try {
-      decodedToken = await admin.auth().verifyIdToken(idToken);
-    } catch (error) {
-      console.error("Compatibility embedding token verification failed:", error);
-      throw new HttpsError("unauthenticated", "Invalid Firebase ID token.");
-    }
+    const auth = requireCallableAuth(request);
+    const decodedToken = { uid: auth.uid };
 
     const text = request.data.text;
 
@@ -208,20 +197,8 @@ exports.retrieveCompatibilityKnowledge = onCall(
     memory: "512MiB",
   }),
   async (request) => {
-    const idToken = request.data.idToken;
-
-    if (!idToken || typeof idToken !== "string") {
-      throw new HttpsError("unauthenticated", "Missing Firebase ID token.");
-    }
-
-    let decodedToken;
-
-    try {
-      decodedToken = await admin.auth().verifyIdToken(idToken);
-    } catch (error) {
-      console.error("Compatibility retrieval token verification failed:", error);
-      throw new HttpsError("unauthenticated", "Invalid Firebase ID token.");
-    }
+    const auth = requireCallableAuth(request);
+    const decodedToken = { uid: auth.uid };
 
     const query = String(request.data.query || "").trim();
     const limit = Math.min(
@@ -293,20 +270,8 @@ exports.generatePartnerMatchReading = onCall(
     memory: "512MiB",
   }),
   async (request) => {
-    const idToken = request.data.idToken;
-
-    if (!idToken || typeof idToken !== "string") {
-      throw new HttpsError("unauthenticated", "Missing Firebase ID token.");
-    }
-
-    let decodedToken;
-
-    try {
-      decodedToken = await admin.auth().verifyIdToken(idToken);
-    } catch (error) {
-      console.error("Partner match token verification failed:", error);
-      throw new HttpsError("unauthenticated", "Invalid Firebase ID token.");
-    }
+    const auth = requireCallableAuth(request);
+    const decodedToken = { uid: auth.uid };
 
     const user = request.data.user || {};
     const partner = request.data.partner || {};
@@ -542,20 +507,8 @@ exports.generateCompatibilityInsight = onCall(
     region: FUNCTION_REGION,
   }),
   async (request) => {
-    const idToken = request.data.idToken;
-
-    if (!idToken || typeof idToken !== "string") {
-      throw new HttpsError("unauthenticated", "Missing Firebase ID token.");
-    }
-
-    let decodedToken;
-
-    try {
-      decodedToken = await admin.auth().verifyIdToken(idToken);
-    } catch (error) {
-      console.error("Chart AI token verification failed:", error);
-      throw new HttpsError("unauthenticated", "Invalid Firebase ID token.");
-    }
+    const auth = requireCallableAuth(request);
+    const decodedToken = { uid: auth.uid };
 
     const westernChart = request.data.westernChart;
     const vedicChart = request.data.vedicChart;
@@ -587,7 +540,7 @@ ${languageInstruction(aiResponseLanguage)}
 
     try {
       let text = await generateUserReadingText({
-        requestData: request.data,
+        requestData: {},
         prompt,
         temperature: 0.75,
         maxTokens: 160,
@@ -600,12 +553,19 @@ ${languageInstruction(aiResponseLanguage)}
         maxTokens: 180,
       });
 
+      await admin.firestore().collection("users").doc(decodedToken.uid).set(
+        {
+          compatibilityAiInsight: text.trim(),
+          compatibilityAiInsightLanguage: aiResponseLanguage,
+          compatibilityAiGeneratedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
       await recordUsageEvent(decodedToken.uid, {
         feature: "compatibility_insight",
-        provider: shouldUsePremiumReadingModel(request.data) ? "groq" : "gemini",
-        model: shouldUsePremiumReadingModel(request.data)
-          ? GROQ_PARTNER_MATCH_MODEL
-          : GEMINI_FLASH_LITE_MODEL,
+        provider: "gemini",
+        model: GEMINI_FLASH_LITE_MODEL,
         cached: false,
       });
 

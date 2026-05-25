@@ -57,9 +57,7 @@ class TarotService {
             'Time: ${userData['timeOfBirth']}, Place: ${userData['placeOfBirth']}';
 
     try {
-      final idToken = await _session.idToken();
-
-      if (idToken == null) {
+      if (await _session.currentUserOrWait() == null) {
         return TarotInterpretationResult(
           text: cosmicConnectionLostMessage,
           aiResponseLanguage: aiResponseLanguage,
@@ -75,7 +73,6 @@ class TarotService {
 
       final response = await callable.call(
         {
-          'idToken': idToken,
           'birthData': birthData,
           'question': question,
           'pastName': past.name,

@@ -21,7 +21,7 @@ class GroqService {
     List<ChatMessage> history, {
     FollowUpContext? followUpContext,
   }) async* {
-    final user = _session.currentUser;
+    final user = await _session.currentUserOrWait();
 
     if (user == null) {
       debugPrint('Bhrigu chat blocked: FirebaseAuth.currentUser is null');
@@ -29,23 +29,7 @@ class GroqService {
       return;
     }
 
-    String? idToken;
-
-    try {
-      idToken = await _session.idToken();
-
-      debugPrint('Firebase session ready for Bhrigu chat.');
-    } catch (e) {
-      debugPrint('Failed to get Firebase ID token: $e');
-      yield cosmicConnectionLostMessage;
-      return;
-    }
-
-    if (idToken == null || idToken.isEmpty) {
-      debugPrint('Firebase ID token is empty');
-      yield cosmicConnectionLostMessage;
-      return;
-    }
+    debugPrint('Firebase session ready for Bhrigu chat.');
 
     final lastUserMessage = history.isNotEmpty
         ? history
@@ -80,7 +64,6 @@ class GroqService {
         .toList();
 
     final payload = <String, dynamic>{
-      'idToken': idToken,
       'message': lastUserMessage,
       'history': safeHistory,
       'aiResponseLanguage': aiResponseLanguage,

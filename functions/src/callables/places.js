@@ -44,6 +44,7 @@ const {
   readCachedReading,
   writeCachedReading,
   callableRuntimeOptions,
+  requireCallableAuth,
   cleanMetricKey,
   recordUsageEvent,
   isTimeoutError,
@@ -146,14 +147,8 @@ exports.searchBirthPlaces = onCall(
   async (request) => {
     try {
       const data = request.data || {};
-      const idToken = data.idToken;
+      const auth = requireCallableAuth(request);
       const query = String(data.query || "").trim();
-
-      if (!idToken) {
-        throw new HttpsError("unauthenticated", "Missing Firebase ID token.");
-      }
-
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
 
       if (query.length < 2) {
         return {
@@ -295,7 +290,7 @@ exports.searchBirthPlaces = onCall(
         })
       );
 
-      await recordUsageEvent(decodedToken.uid, {
+      await recordUsageEvent(auth.uid, {
         feature: "birth_place_search",
         provider: "google_places",
         model: "places_autocomplete",

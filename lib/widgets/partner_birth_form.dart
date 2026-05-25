@@ -4,7 +4,6 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../constants/app_messages.dart';
 import '../constants/firebase_constants.dart';
 import '../models/birth_place_suggestion.dart';
 import '../models/partner_match_model.dart';
@@ -664,16 +663,9 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
         throw Exception('User not signed in');
       }
 
-      final idToken = await user.getIdToken();
-
-      if (idToken == null || idToken.isEmpty) {
-        throw Exception(missingFirebaseIdTokenMessage);
-      }
-
       final callable = _functions.httpsCallable('searchBirthPlaces');
 
       final response = await callable.call({
-        'idToken': idToken,
         'query': query,
       });
 

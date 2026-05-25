@@ -1,20 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../constants/ai_response_language.dart';
 import '../models/chat_message.dart';
+import '../services/firebase_session_service.dart';
 import '../services/user_profile_cache_service.dart';
 
 class ChatNotifier extends StateNotifier<List<ChatMessage>> {
-  final _storage = const FlutterSecureStorage();
+  final FirebaseSessionService _session =
+      FirebaseSessionService(debugLabel: 'Chat history');
   String _activeLanguage = englishAiResponseLanguage;
 
   ChatNotifier() : super([]) {
     _load();
   }
 
-  Future<String?> _uid() => _storage.read(key: 'user_id');
+  Future<String?> _uid() async => _session.userId();
 
   Future<void> _load() async {
     final uid = await _uid();

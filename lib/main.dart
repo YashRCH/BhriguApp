@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'firebase_options.dart';
 import 'router.dart';
+
+const _enableAppCheck = bool.fromEnvironment('ENABLE_APP_CHECK');
 
 void main() async {
   await runZonedGuarded(
@@ -28,6 +31,7 @@ void main() async {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+      await _activateAppCheck();
 
       runApp(
         const ProviderScope(
@@ -43,6 +47,47 @@ void _reportUncaughtError(Object error, StackTrace? stack) {
   if (kDebugMode) {
     debugPrint('Uncaught app error: $error');
     if (stack != null) {
+      debugPrintStack(stackTrace: stack);
+    }
+  }
+}
+
+Future<void> _activateAppCheck() async {
+  if (kIsWeb || !_enableAppCheck) {
+    if (kDebugMode && !_enableAppCheck) {
+      debugPrint(
+        'Firebase App Check activation skipped. '
+        'Use --dart-define=ENABLE_APP_CHECK=true when testing App Check.',
+      );
+    }
+    return;
+  }
+
+  try {
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        await FirebaseAppCheck.instance.activate(
+          androidProvider: kDebugMode
+              ? AndroidProvider.debug
+              : AndroidProvider.playIntegrity,
+        );
+        return;
+      case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
+        await FirebaseAppCheck.instance.activate(
+          appleProvider: kDebugMode
+              ? AppleProvider.debug
+              : AppleProvider.appAttestWithDeviceCheckFallback,
+        );
+        return;
+      case TargetPlatform.fuchsia:
+      case TargetPlatform.linux:
+      case TargetPlatform.windows:
+        return;
+    }
+  } catch (e, stack) {
+    if (kDebugMode) {
+      debugPrint('Firebase App Check activation failed: $e');
       debugPrintStack(stackTrace: stack);
     }
   }

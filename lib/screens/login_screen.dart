@@ -1,4 +1,6 @@
 import 'dart:ui';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -19,6 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLogin = true;
   bool _loading = false;
   String? _error;
+  String? _info;
 
   @override
   void dispose() {
@@ -30,28 +33,55 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _submitEmail() async {
     if (_loading) return;
 
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final validationError = _validateEmailPassword(email, password);
+
+    if (validationError != null) {
+      setState(() {
+        _error = validationError;
+        _info = null;
+      });
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
+      _info = null;
     });
     try {
       if (_isLogin) {
         await _auth.signInWithEmail(
-          _emailController.text.trim(),
-          _passwordController.text.trim(),
+          email,
+          password,
         );
       } else {
         await _auth.signUpWithEmail(
-          _emailController.text.trim(),
-          _passwordController.text.trim(),
+          email,
+          password,
         );
+
+        await _auth.signOut();
+
+        if (!mounted) return;
+
+        setState(() {
+          _isLogin = true;
+          _passwordController.clear();
+          _info =
+              'Verification email sent. Please verify your email, then sign in.';
+        });
+        return;
       }
       if (mounted) {
         final completed = await _auth.hasCompletedOnboarding();
         if (mounted) context.go(completed ? '/home' : '/onboarding');
       }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) setState(() => _error = _friendlyAuthError(e));
     } catch (e) {
-      setState(() => _error = _friendlyError(e.toString()));
+      if (mounted) setState(() => _error = _friendlyError(e.toString()));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -63,6 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _info = null;
     });
     try {
       final cred = await _auth.signInWithGoogle();
@@ -74,24 +105,121 @@ class _LoginScreenState extends State<LoginScreen> {
         final completed = await _auth.hasCompletedOnboarding();
         if (mounted) context.go(completed ? '/home' : '/onboarding');
       }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) setState(() => _error = _friendlyAuthError(e));
     } catch (e) {
-      setState(() => _error = _friendlyError(e.toString()));
+      if (mounted) setState(() => _error = _friendlyError(e.toString()));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
+  String _friendlyAuthError(FirebaseAuthException e) {
+    return _friendlyError(e.code);
+  }
+
   String _friendlyError(String e) {
-    if (e.contains('user-not-found')) {
-      return 'No account found with this email.';
+    if (e.contains('email-not-verified')) {
+      return 'Please verify your email, then sign in.';
     }
-    if (e.contains('wrong-password')) return 'Incorrect password.';
-    if (e.contains('email-already-in-use')) return 'Email already registered.';
+    if (e.contains('user-not-found') ||
+        e.contains('wrong-password') ||
+        e.contains('invalid-credential') ||
+        e.contains('invalid-login-credentials')) {
+      return 'Could not sign in with those credentials.';
+    }
+    if (e.contains('email-already-in-use')) {
+      return 'Could not create account. Try signing in or use another email.';
+    }
     if (e.contains('weak-password')) {
-      return 'Password must be at least 6 characters.';
+      return 'Choose a stronger password.';
     }
     if (e.contains('invalid-email')) return 'Please enter a valid email.';
     return 'Something went wrong. Please try again.';
+  }
+
+  String? _validateEmailPassword(String email, String password) {
+    if (!_isValidEmail(email)) return 'Please enter a valid email.';
+
+    if (_isLogin) {
+      if (password.isEmpty) return 'Please enter your password.';
+      return null;
+    }
+
+    if (password.length < 8) {
+      return 'Password must be at least 8 characters.';
+    }
+    if (!RegExp(r'[A-Za-z]').hasMatch(password) ||
+        !RegExp(r'\d').hasMatch(password)) {
+      return 'Use at least one letter and one number in your password.';
+    }
+
+    return null;
+  }
+
+  bool _isValidEmail(String email) {
+    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
+  }
+
+  Future<void> _sendPasswordReset() async {
+    if (_loading) return;
+
+    final email = _emailController.text.trim();
+
+    if (!_isValidEmail(email)) {
+      setState(() {
+        _error = 'Please enter your email address first.';
+        _info = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+      _info = null;
+    });
+
+    try {
+      await _auth.sendPasswordResetEmail(email);
+
+      if (!mounted) return;
+
+      setState(() {
+        _info =
+            'If an account exists for this email, a reset link has been sent.';
+      });
+    } on FirebaseAuthException catch (e, stack) {
+      if (kDebugMode) {
+        debugPrint(
+          'Password reset email request failed: ${e.code} ${e.message}',
+        );
+        debugPrintStack(stackTrace: stack);
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _info =
+            'If an account exists for this email, a reset link has been sent.';
+        _error = kDebugMode ? 'Debug reset error: ${e.code}' : null;
+      });
+    } catch (e, stack) {
+      if (kDebugMode) {
+        debugPrint('Password reset email request failed: $e');
+        debugPrintStack(stackTrace: stack);
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _info =
+            'If an account exists for this email, a reset link has been sent.';
+        _error = kDebugMode ? 'Debug reset error: ${e.runtimeType}' : null;
+      });
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -188,6 +316,19 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ],
+                  if (_info != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      _info!,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFF7DD3FC),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 32),
 
                   // Main Action Button (Email)
@@ -234,6 +375,20 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
+                  if (_isLogin) ...[
+                    const SizedBox(height: 14),
+                    TextButton(
+                      onPressed: _loading ? null : _sendPasswordReset,
+                      child: Text(
+                        'Forgot password?',
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFFB58E34),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 24),
 
                   // Divider
@@ -307,6 +462,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     onTap: () => setState(() {
                       _isLogin = !_isLogin;
                       _error = null;
+                      _info = null;
                     }),
                     child: RichText(
                       text: TextSpan(

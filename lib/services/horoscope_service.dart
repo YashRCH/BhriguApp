@@ -2,30 +2,31 @@ import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
 import '../utils/date_keys.dart';
+import 'firebase_session_service.dart';
 import 'user_profile_cache_service.dart';
 
 class HoroscopeService {
   static const _homeHoroscopeContentVersion =
       'home_signal_v6_complete_sentences';
 
-  final _storage = const FlutterSecureStorage();
-
   FirebaseFunctions get _functions => FirebaseFunctions.instanceFor(
         region: firebaseFunctionsRegion,
       );
 
-  FirebaseAuth get _auth => FirebaseAuth.instance;
+  FirebaseSessionService? _session;
+
+  FirebaseSessionService get _authSession {
+    return _session ??= FirebaseSessionService(debugLabel: 'Daily horoscope');
+  }
 
   Future<Map<String, dynamic>?> getDailyHoroscope({String? uid}) async {
-    final resolvedUid =
-        uid ?? _auth.currentUser?.uid ?? await _storage.read(key: 'user_id');
+    final currentUid = (await _authSession.currentUserOrWait())?.uid;
+    final resolvedUid = uid == currentUid ? uid : currentUid;
     if (resolvedUid == null) return null;
 
     final today = DateTime.now();
@@ -187,17 +188,10 @@ Do not ask questions at the end. Do not sound like a newspaper horoscope. Do not
 ''';
 
     try {
-      final user = _auth.currentUser;
+      final user = await _authSession.currentUserOrWait();
 
       if (user == null) {
         debugPrint('Horoscope error: FirebaseAuth.currentUser is null');
-        return null;
-      }
-
-      final idToken = await user.getIdToken();
-
-      if (idToken == null || idToken.isEmpty) {
-        debugPrint('Horoscope error: Firebase ID token is empty');
         return null;
       }
 
@@ -210,7 +204,6 @@ Do not ask questions at the end. Do not sound like a newspaper horoscope. Do not
 
       final result = await callable.call(
         {
-          'idToken': idToken,
           'prompt': prompt,
           'dateKey': dateKey,
           'contentVersion': _homeHoroscopeContentVersion,

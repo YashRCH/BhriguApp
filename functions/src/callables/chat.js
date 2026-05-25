@@ -48,6 +48,7 @@ const {
   readCachedReading,
   writeCachedReading,
   callableRuntimeOptions,
+  requireCallableAuth,
   cleanMetricKey,
   recordUsageEvent,
   isTimeoutError,
@@ -150,20 +151,8 @@ exports.generateBhriguChat = onCall(
     memory: "512MiB",
   }),
   async (request) => {
-    const idToken = request.data.idToken;
-    if (!idToken || typeof idToken !== "string") {
-      throw new HttpsError("unauthenticated", "Missing Firebase ID token.");
-    }
-
-    let decodedToken;
-    try {
-      decodedToken = await admin.auth().verifyIdToken(idToken);
-    } catch (error) {
-      console.error("Token verification failed:", error);
-      throw new HttpsError("unauthenticated", "Invalid Firebase ID token.");
-    }
-
-    const uid = decodedToken.uid;
+    const auth = requireCallableAuth(request);
+    const uid = auth.uid;
     const message = request.data.message;
     const history = request.data.history || [];
     const followUpContext =

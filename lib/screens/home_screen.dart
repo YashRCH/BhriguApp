@@ -3,8 +3,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:go_router/go_router.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/streak_reward_model.dart';
 import '../services/horoscope_service.dart';
@@ -224,8 +224,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _loadData() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid ??
-        await _storage.read(key: 'user_id');
+    final uid = FirebaseAuth.instance.currentUser?.uid;
 
     if (uid == null) {
       if (mounted) {
@@ -299,8 +298,7 @@ class _HomeScreenState extends State<HomeScreen>
       return;
     }
 
-    final uid = FirebaseAuth.instance.currentUser?.uid ??
-        await _storage.read(key: 'user_id');
+    final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
     final previousProgress = _displayedRoadProgress;
@@ -333,7 +331,7 @@ class _HomeScreenState extends State<HomeScreen>
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not claim reward. Check Firestore rules.'),
+          content: Text('Could not claim reward. Please try again.'),
           backgroundColor: Color(0xFF1A1630),
         ),
       );
@@ -343,8 +341,7 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _openFreeReward() async {
     if (!_freeRewardAvailable || _openingReward) return;
 
-    final uid = FirebaseAuth.instance.currentUser?.uid ??
-        await _storage.read(key: 'user_id');
+    final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
     final rewardRoute = StreakRewardState(

@@ -9,7 +9,6 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../constants/ai_response_language.dart';
-import '../constants/app_messages.dart';
 import '../constants/firebase_constants.dart';
 import '../models/birth_place_suggestion.dart';
 import '../models/user_model.dart';
@@ -1038,16 +1037,9 @@ class _OnboardingPlacePickerSheetState
         throw Exception('User not signed in');
       }
 
-      final idToken = await user.getIdToken();
-
-      if (idToken == null || idToken.isEmpty) {
-        throw Exception(missingFirebaseIdTokenMessage);
-      }
-
       final callable = _functions.httpsCallable('searchBirthPlaces');
 
       final response = await callable.call({
-        'idToken': idToken,
         'query': query,
       });
 
