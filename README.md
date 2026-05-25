@@ -23,7 +23,7 @@ Firebase configuration is generated in `lib/firebase_options.dart`. Cloud Functi
 
 - Configure Firebase Secret Manager values for `GROQ_API_KEY`, `GEMINI_API_KEY`, and `GOOGLE_PLACES_API_KEY`.
 - Create `android/key.properties` from `android/key.properties.example` and keep the real keystore outside version control.
-- Use a production Android package id and matching Firebase app before store release. The current Firebase Android config is tied to `com.example.astrology_guru_app`.
+- Confirm the production Android package id, Firebase Android app, and release signing SHA are all registered for `com.bhr1gu.app`.
 - Run `flutter analyze --no-pub`, `flutter test test/widget_test.dart --no-pub`, and `node --check functions/index.js` before every release.
 - Build store artifacts from a clean workspace with production Firebase config and release signing available.
 

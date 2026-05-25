@@ -5,7 +5,7 @@
         "lib/firebase_options.dart": {
           "projectId": "astrology-guru-app",
           "configurations": {
-            "android": "1:91676554553:android:9a6823222bdb2e9f4024e8",
+            "android": "1:91676554553:android:2b97d0f2f3b8b1cb4024e8",
             "ios": "1:91676554553:ios:21564a991f2538434024e8"
           }
         }
@@ -13,7 +13,7 @@
       "android": {
         "default": {
           "projectId": "astrology-guru-app",
-          "appId": "1:91676554553:android:9a6823222bdb2e9f4024e8",
+          "appId": "1:91676554553:android:2b97d0f2f3b8b1cb4024e8",
           "fileOutput": "android/app/google-services.json"
         }
       }

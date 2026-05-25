@@ -80,7 +80,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAgYByGw7likF5AQvJKV4yIjgrU1ffmo8M',
-    appId: '1:91676554553:android:9a6823222bdb2e9f4024e8',
+    appId: '1:91676554553:android:2b97d0f2f3b8b1cb4024e8',
     messagingSenderId: '91676554553',
     projectId: 'astrology-guru-app',
     storageBucket: 'astrology-guru-app.firebasestorage.app',
