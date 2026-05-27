@@ -367,6 +367,52 @@ void main() {
     expect(json['longitude'], 77.5946);
   });
 
+  test('saved partner match accepts numeric Firestore variants', () {
+    final reading = PartnerMatchReading.fromJson({
+      'user': {
+        'name': 'Asha',
+        'dob': '1998-01-02T00:00:00.000',
+        'timeOfBirth': '06:30',
+        'placeOfBirth': 'Delhi',
+      },
+      'partner': {
+        'name': 'Ravi',
+        'dob': '1997-03-04T00:00:00.000',
+        'timeOfBirth': '18:45',
+        'placeOfBirth': 'Mumbai',
+      },
+      'scores': {
+        'overall': 82.0,
+        'emotional': '80.0',
+        'attraction': 85,
+        'communication': '76',
+        'stability': 78.4,
+        'karmic': null,
+      },
+      'marriageGunaMatch': {
+        'totalScore': '24.0',
+        'maxScore': 36.0,
+        'items': [
+          {
+            'name': 'Gana',
+            'score': 4.0,
+            'maxScore': '6',
+            'meaning': 'Temperament blends with effort.',
+          },
+        ],
+      },
+      'summary': 'A workable match.',
+      'createdAt': '2026-05-19T00:00:00.000',
+    });
+
+    expect(reading.scores.overall, 82);
+    expect(reading.scores.emotional, 80);
+    expect(reading.scores.stability, 78);
+    expect(reading.scores.karmic, 0);
+    expect(reading.marriageGunaMatch.totalScore, 24);
+    expect(reading.marriageGunaMatch.items.single.score, 4);
+  });
+
   test('birth place suggestion accepts geocoded and legacy results', () {
     final geocoded = BirthPlaceSuggestion.fromMap({
       'description': 'Delhi, India',

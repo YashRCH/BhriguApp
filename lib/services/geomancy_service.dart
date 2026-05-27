@@ -516,18 +516,26 @@ class GeomancyService {
         aiResponseLanguage: aiResponseLanguage,
       );
 
-      return snap.docs
-          .map((doc) {
-            return GeomancySavedReading.fromJson(
-              id: doc.id,
-              json: doc.data(),
-            );
-          })
-          .where(
-            (reading) => reading.aiResponseLanguage == aiResponseLanguage,
-          )
-          .take(_savedReadingLimit)
-          .toList();
+      final readings = <GeomancySavedReading>[];
+
+      for (final doc in snap.docs) {
+        try {
+          final reading = GeomancySavedReading.fromJson(
+            id: doc.id,
+            json: doc.data(),
+          );
+
+          if (reading.aiResponseLanguage == aiResponseLanguage) {
+            readings.add(reading);
+          }
+
+          if (readings.length >= _savedReadingLimit) break;
+        } catch (e) {
+          debugPrint('Geomancy history parse error: $e');
+        }
+      }
+
+      return readings;
     } catch (e) {
       debugPrint('Get geomancy readings error: $e');
       return [];
@@ -546,13 +554,23 @@ class GeomancyService {
 
     final snap = await ref.get();
 
-    final batch = _firestore.batch();
+    var batch = _firestore.batch();
+    var writes = 0;
 
     for (final doc in snap.docs) {
       batch.delete(doc.reference);
+      writes++;
+
+      if (writes >= _firestoreBatchWriteLimit) {
+        await batch.commit();
+        batch = _firestore.batch();
+        writes = 0;
+      }
     }
 
-    await batch.commit();
+    if (writes > 0) {
+      await batch.commit();
+    }
   }
 
   Future<void> _pruneSavedReadings(

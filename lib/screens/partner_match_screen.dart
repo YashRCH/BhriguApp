@@ -17,6 +17,16 @@ import '../widgets/compatibility_score_ring.dart';
 import '../widgets/heart_signal_card.dart';
 import '../widgets/partner_birth_form.dart';
 import '../widgets/partner_match_share_card.dart';
+import '../widgets/zodiac_sign_icon.dart';
+
+const _matchBlack = Color(0xFF050505);
+const _matchPanel = Color(0xFF0D0B08);
+const _matchPanelSoft = Color(0xFF15110A);
+const _matchGold = Color(0xFFFFD88A);
+const _matchGoldDeep = Color(0xFFC7A867);
+const _matchWhite = Color(0xFFFFFFFF);
+const _matchMuted = Color(0xCCFFFFFF);
+const _matchLine = Color(0xFF3A301C);
 
 class PartnerMatchScreen extends StatefulWidget {
   const PartnerMatchScreen({super.key});
@@ -30,26 +40,47 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
   final FollowUpContextService _followUpService = FollowUpContextService();
 
   PartnerMatchFlow _flow = PartnerMatchFlow.initial();
+  int _readingRequestId = 0;
 
   bool get _loading => _flow.loading;
   bool get _creatingFollowUp => _flow.creatingFollowUp;
   PartnerMatchReading? get _reading => _flow.reading;
 
   Future<void> _createReading(PartnerBirthProfile partner) async {
+    if (_loading) return;
+
+    final requestId = ++_readingRequestId;
+
     setState(() {
       _flow = _flow.beginReading();
     });
 
-    final reading = await _service.createReading(partner: partner);
+    try {
+      final reading = await _service.createReading(partner: partner);
 
-    if (!mounted) return;
+      if (!mounted || requestId != _readingRequestId) return;
 
-    setState(() {
-      _flow = _flow.completeReading(reading);
-    });
+      setState(() {
+        _flow = _flow.completeReading(reading);
+      });
+    } catch (e) {
+      if (!mounted || requestId != _readingRequestId) return;
+
+      setState(() {
+        _flow = PartnerMatchFlow.initial();
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not create this match reading. Try again.'),
+          backgroundColor: _matchPanel,
+        ),
+      );
+    }
   }
 
   void _reset() {
+    _readingRequestId++;
     setState(() {
       _flow = PartnerMatchFlow.initial();
     });
@@ -68,6 +99,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
           onSelect: (reading) {
             Navigator.pop(context);
             setState(() {
+              _readingRequestId++;
               _flow = _flow.loadSaved(reading);
             });
           },
@@ -111,7 +143,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Could not open follow-up chat: $e'),
-          backgroundColor: const Color(0xFF6B21A8),
+          backgroundColor: _matchPanel,
         ),
       );
     } finally {
@@ -126,13 +158,13 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF090712),
+      backgroundColor: _matchBlack,
       appBar: AppBar(
         leading: IconButton(
           onPressed: _openHistory,
           icon: const Icon(
             Icons.menu_book_rounded,
-            color: Color(0xFFFFD88A),
+            color: _matchGold,
           ),
           tooltip: 'Match history',
         ),
@@ -145,14 +177,14 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
           ),
         ),
         centerTitle: true,
-        backgroundColor: const Color(0xFF090712),
+        backgroundColor: _matchBlack,
         elevation: 0,
         actions: [
           IconButton(
             onPressed: _reset,
             icon: const Icon(
               Icons.refresh,
-              color: Color(0xFF9D6FE8),
+              color: _matchGold,
             ),
             tooltip: 'Reset',
           ),
@@ -164,8 +196,8 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
             center: Alignment(0, -0.7),
             radius: 1.25,
             colors: [
-              Color(0xFF1A0C2E),
-              Color(0xFF090712),
+              Color(0xFF241903),
+              _matchBlack,
             ],
           ),
         ),
@@ -208,7 +240,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
           Text(
             'Compare two birth blueprints',
             style: GoogleFonts.cinzel(
-              color: const Color(0xFFE5D5F5),
+              color: _matchWhite,
               fontSize: 23,
               fontWeight: FontWeight.bold,
               letterSpacing: 0.4,
@@ -218,7 +250,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
           Text(
             'Bhrigu reads emotional harmony, attraction, stability, karmic bond, and 36 Guna marriage compatibility.',
             style: GoogleFonts.cormorantGaramond(
-              color: const Color(0xFFD4D4CE),
+              color: _matchMuted,
               fontSize: 18,
               height: 1.45,
             ),
@@ -239,7 +271,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
             child: Text(
               'Bhrigu is reading the two birth blueprints...',
               style: GoogleFonts.cormorantGaramond(
-                color: const Color(0xFFD4D4CE),
+                color: _matchMuted,
                 fontSize: 18,
                 height: 1.4,
               ),
@@ -253,6 +285,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
   Widget _resultCard(PartnerMatchReading reading) {
     final scores = reading.scores;
     final safeOverallScore = scores.overall.clamp(60, 95).toInt();
+    final showLegacyVerdict = reading.summary.trim().isEmpty;
 
     return Column(
       children: [
@@ -279,7 +312,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
                   vertical: 7,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF21163A),
+                  color: _matchPanelSoft,
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
                     color: const Color(0xFFF59E0B).withAlpha(90),
@@ -297,10 +330,10 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                '${reading.user.name} × ${reading.partner.name}',
+                '${reading.user.name} x ${reading.partner.name}',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: Color(0xFFB8AEE0),
+                  color: _matchWhite,
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                 ),
@@ -317,6 +350,8 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
           prompt: reading.partner.emotionalPrompt,
           connectionType: reading.connectionType,
         ),
+        const SizedBox(height: 14),
+        _compatibilityMapCard(reading),
         const SizedBox(height: 14),
         CompatibilityMetricCard(
           title: 'Emotional Harmony',
@@ -357,43 +392,445 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
           _marriageGunaCard(reading),
         ],
         const SizedBox(height: 14),
-        _glassCard(
-          padding: const EdgeInsets.all(20),
-          child: Column(
+        _bhriguVerdictCard(reading),
+        if (showLegacyVerdict) const SizedBox(height: 14),
+        if (showLegacyVerdict)
+          _glassCard(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Bhrigu's Verdict",
+                  style: TextStyle(
+                    color: Color(0xFFFFD88A),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  reading.summary,
+                  style: const TextStyle(
+                    color: _matchWhite,
+                    fontSize: 14.5,
+                    height: 1.65,
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: AiReportButton(
+                    feature: 'match',
+                    contentId: 'match_${reading.createdAt.toIso8601String()}',
+                    contentText: reading.summary,
+                    label: 'Report',
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _compatibilityMapCard(PartnerMatchReading reading) {
+    final scores = reading.scores;
+    final strongest = _scoreArea(scores, highest: true);
+    final softest = _scoreArea(scores, highest: false);
+    final marriage = reading.marriageGunaMatch;
+    final marriageText = marriage.maxScore > 0
+        ? '${marriage.totalScore}/${marriage.maxScore} - ${marriage.level}'
+        : 'Not enough Guna data';
+
+    return _glassCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Compatibility Map',
+            style: GoogleFonts.cinzel(
+              color: _matchGold,
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 2.1,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _dataInsightRow(
+            icon: Icons.trending_up_rounded,
+            title: 'Strongest Pull',
+            value: strongest.label,
+            body: _scoreAreaMeaning(strongest, positive: true),
+          ),
+          _dataInsightRow(
+            icon: Icons.tune_rounded,
+            title: 'Growth Edge',
+            value: softest.label,
+            body: _scoreAreaMeaning(softest, positive: false),
+          ),
+          _dataInsightRow(
+            icon: Icons.auto_awesome,
+            title: 'Marriage Lens',
+            value: marriageText,
+            body: marriage.summary.trim().isEmpty
+                ? 'Bhrigu still weighs daily behavior, emotional maturity, and consistency alongside the score.'
+                : marriage.summary,
+          ),
+          _dataInsightRow(
+            icon: Icons.join_inner_rounded,
+            title: 'Connection Dynamic',
+            value: reading.connectionType,
+            body:
+                'Read this match as a living dynamic between ${reading.userSunSign} and ${reading.partnerSunSign}, not as a fixed fate.',
+            showDivider: false,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dataInsightRow({
+    required IconData icon,
+    required String title,
+    required String value,
+    required String body,
+    bool showDivider = true,
+  }) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Bhrigu’s Verdict',
-                style: TextStyle(
-                  color: Color(0xFFFFD88A),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _matchPanelSoft,
+                  border: Border.all(
+                    color: _matchGold.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  color: _matchGold,
+                  size: 19,
                 ),
               ),
-              const SizedBox(height: 12),
-              Text(
-                reading.summary,
-                style: const TextStyle(
-                  color: Color(0xFFB8AEE0),
-                  fontSize: 14.5,
-                  height: 1.65,
-                ),
-              ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: AiReportButton(
-                  feature: 'match',
-                  contentId: 'match_${reading.createdAt.toIso8601String()}',
-                  contentText: reading.summary,
-                  label: 'Report',
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.cinzel(
+                        color: _matchGoldDeep,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      value,
+                      style: const TextStyle(
+                        color: _matchWhite,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      body,
+                      style: GoogleFonts.cormorantGaramond(
+                        color: _matchMuted,
+                        fontSize: 16,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
+        if (showDivider)
+          Divider(
+            color: _matchGold.withValues(alpha: 0.16),
+            height: 1,
+          ),
       ],
     );
   }
+
+  Widget _bhriguVerdictCard(PartnerMatchReading reading) {
+    final sections = _verdictSections(reading.summary);
+
+    return _glassCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _matchPanelSoft,
+                  border: Border.all(
+                    color: _matchGold.withValues(alpha: 0.65),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _matchGold.withValues(alpha: 0.16),
+                      blurRadius: 18,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.menu_book_rounded,
+                  color: _matchGold,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Bhrigu's Verdict",
+                      style: TextStyle(
+                        color: _matchGold,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'A fuller reading of the compatibility data, heart signal, Guna match, and growth areas.',
+                      style: GoogleFonts.inter(
+                        color: _matchMuted,
+                        fontSize: 12.5,
+                        height: 1.35,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...sections.map(_verdictSectionBlock),
+          Align(
+            alignment: Alignment.centerRight,
+            child: AiReportButton(
+              feature: 'match',
+              contentId: 'match_${reading.createdAt.toIso8601String()}',
+              contentText: reading.summary,
+              label: 'Report',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _verdictSectionBlock(_VerdictSection section) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 13),
+      padding: const EdgeInsets.fromLTRB(14, 11, 12, 11),
+      decoration: BoxDecoration(
+        color: _matchBlack.withValues(alpha: 0.34),
+        border: Border(
+          left: BorderSide(
+            color: _matchGold.withValues(alpha: 0.85),
+            width: 3,
+          ),
+          top: BorderSide(
+            color: _matchGold.withValues(alpha: 0.12),
+          ),
+          right: BorderSide(
+            color: _matchGold.withValues(alpha: 0.12),
+          ),
+          bottom: BorderSide(
+            color: _matchGold.withValues(alpha: 0.12),
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            section.title,
+            style: GoogleFonts.cinzel(
+              color: _matchGoldDeep,
+              fontSize: 11.5,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            section.body,
+            style: GoogleFonts.cormorantGaramond(
+              color: _matchWhite,
+              fontSize: 17,
+              height: 1.45,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<_VerdictSection> _verdictSections(String text) {
+    final cleaned = text.replaceAll('\r\n', '\n').trim();
+
+    if (cleaned.isEmpty) {
+      return const [
+        _VerdictSection(
+          title: 'Verdict',
+          body: 'Bhrigu could not generate a detailed verdict for this match.',
+        ),
+      ];
+    }
+
+    final sections = <_VerdictSection>[];
+    String? currentTitle;
+    final buffer = <String>[];
+
+    void flush() {
+      final title = currentTitle;
+      final body = buffer.join('\n').trim();
+
+      if (title != null && body.isNotEmpty) {
+        sections.add(_VerdictSection(title: title, body: body));
+      }
+
+      buffer.clear();
+    }
+
+    for (final line in cleaned.split('\n')) {
+      final header = _verdictHeader(line);
+
+      if (header != null) {
+        flush();
+        currentTitle = header.title;
+        if (header.trailingText.isNotEmpty) {
+          buffer.add(header.trailingText);
+        }
+        continue;
+      }
+
+      currentTitle ??= 'Bhrigu Reading';
+      buffer.add(line.trimRight());
+    }
+
+    flush();
+
+    if (sections.isEmpty) {
+      return [
+        _VerdictSection(title: 'Bhrigu Reading', body: cleaned),
+      ];
+    }
+
+    return sections;
+  }
+
+  _VerdictHeader? _verdictHeader(String line) {
+    final trimmed = line.trim();
+
+    for (final entry in _verdictSectionAliases.entries) {
+      final prefix = '${entry.key}:';
+
+      if (trimmed.toLowerCase().startsWith(prefix.toLowerCase())) {
+        return _VerdictHeader(
+          title: entry.value,
+          trailingText: trimmed.substring(prefix.length).trim(),
+        );
+      }
+    }
+
+    return null;
+  }
+
+  _ScoreArea _scoreArea(CompatibilityScores scores, {required bool highest}) {
+    final areas = <_ScoreArea>[
+      _ScoreArea(
+        label: 'Emotional Harmony',
+        score: scores.emotional,
+        strengthText: 'Feelings have the clearest path to trust here.',
+        growthText: 'Emotional needs may require slower, clearer reassurance.',
+      ),
+      _ScoreArea(
+        label: 'Attraction Pull',
+        score: scores.attraction,
+        strengthText: 'Chemistry is the visible spark in this connection.',
+        growthText: 'Chemistry should be checked against emotional safety.',
+      ),
+      _ScoreArea(
+        label: 'Communication',
+        score: scores.communication,
+        strengthText: 'Conversation can become a bridge when both stay honest.',
+        growthText:
+            'Misunderstandings need repair before they become distance.',
+      ),
+      _ScoreArea(
+        label: 'Long-term Stability',
+        score: scores.stability,
+        strengthText: 'Consistency can give this bond a practical foundation.',
+        growthText: 'Daily consistency is the test this match should not skip.',
+      ),
+      _ScoreArea(
+        label: 'Karmic Bond',
+        score: scores.karmic,
+        strengthText: 'There is a strong lesson or familiar pull between them.',
+        growthText:
+            'The lesson needs maturity so it does not become obsession.',
+      ),
+    ];
+
+    return areas.reduce((current, next) {
+      if (highest) {
+        return next.score > current.score ? next : current;
+      }
+
+      return next.score < current.score ? next : current;
+    });
+  }
+
+  String _scoreAreaMeaning(_ScoreArea area, {required bool positive}) {
+    return positive ? area.strengthText : area.growthText;
+  }
+
+  static const _verdictSectionAliases = <String, String>{
+    'Compatibility Snapshot': 'Compatibility Snapshot',
+    'Attraction & Chemistry': 'Attraction & Chemistry',
+    '36 Guna Marriage Reading': '36 Guna Marriage Reading',
+    '36 Guna Marriage Match': '36 Guna Marriage Reading',
+    "Bhrigu's Guidance": "Bhrigu's Guidance",
+    'Long-Term Stability': 'Long-Term Stability',
+    'Long-Term Potential': 'Long-Term Stability',
+    'Communication Pattern': 'Communication Pattern',
+    'Karmic Lesson': 'Karmic Lesson',
+    'Growth Edge': 'Growth Edge',
+    'Bhrigu Warning': 'Bhrigu Warning',
+    'Emotional Bond': 'Emotional Bond',
+    'Heart Signal': 'Heart Signal',
+    'Attraction': 'Attraction & Chemistry',
+    'Verdict': 'Verdict',
+  };
 
   Widget _followUpCard(PartnerMatchReading reading) {
     final questions = [
@@ -417,8 +854,8 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
                   shape: BoxShape.circle,
                   gradient: const LinearGradient(
                     colors: [
-                      Color(0xFFF59E0B),
-                      Color(0xFFFFD88A),
+                      _matchGoldDeep,
+                      _matchGold,
                     ],
                   ),
                   boxShadow: [
@@ -452,7 +889,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
                     Text(
                       'Continue this fresh match reading in chat.',
                       style: TextStyle(
-                        color: Color(0xFF8E83B5),
+                        color: _matchMuted,
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
                       ),
@@ -481,7 +918,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
                     vertical: 14,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF21163A),
+                    color: _matchPanelSoft,
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
                       color: const Color(0xFFF59E0B).withAlpha(90),
@@ -493,7 +930,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
                         child: Text(
                           question,
                           style: const TextStyle(
-                            color: Color(0xFFF0ECF8),
+                            color: _matchWhite,
                             fontSize: 13.5,
                             height: 1.35,
                             fontWeight: FontWeight.w700,
@@ -517,7 +954,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
           const Text(
             'Follow-ups are created only from this current match, not from old history.',
             style: TextStyle(
-              color: Color(0xFF6B6080),
+              color: _matchMuted,
               fontSize: 11.5,
               height: 1.4,
               fontWeight: FontWeight.w600,
@@ -545,8 +982,8 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
                   shape: BoxShape.circle,
                   gradient: const LinearGradient(
                     colors: [
-                      Color(0xFFF59E0B),
-                      Color(0xFFFFD88A),
+                      _matchGoldDeep,
+                      _matchGold,
                     ],
                   ),
                   boxShadow: [
@@ -581,7 +1018,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
                     const Text(
                       'Traditional 8-koota marriage harmony',
                       style: TextStyle(
-                        color: Color(0xFF8E83B5),
+                        color: _matchMuted,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -595,7 +1032,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF21163A),
+                  color: _matchPanelSoft,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: const Color(0xFFF59E0B).withAlpha(100),
@@ -629,7 +1066,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
               child: LinearProgressIndicator(
                 value: marriage.percentage.clamp(0.0, 1.0),
                 minHeight: 10,
-                backgroundColor: const Color(0xFF151126),
+                backgroundColor: _matchBlack,
                 valueColor: const AlwaysStoppedAnimation<Color>(
                   Color(0xFFE8B530),
                 ),
@@ -640,7 +1077,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
           Text(
             marriage.level,
             style: const TextStyle(
-              color: Color(0xFFF0ECF8),
+              color: _matchWhite,
               fontSize: 15,
               fontWeight: FontWeight.w900,
             ),
@@ -649,7 +1086,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
           Text(
             marriage.summary,
             style: const TextStyle(
-              color: Color(0xFFB8AEE0),
+              color: _matchMuted,
               fontSize: 13.5,
               height: 1.5,
               fontWeight: FontWeight.w500,
@@ -668,7 +1105,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
           Text(
             'Bhrigu blends this marriage score into the overall compatibility result.',
             style: GoogleFonts.inter(
-              color: const Color(0xFF6B6080),
+              color: _matchMuted,
               fontSize: 11.5,
               height: 1.4,
               fontWeight: FontWeight.w600,
@@ -688,7 +1125,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '✦',
+                '*',
                 style: GoogleFonts.cinzel(
                   color: const Color(0xFFE8B530),
                   fontSize: 11,
@@ -714,7 +1151,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
                     Text(
                       item.meaning,
                       style: GoogleFonts.cormorantGaramond(
-                        color: const Color(0xFFB8AEE0),
+                        color: _matchMuted,
                         fontSize: 15.5,
                         height: 1.35,
                       ),
@@ -734,7 +1171,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
             ],
           ),
         ),
-        if (showDivider) const Divider(color: Color(0xFF2E2650), height: 1),
+        if (showDivider) const Divider(color: _matchLine, height: 1),
       ],
     );
   }
@@ -763,7 +1200,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
                 Text(
                   item.name,
                   style: const TextStyle(
-                    color: Color(0xFFF0ECF8),
+                    color: _matchWhite,
                     fontSize: 13.5,
                     fontWeight: FontWeight.w900,
                   ),
@@ -772,7 +1209,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
                 Text(
                   item.meaning,
                   style: const TextStyle(
-                    color: Color(0xFF8E83B5),
+                    color: _matchMuted,
                     fontSize: 11.5,
                     height: 1.35,
                     fontWeight: FontWeight.w500,
@@ -788,10 +1225,10 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
               vertical: 6,
             ),
             decoration: BoxDecoration(
-              color: const Color(0xFF21163A),
+              color: _matchPanelSoft,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: const Color(0xFF9D6FE8).withAlpha(80),
+                color: _matchGold.withAlpha(80),
               ),
             ),
             child: Text(
@@ -816,7 +1253,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
             title: reading.user.name,
             sign: reading.userSunSign,
             mood: reading.userMoonStyle,
-            borderColor: const Color(0xFFB58E34).withValues(alpha: 0.6),
+            borderColor: _matchGoldDeep.withValues(alpha: 0.65),
           ),
         ),
         const SizedBox(width: 10),
@@ -825,7 +1262,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
             title: reading.partner.name,
             sign: reading.partnerSunSign,
             mood: reading.partnerMoonStyle,
-            borderColor: const Color(0xFF9D6FE8).withValues(alpha: 0.6),
+            borderColor: _matchGold.withValues(alpha: 0.55),
           ),
         ),
       ],
@@ -852,26 +1289,41 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: GoogleFonts.cinzel(
-              color: const Color(0xFFE5D5F5),
+              color: _matchWhite,
               fontSize: 13,
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 5),
-          Text(
-            sign,
-            style: const TextStyle(
-              color: Color(0xFFFFD88A),
-              fontSize: 15,
-              fontWeight: FontWeight.w900,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ZodiacSignIcon(
+                sign: sign,
+                size: 30,
+                fallbackColor: const Color(0xFFFFD88A),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  sign,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFFFFD88A),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           Text(
             '$mood Moon',
             textAlign: TextAlign.center,
             style: GoogleFonts.inter(
-              color: const Color(0xFF8E83B5),
+              color: _matchMuted,
               fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
@@ -896,7 +1348,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
         borderRadius: radius,
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF9D6FE8).withValues(alpha: 0.1),
+            color: _matchGold.withValues(alpha: 0.1),
             blurRadius: 28,
             spreadRadius: 2,
             offset: const Offset(0, 12),
@@ -910,7 +1362,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
           child: Container(
             padding: padding,
             decoration: BoxDecoration(
-              color: const Color(0xFF0F0A18).withValues(alpha: 0.5),
+              color: _matchPanel.withValues(alpha: 0.78),
               borderRadius: radius,
               border: Border.all(
                 color: borderColor ??
@@ -934,13 +1386,13 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Color(0xFF151126),
-          Color(0xFF0D0B1E),
+          _matchPanelSoft,
+          _matchPanel,
         ],
       ),
       borderRadius: BorderRadius.circular(26),
       border: Border.all(
-        color: borderColor ?? const Color(0xFF2E2650),
+        color: borderColor ?? _matchLine,
         width: 1.2,
       ),
       boxShadow: [
@@ -953,6 +1405,40 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
       ],
     );
   }
+}
+
+class _VerdictSection {
+  final String title;
+  final String body;
+
+  const _VerdictSection({
+    required this.title,
+    required this.body,
+  });
+}
+
+class _VerdictHeader {
+  final String title;
+  final String trailingText;
+
+  const _VerdictHeader({
+    required this.title,
+    required this.trailingText,
+  });
+}
+
+class _ScoreArea {
+  final String label;
+  final int score;
+  final String strengthText;
+  final String growthText;
+
+  const _ScoreArea({
+    required this.label,
+    required this.score,
+    required this.strengthText,
+    required this.growthText,
+  });
 }
 
 class _MatchHistorySheet extends StatefulWidget {
@@ -971,6 +1457,8 @@ class _MatchHistorySheet extends StatefulWidget {
 }
 
 class _MatchHistorySheetState extends State<_MatchHistorySheet> {
+  static const _firestoreBatchWriteLimit = 500;
+
   late Future<List<PartnerMatchReading>> _future;
   bool _clearing = false;
 
@@ -991,7 +1479,7 @@ class _MatchHistorySheetState extends State<_MatchHistorySheet> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF151126),
+          backgroundColor: _matchPanel,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(22),
           ),
@@ -1005,7 +1493,7 @@ class _MatchHistorySheetState extends State<_MatchHistorySheet> {
           content: const Text(
             'This will permanently delete all saved Bhrigu Match readings from your history.',
             style: TextStyle(
-              color: Color(0xFFB8AEE0),
+              color: _matchMuted,
               height: 1.4,
             ),
           ),
@@ -1015,7 +1503,7 @@ class _MatchHistorySheetState extends State<_MatchHistorySheet> {
               child: const Text(
                 'Cancel',
                 style: TextStyle(
-                  color: Color(0xFF8E83B5),
+                  color: _matchMuted,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -1055,13 +1543,23 @@ class _MatchHistorySheetState extends State<_MatchHistorySheet> {
 
       final snap = await ref.get();
 
-      final batch = FirebaseFirestore.instance.batch();
+      var batch = FirebaseFirestore.instance.batch();
+      var writes = 0;
 
       for (final doc in snap.docs) {
         batch.delete(doc.reference);
+        writes++;
+
+        if (writes >= _firestoreBatchWriteLimit) {
+          await batch.commit();
+          batch = FirebaseFirestore.instance.batch();
+          writes = 0;
+        }
       }
 
-      await batch.commit();
+      if (writes > 0) {
+        await batch.commit();
+      }
 
       widget.onCleared();
 
@@ -1070,7 +1568,7 @@ class _MatchHistorySheetState extends State<_MatchHistorySheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Match history cleared.'),
-          backgroundColor: Color(0xFF6B21A8),
+          backgroundColor: _matchPanel,
         ),
       );
 
@@ -1081,7 +1579,7 @@ class _MatchHistorySheetState extends State<_MatchHistorySheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Could not clear history: $e'),
-          backgroundColor: const Color(0xFF6B21A8),
+          backgroundColor: _matchPanel,
         ),
       );
     } finally {
@@ -1102,7 +1600,7 @@ class _MatchHistorySheetState extends State<_MatchHistorySheet> {
       builder: (context, scrollController) {
         return Container(
           decoration: const BoxDecoration(
-            color: Color(0xFF090712),
+            color: _matchBlack,
             borderRadius: BorderRadius.vertical(
               top: Radius.circular(30),
             ),
@@ -1114,7 +1612,7 @@ class _MatchHistorySheetState extends State<_MatchHistorySheet> {
                 width: 44,
                 height: 5,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2E2650),
+                  color: _matchLine,
                   borderRadius: BorderRadius.circular(30),
                 ),
               ),
@@ -1160,7 +1658,7 @@ class _MatchHistorySheetState extends State<_MatchHistorySheet> {
                   child: Text(
                     'Open a previous compatibility reading.',
                     style: TextStyle(
-                      color: Color(0xFF8E83B5),
+                      color: _matchMuted,
                       fontSize: 12.5,
                       height: 1.4,
                     ),
@@ -1188,7 +1686,7 @@ class _MatchHistorySheetState extends State<_MatchHistorySheet> {
                             'No saved matches yet. Create a Bhrigu Match and it will appear here.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: Color(0xFF8E83B5),
+                              color: _matchMuted,
                               fontSize: 13.5,
                               height: 1.5,
                             ),
@@ -1232,13 +1730,13 @@ class _MatchHistorySheetState extends State<_MatchHistorySheet> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF151126),
-              Color(0xFF0D0B1E),
+              _matchPanelSoft,
+              _matchPanel,
             ],
           ),
           borderRadius: BorderRadius.circular(22),
           border: Border.all(
-            color: const Color(0xFF2E2650),
+            color: _matchLine,
           ),
           boxShadow: [
             BoxShadow(
@@ -1255,7 +1753,7 @@ class _MatchHistorySheetState extends State<_MatchHistorySheet> {
               height: 54,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF21163A),
+                color: _matchPanelSoft,
                 border: Border.all(
                   color: const Color(0xFFF59E0B).withAlpha(100),
                 ),
@@ -1283,11 +1781,11 @@ class _MatchHistorySheetState extends State<_MatchHistorySheet> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${reading.user.name} × ${reading.partner.name}',
+                    '${reading.user.name} x ${reading.partner.name}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Color(0xFFF0ECF8),
+                      color: _matchWhite,
                       fontSize: 14.5,
                       fontWeight: FontWeight.w900,
                     ),
@@ -1298,7 +1796,7 @@ class _MatchHistorySheetState extends State<_MatchHistorySheet> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Color(0xFFB8AEE0),
+                      color: _matchMuted,
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1317,16 +1815,16 @@ class _MatchHistorySheetState extends State<_MatchHistorySheet> {
                         ),
                       if (reading.marriageGunaMatch.maxScore > 0)
                         const Text(
-                          '  •  ',
+                          '  -  ',
                           style: TextStyle(
-                            color: Color(0xFF6B6080),
+                            color: _matchMuted,
                             fontSize: 11.5,
                           ),
                         ),
                       Text(
                         dateText,
                         style: const TextStyle(
-                          color: Color(0xFF6B6080),
+                          color: _matchMuted,
                           fontSize: 11.5,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1339,7 +1837,7 @@ class _MatchHistorySheetState extends State<_MatchHistorySheet> {
             const SizedBox(width: 8),
             const Icon(
               Icons.chevron_right,
-              color: Color(0xFF6B6080),
+              color: _matchMuted,
             ),
           ],
         ),
@@ -1407,7 +1905,7 @@ class _TeslaGlobePainter extends CustomPainter {
       ..shader = RadialGradient(
         colors: [
           Colors.transparent,
-          const Color(0xFF9D6FE8).withAlpha(38),
+          _matchGold.withAlpha(38),
         ],
         stops: const [0.6, 1.0],
       ).createShader(Rect.fromCircle(center: center, radius: radius))
@@ -1480,8 +1978,7 @@ class _TeslaGlobePainter extends CustomPainter {
 
       final safeFlicker = flicker.clamp(0.2, 1.0);
 
-      final tendrilColor =
-          i % 2 == 0 ? const Color(0xFFE040FB) : const Color(0xFF00E5FF);
+      final tendrilColor = i % 2 == 0 ? _matchGold : _matchGoldDeep;
 
       canvas.drawPath(
         path,
@@ -1495,8 +1992,7 @@ class _TeslaGlobePainter extends CustomPainter {
       canvas.drawPath(
         path,
         Paint()
-          ..color =
-              const Color(0xFFE5D5F5).withAlpha((230 * safeFlicker).round())
+          ..color = _matchWhite.withAlpha((230 * safeFlicker).round())
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.0,
       );
@@ -1505,8 +2001,7 @@ class _TeslaGlobePainter extends CustomPainter {
         endPoint,
         3.0 * safeFlicker,
         Paint()
-          ..color =
-              const Color(0xFFE5D5F5).withAlpha((255 * safeFlicker).round())
+          ..color = _matchWhite.withAlpha((255 * safeFlicker).round())
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
       );
     }

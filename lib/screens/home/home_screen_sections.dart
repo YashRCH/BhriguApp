@@ -77,6 +77,8 @@ extension _HomeScreenSections on _HomeScreenState {
   }
 
   Widget _welcomeHeader(String name, String sunSign) {
+    final displaySign = cleanZodiacSignName(sunSign);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -186,13 +188,26 @@ extension _HomeScreenSections on _HomeScreenState {
           ],
         ),
         const SizedBox(height: 4),
-        Text(
-          sunSign,
-          style: const TextStyle(
-            fontSize: 13,
-            color: Color(0xFFF59E0B),
-            letterSpacing: 1,
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isKnownZodiacSign(displaySign)) ...[
+              ZodiacSignIcon(
+                sign: displaySign,
+                size: 24,
+                fallbackColor: const Color(0xFFF59E0B),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Text(
+              displaySign,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFFF59E0B),
+                letterSpacing: 1,
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -958,6 +973,7 @@ extension _HomeScreenSections on _HomeScreenState {
     return _cosmicStatusCard(
       label: 'DAILY ENERGY',
       mainIcon: symbol,
+      planetAssetName: planet,
       title: planet,
       subtitle: subtitle,
       orbAccent: const Color(0xFFF59E0B),
@@ -969,6 +985,7 @@ extension _HomeScreenSections on _HomeScreenState {
   Widget _cosmicStatusCard({
     required String label,
     required String mainIcon,
+    String? planetAssetName,
     required String title,
     required String subtitle,
     required Color orbAccent,
@@ -1094,9 +1111,13 @@ extension _HomeScreenSections on _HomeScreenState {
                           ? _MoonPhaseAsset(
                               phaseIcon: mainIcon,
                             )
-                          : Text(
-                              mainIcon,
-                              style: const TextStyle(fontSize: 25),
+                          : PlanetAsset(
+                              planetName: planetAssetName ?? title,
+                              size: 34,
+                              fallback: Text(
+                                mainIcon,
+                                style: const TextStyle(fontSize: 25),
+                              ),
                             ),
                     ),
                   ),

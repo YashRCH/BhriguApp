@@ -31,6 +31,7 @@ class _TarotScreenState extends State<TarotScreen>
   TarotReadingFlow _flow = TarotReadingFlow.initial();
   final List<AnimationController> _flipControllers = [];
   final List<Animation<double>> _flipAnimations = [];
+  int _readingRequestId = 0;
 
   late final AnimationController _breathController;
   late final Animation<double> _breathAnimation;
@@ -103,6 +104,7 @@ class _TarotScreenState extends State<TarotScreen>
     if (_questionController.text.trim().isEmpty) return;
     FocusScope.of(context).unfocus();
     setState(() {
+      _readingRequestId++;
       _flow = TarotReadingFlow.drawn(_service.drawThreeCards());
     });
     for (final c in _flipControllers) {
@@ -114,30 +116,37 @@ class _TarotScreenState extends State<TarotScreen>
     if (_revealed[index] || _cards == null) return;
     setState(() => _flow = _flow.reveal(index));
     await _flipControllers[index].forward();
+    if (!mounted) return;
     if (_revealed.every((r) => r) && !_readingStarted) {
       _startReading();
     }
   }
 
   void _startReading() async {
-    if (_cards == null || _readingStarted) return;
+    final cards = _cards;
+
+    if (cards == null || _readingStarted) return;
+
+    final requestId = ++_readingRequestId;
+
     setState(() {
       _flow = _flow.beginReading();
     });
     final result = await _service.interpretReading(
       question: _questionController.text.trim(),
-      past: _cards![0],
-      present: _cards![1],
-      future: _cards![2],
+      past: cards[0],
+      present: cards[1],
+      future: cards[2],
     );
-    if (mounted) {
-      setState(() {
-        _flow = _flow.completeReading(
-          result.text,
-          aiResponseLanguage: result.aiResponseLanguage,
-        );
-      });
-    }
+
+    if (!mounted || requestId != _readingRequestId) return;
+
+    setState(() {
+      _flow = _flow.completeReading(
+        result.text,
+        aiResponseLanguage: result.aiResponseLanguage,
+      );
+    });
   }
 
   Future<void> _openHistory() async {
@@ -156,6 +165,7 @@ class _TarotScreenState extends State<TarotScreen>
               c.value = 1;
             }
             setState(() {
+              _readingRequestId++;
               _questionController.text = savedReading.question;
               _flow = TarotReadingFlow.saved(
                 reading: savedReading.reading,
@@ -168,6 +178,7 @@ class _TarotScreenState extends State<TarotScreen>
           },
           onCleared: () {
             setState(() {
+              _readingRequestId++;
               _flow = TarotReadingFlow.initial();
               _questionController.clear();
             });
@@ -552,6 +563,7 @@ class _TarotScreenState extends State<TarotScreen>
         if (_flow.canReset)
           TextButton(
             onPressed: () => setState(() {
+              _readingRequestId++;
               _flow = TarotReadingFlow.initial();
               _questionController.clear();
             }),

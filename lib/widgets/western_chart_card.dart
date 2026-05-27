@@ -1,10 +1,13 @@
 import 'dart:math';
-import 'dart:ui';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/user_profile_cache_service.dart';
+import '../utils/zodiac_signs.dart';
+import 'zodiac_sign_icon.dart';
 
 class WesternChartCard extends StatefulWidget {
   const WesternChartCard({super.key});
@@ -16,9 +19,10 @@ class WesternChartCard extends StatefulWidget {
 class _WesternChartCardState extends State<WesternChartCard>
     with SingleTickerProviderStateMixin {
   static const double _chartLogicalSize = 300;
-  static const double _chartDisplayMaxSize = 390;
+  static const double _chartDisplayMaxSize = 520;
 
   late AnimationController _rotationController;
+  Map<String, ui.Image> _zodiacImages = {};
 
   bool loading = true;
 
@@ -37,7 +41,46 @@ class _WesternChartCardState extends State<WesternChartCard>
       duration: const Duration(seconds: 80),
     )..repeat();
 
+    _loadZodiacImages();
     _loadWesternChart();
+  }
+
+  Future<void> _loadZodiacImages() async {
+    final images = <String, ui.Image>{};
+
+    try {
+      for (final sign in zodiacSignNames) {
+        final path = zodiacAssetPath(sign);
+        if (path == null) continue;
+
+        final data = await rootBundle.load(path);
+        final codec = await ui.instantiateImageCodec(
+          data.buffer.asUint8List(),
+        );
+        final frame = await codec.getNextFrame();
+        images[sign] = frame.image;
+      }
+    } catch (e) {
+      debugPrint('Zodiac asset load failed: $e');
+      for (final image in images.values) {
+        image.dispose();
+      }
+      return;
+    }
+
+    if (!mounted) {
+      for (final image in images.values) {
+        image.dispose();
+      }
+      return;
+    }
+
+    setState(() {
+      for (final image in _zodiacImages.values) {
+        image.dispose();
+      }
+      _zodiacImages = images;
+    });
   }
 
   Future<void> _loadWesternChart() async {
@@ -85,6 +128,9 @@ class _WesternChartCardState extends State<WesternChartCard>
   @override
   void dispose() {
     _rotationController.dispose();
+    for (final image in _zodiacImages.values) {
+      image.dispose();
+    }
     super.dispose();
   }
 
@@ -100,7 +146,7 @@ class _WesternChartCardState extends State<WesternChartCard>
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(34),
@@ -127,7 +173,7 @@ class _WesternChartCardState extends State<WesternChartCard>
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 18),
+          padding: const EdgeInsets.fromLTRB(4, 16, 4, 14),
           child: loading
               ? const Center(
                   child: CircularProgressIndicator(
@@ -156,90 +202,76 @@ class _WesternChartCardState extends State<WesternChartCard>
                         fontSize: 16,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 10),
                     Expanded(
                       child: LayoutBuilder(
                         builder: (context, constraints) {
                           final availableWidth = constraints.maxWidth.isFinite
                               ? constraints.maxWidth
                               : _chartDisplayMaxSize;
-                          final availableHeight = constraints.maxHeight.isFinite
-                              ? constraints.maxHeight
-                              : _chartDisplayMaxSize;
                           final chartSize = min(
                             _chartDisplayMaxSize,
-                            min(
-                              availableWidth,
-                              availableHeight,
-                            ),
+                            availableWidth,
                           );
 
-                          return Center(
-                            child: SizedBox.square(
-                              dimension: chartSize,
-                              child: FittedBox(
-                                fit: BoxFit.contain,
-                                child: SizedBox(
-                                  width: _chartLogicalSize,
-                                  height: _chartLogicalSize,
-                                  child: RotationTransition(
-                                    turns: _rotationController,
-                                    child: CustomPaint(
-                                      painter: WesternWheelPainter(
-                                        planets: planets,
+                          return SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: Column(
+                              children: [
+                                Center(
+                                  child: SizedBox.square(
+                                    dimension: chartSize,
+                                    child: FittedBox(
+                                      fit: BoxFit.contain,
+                                      child: SizedBox(
+                                        width: _chartLogicalSize,
+                                        height: _chartLogicalSize,
+                                        child: RotationTransition(
+                                          turns: _rotationController,
+                                          child: CustomPaint(
+                                            painter: WesternWheelPainter(
+                                              planets: planets,
+                                              zodiacImages: _zodiacImages,
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
+                                const SizedBox(height: 16),
+                                _infoTile(
+                                  '☉',
+                                  'Sun',
+                                  sunSign,
+                                  const Color(0xFFFFD166),
+                                ),
+                                const SizedBox(height: 10),
+                                _infoTile(
+                                  '☽',
+                                  'Moon',
+                                  moonSign,
+                                  const Color(0xFF4EEBFE),
+                                ),
+                                const SizedBox(height: 10),
+                                _infoTile(
+                                  '↑',
+                                  'Rising',
+                                  risingSign,
+                                  const Color(0xFFC77DFF),
+                                ),
+                                const SizedBox(height: 10),
+                                _infoTile(
+                                  '♀',
+                                  'Venus',
+                                  _planetSign('Venus'),
+                                  const Color(0xFFFE8CFE),
+                                ),
+                              ],
                             ),
                           );
                         },
                       ),
-                    ),
-                    const SizedBox(height: 22),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _infoTile(
-                            '☉',
-                            'Sun',
-                            sunSign,
-                            const Color(0xFFFFD166),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: _infoTile(
-                            '☽',
-                            'Moon',
-                            moonSign,
-                            const Color(0xFF4EEBFE),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _infoTile(
-                            '↑',
-                            'Rising',
-                            risingSign,
-                            const Color(0xFFC77DFF),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: _infoTile(
-                            '♀',
-                            'Venus',
-                            _planetSign('Venus'),
-                            const Color(0xFFFE8CFE),
-                          ),
-                        ),
-                      ],
                     ),
                   ],
                 ),
@@ -249,12 +281,14 @@ class _WesternChartCardState extends State<WesternChartCard>
   }
 
   Widget _infoTile(String symbol, String title, String sign, Color glowColor) {
+    final showZodiacIcon = isKnownZodiacSign(sign);
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
             color: const Color(0xFF1E1430).withValues(alpha: 0.5),
             border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
@@ -274,7 +308,7 @@ class _WesternChartCardState extends State<WesternChartCard>
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -292,15 +326,29 @@ class _WesternChartCardState extends State<WesternChartCard>
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      sign,
-                      style: GoogleFonts.cormorantGaramond(
-                        color: const Color(0xFFE5D5F5),
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        if (showZodiacIcon) ...[
+                          ZodiacSignIcon(
+                            sign: sign,
+                            size: 20,
+                            fallbackColor: const Color(0xFFE5D5F5),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        Expanded(
+                          child: Text(
+                            sign,
+                            style: GoogleFonts.cormorantGaramond(
+                              color: const Color(0xFFE5D5F5),
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -315,9 +363,11 @@ class _WesternChartCardState extends State<WesternChartCard>
 
 class WesternWheelPainter extends CustomPainter {
   final List<Map<String, dynamic>> planets;
+  final Map<String, ui.Image> zodiacImages;
 
   WesternWheelPainter({
     required this.planets,
+    required this.zodiacImages,
   });
 
   static const Color _antiqueGold = Color(0xFFB58E34);
@@ -326,36 +376,6 @@ class WesternWheelPainter extends CustomPainter {
   static const Color _deepCosmicPurple = Color(0xFF2A1B4D);
   static const Color _spaceBlack = Color(0xFF0F0A18);
   static const Color _pureWhite = Colors.white;
-
-  final List<String> zodiacGlyphs = const [
-    '♈',
-    '♉',
-    '♊',
-    '♋',
-    '♌',
-    '♍',
-    '♎',
-    '♏',
-    '♐',
-    '♑',
-    '♒',
-    '♓',
-  ];
-
-  final List<String> zodiacSigns = const [
-    'Aries',
-    'Taurus',
-    'Gemini',
-    'Cancer',
-    'Leo',
-    'Virgo',
-    'Libra',
-    'Scorpio',
-    'Sagittarius',
-    'Capricorn',
-    'Aquarius',
-    'Pisces',
-  ];
 
   final List<String> houseRoman = const [
     'I',
@@ -449,7 +469,7 @@ class WesternWheelPainter extends CustomPainter {
 
   double _getPlanetDegree(Map<String, dynamic> planet) {
     final sign = planet['sign'] ?? '';
-    final signIndex = zodiacSigns.indexOf(sign);
+    final signIndex = zodiacSignNames.indexOf(sign);
 
     final degreeRaw = planet['degree'] ?? 0;
     final degree = degreeRaw is int
@@ -556,7 +576,7 @@ class WesternWheelPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = min(size.width, size.height) / 2 * 0.94;
+    final radius = min(size.width, size.height) / 2 * 0.98;
 
     final outerZodiacRadius = radius;
     final houseRingRadius = radius * 0.82;
@@ -664,16 +684,30 @@ class WesternWheelPainter extends CustomPainter {
         alpha: 0.30,
       );
 
-      _drawWheelText(
-        canvas,
-        zodiacGlyphs[i],
-        center,
-        zodiacTextRadius,
-        labelAngle,
-        17,
-        _moonlightSilver,
-        fontWeight: FontWeight.w700,
-      );
+      final zodiacSign = zodiacSignNames[i];
+      final zodiacImage = zodiacImages[zodiacSign];
+
+      if (zodiacImage == null) {
+        _drawWheelText(
+          canvas,
+          zodiacSignInitials(zodiacSign),
+          center,
+          zodiacTextRadius,
+          labelAngle,
+          9.5,
+          _moonlightSilver,
+          fontWeight: FontWeight.w800,
+        );
+      } else {
+        _drawWheelImage(
+          canvas,
+          zodiacImage,
+          center,
+          zodiacTextRadius,
+          labelAngle,
+          24,
+        );
+      }
 
       final houseLabel = switch (i) {
         9 => 'ASC',
@@ -809,6 +843,42 @@ class WesternWheelPainter extends CustomPainter {
     }
   }
 
+  void _drawWheelImage(
+    Canvas canvas,
+    ui.Image image,
+    Offset center,
+    double radius,
+    double angle,
+    double size,
+  ) {
+    final offset = Offset(
+      center.dx + cos(angle) * radius,
+      center.dy + sin(angle) * radius,
+    );
+    final source = Rect.fromLTWH(
+      0,
+      0,
+      image.width.toDouble(),
+      image.height.toDouble(),
+    );
+    final destination = Rect.fromCenter(
+      center: Offset.zero,
+      width: size,
+      height: size,
+    );
+
+    canvas.save();
+    canvas.translate(offset.dx, offset.dy);
+    canvas.rotate(angle + pi / 2);
+    canvas.drawImageRect(
+      image,
+      source,
+      destination,
+      Paint()..filterQuality = FilterQuality.high,
+    );
+    canvas.restore();
+  }
+
   void _drawWheelText(
     Canvas canvas,
     String text,
@@ -852,7 +922,8 @@ class WesternWheelPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant WesternWheelPainter oldDelegate) {
-    return oldDelegate.planets != planets;
+    return oldDelegate.planets != planets ||
+        oldDelegate.zodiacImages != zodiacImages;
   }
 }
 

@@ -94,12 +94,12 @@ class CompatibilityScores {
 
   factory CompatibilityScores.fromJson(Map<String, dynamic> json) {
     return CompatibilityScores(
-      overall: json['overall'] as int? ?? 0,
-      emotional: json['emotional'] as int? ?? 0,
-      attraction: json['attraction'] as int? ?? 0,
-      communication: json['communication'] as int? ?? 0,
-      stability: json['stability'] as int? ?? 0,
-      karmic: json['karmic'] as int? ?? 0,
+      overall: _intFromValue(json['overall']),
+      emotional: _intFromValue(json['emotional']),
+      attraction: _intFromValue(json['attraction']),
+      communication: _intFromValue(json['communication']),
+      stability: _intFromValue(json['stability']),
+      karmic: _intFromValue(json['karmic']),
     );
   }
 }
@@ -127,8 +127,8 @@ class GunaScoreItem {
   factory GunaScoreItem.fromJson(Map<String, dynamic> json) {
     return GunaScoreItem(
       name: json['name'] as String? ?? '',
-      score: json['score'] as int? ?? 0,
-      maxScore: json['maxScore'] as int? ?? 0,
+      score: _intFromValue(json['score']),
+      maxScore: _intFromValue(json['maxScore']),
       meaning: json['meaning'] as String? ?? '',
     );
   }
@@ -172,16 +172,13 @@ class MarriageGunaMatch {
 
   factory MarriageGunaMatch.fromJson(Map<String, dynamic> json) {
     return MarriageGunaMatch(
-      totalScore: json['totalScore'] as int? ?? 0,
-      maxScore: json['maxScore'] as int? ?? 36,
+      totalScore: _intFromValue(json['totalScore']),
+      maxScore: _intFromValue(json['maxScore'], fallback: 36),
       level: json['level'] as String? ?? '',
       summary: json['summary'] as String? ?? '',
       items: ((json['items'] as List?) ?? [])
-          .map(
-            (item) => GunaScoreItem.fromJson(
-              Map<String, dynamic>.from(item as Map),
-            ),
-          )
+          .whereType<Map>()
+          .map((item) => GunaScoreItem.fromJson(_mapFromValue(item)))
           .toList(),
     );
   }
@@ -237,18 +234,18 @@ class PartnerMatchReading {
   factory PartnerMatchReading.fromJson(Map<String, dynamic> json) {
     return PartnerMatchReading(
       user: PartnerBirthProfile.fromJson(
-        Map<String, dynamic>.from(json['user'] as Map),
+        _mapFromValue(json['user']),
       ),
       partner: PartnerBirthProfile.fromJson(
-        Map<String, dynamic>.from(json['partner'] as Map),
+        _mapFromValue(json['partner']),
       ),
       scores: CompatibilityScores.fromJson(
-        Map<String, dynamic>.from(json['scores'] as Map),
+        _mapFromValue(json['scores']),
       ),
       marriageGunaMatch: json['marriageGunaMatch'] == null
           ? MarriageGunaMatch.empty
           : MarriageGunaMatch.fromJson(
-              Map<String, dynamic>.from(json['marriageGunaMatch'] as Map),
+              _mapFromValue(json['marriageGunaMatch']),
             ),
       userSunSign: json['userSunSign'] as String? ?? '',
       partnerSunSign: json['partnerSunSign'] as String? ?? '',
@@ -264,4 +261,16 @@ class PartnerMatchReading {
       ),
     );
   }
+}
+
+int _intFromValue(dynamic value, {int fallback = 0}) {
+  if (value is int) return value;
+  if (value is num) return value.round();
+  if (value is String) return num.tryParse(value)?.round() ?? fallback;
+  return fallback;
+}
+
+Map<String, dynamic> _mapFromValue(dynamic value) {
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return <String, dynamic>{};
 }

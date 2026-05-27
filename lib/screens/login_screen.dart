@@ -98,6 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final cred = await _auth.signInWithGoogle();
       if (cred == null) {
+        if (!mounted) return;
         setState(() => _loading = false);
         return;
       }

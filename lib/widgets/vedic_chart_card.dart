@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../services/cosmic_chart_calculator.dart';
 import '../services/user_profile_cache_service.dart';
+import '../utils/zodiac_signs.dart';
+import 'zodiac_sign_icon.dart';
 
 class VedicChartCard extends StatefulWidget {
   const VedicChartCard({super.key});
@@ -595,6 +597,8 @@ class _VedicChartCardState extends State<VedicChartCard>
     String title,
     String value,
   ) {
+    final showZodiacIcon = isKnownZodiacSign(value);
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -615,15 +619,31 @@ class _VedicChartCardState extends State<VedicChartCard>
             ),
           ),
           Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.inter(
-                color: const Color(0xFFE0C48F),
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (showZodiacIcon) ...[
+                  ZodiacSignIcon(
+                    sign: value,
+                    size: 22,
+                    fallbackColor: const Color(0xFFE0C48F),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Flexible(
+                  child: Text(
+                    value,
+                    textAlign: TextAlign.end,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFFE0C48F),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

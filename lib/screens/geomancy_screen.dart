@@ -48,6 +48,7 @@ class _GeomancyScreenState extends State<GeomancyScreen>
   final List<GeomancyCastLine> _lines = [];
 
   GeomancyReadingFlow _flow = GeomancyReadingFlow.initial();
+  int _readingRequestId = 0;
 
   Size _canvasSize = const Size(320, 300);
   Offset? _currentStart;
@@ -210,23 +211,45 @@ class _GeomancyScreenState extends State<GeomancyScreen>
   }
 
   Future<void> _buildReading() async {
+    final requestId = ++_readingRequestId;
+    final lineValues = List<int>.from(_lineValues);
+
     setState(() {
       _flow = _flow.beginReading();
     });
 
-    final reading = await _service.buildReading(
-      question: _questionController.text.trim(),
-      lineValues: _lineValues,
-    );
-
-    if (!mounted) return;
-
-    setState(() {
-      _flow = _flow.completeReading(
-        reading: reading,
-        lineValues: _lineValues,
+    try {
+      final reading = await _service.buildReading(
+        question: _questionController.text.trim(),
+        lineValues: lineValues,
       );
-    });
+
+      if (!mounted || requestId != _readingRequestId) return;
+
+      setState(() {
+        _flow = _flow.completeReading(
+          reading: reading,
+          lineValues: lineValues,
+        );
+      });
+    } catch (e) {
+      if (!mounted || requestId != _readingRequestId) return;
+
+      setState(() {
+        _lines.clear();
+        _flow = GeomancyReadingFlow.initial();
+        _currentStart = null;
+        _currentControl = null;
+        _isHolding = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not complete this geomancy reading. Try again.'),
+          backgroundColor: Color(0xFF1A1630),
+        ),
+      );
+    }
   }
 
   void _revealShield() {
@@ -238,6 +261,7 @@ class _GeomancyScreenState extends State<GeomancyScreen>
   }
 
   void _resetCast() {
+    _readingRequestId++;
     _holdController.stop();
 
     setState(() {
@@ -304,6 +328,7 @@ class _GeomancyScreenState extends State<GeomancyScreen>
           service: _service,
           onSelect: (savedReading) {
             Navigator.pop(context);
+            _readingRequestId++;
             _holdController.stop();
 
             setState(() {

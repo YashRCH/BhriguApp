@@ -38,9 +38,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   FollowUpContext? _activeFollowUpContext;
   bool _loadingFollowUpContext = false;
+  int _followUpContextRequestId = 0;
+  String? _autoFilledFollowUpQuestion;
 
   bool _isTyping = false;
   bool _stickToBottom = true;
+  StreamSubscription<String>? _messageSubscription;
 
   Timer? _hintTimer;
   int _hintIndex = 0;
@@ -93,6 +96,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
   }
 
+  @override
+  void didUpdateWidget(covariant ChatScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.followUpContextId != widget.followUpContextId) {
+      _loadFollowUpContextIfNeeded();
+    }
+  }
+
   Future<void> _syncChatLanguage() async {
     await ref.read(chatProvider.notifier).ensureActiveLanguage();
 
@@ -103,6 +115,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   @override
   void dispose() {
     _hintTimer?.cancel();
+    _messageSubscription?.cancel();
     _scrollController.removeListener(_handleScroll);
     _pulseController.dispose();
     _dotController.dispose();
@@ -123,9 +136,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   Future<void> _loadFollowUpContextIfNeeded() async {
-    final contextId = widget.followUpContextId;
+    final requestId = ++_followUpContextRequestId;
+    final contextId = widget.followUpContextId?.trim();
 
-    if (contextId == null || contextId.trim().isEmpty) return;
+    if (contextId == null || contextId.isEmpty) {
+      if (!mounted) return;
+
+      setState(() {
+        _clearAutoFilledFollowUpQuestion();
+        _activeFollowUpContext = null;
+        _loadingFollowUpContext = false;
+      });
+      return;
+    }
 
     setState(() {
       _loadingFollowUpContext = true;
@@ -135,10 +158,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       final currentLanguage =
           await UserProfileCacheService.instance.aiResponseLanguage();
       final followUpContext = await _followUpService.getFollowUpContext(
-        contextId.trim(),
+        contextId,
       );
 
-      if (!mounted) return;
+      if (!mounted || requestId != _followUpContextRequestId) return;
 
       if (followUpContext != null &&
           followUpContext.aiResponseLanguage != currentLanguage) {
@@ -154,6 +177,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         );
 
         setState(() {
+          _clearAutoFilledFollowUpQuestion();
+          _activeFollowUpContext = null;
           _loadingFollowUpContext = false;
         });
         return;
@@ -164,20 +189,45 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _loadingFollowUpContext = false;
 
         if (followUpContext != null &&
-            _controller.text.trim().isEmpty &&
             followUpContext.selectedFollowUpQuestion.trim().isNotEmpty) {
-          _controller.text = followUpContext.selectedFollowUpQuestion.trim();
+          final question = followUpContext.selectedFollowUpQuestion.trim();
+
+          if (_canReplaceWithFollowUpQuestion) {
+            _controller.text = question;
+            _autoFilledFollowUpQuestion = question;
+          } else {
+            _autoFilledFollowUpQuestion = null;
+          }
         }
       });
 
       _scrollToBottom(force: true);
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || requestId != _followUpContextRequestId) return;
 
       setState(() {
+        _clearAutoFilledFollowUpQuestion();
+        _activeFollowUpContext = null;
         _loadingFollowUpContext = false;
       });
     }
+  }
+
+  bool get _canReplaceWithFollowUpQuestion {
+    final text = _controller.text.trim();
+    final autoFilled = _autoFilledFollowUpQuestion?.trim();
+
+    return text.isEmpty || (autoFilled != null && text == autoFilled);
+  }
+
+  void _clearAutoFilledFollowUpQuestion() {
+    final autoFilled = _autoFilledFollowUpQuestion?.trim();
+
+    if (autoFilled != null && _controller.text.trim() == autoFilled) {
+      _controller.clear();
+    }
+
+    _autoFilledFollowUpQuestion = null;
   }
 
   Future<void> _send() async {
@@ -242,7 +292,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         ? history.sublist(history.length - _apiHistoryLimit)
         : history;
 
-    _groq
+    await _messageSubscription?.cancel();
+    _messageSubscription = _groq
         .streamMessage(
       limitedHistory,
       followUpContext: _activeFollowUpContext,
@@ -257,21 +308,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       onDone: () async {
         if (!mounted) return;
 
-        final lastContent = ref.read(chatProvider).last.content;
+        final messages = ref.read(chatProvider);
+        final lastContent =
+            messages.isNotEmpty && messages.last.role == 'assistant'
+                ? messages.last.content
+                : '';
 
         await ref.read(chatProvider.notifier).finalizeLastMessage(
               lastContent,
             );
 
+        if (!mounted) return;
+
         setState(() {
           _isTyping = false;
         });
 
+        _messageSubscription = null;
         _scrollToBottom();
       },
       onError: (_) {
         if (!mounted) return;
 
+        _messageSubscription = null;
         setState(() {
           _isTyping = false;
         });
@@ -318,6 +377,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
+
+              await _messageSubscription?.cancel();
+              _messageSubscription = null;
+
+              if (!mounted) return;
+
+              setState(() {
+                _isTyping = false;
+              });
 
               await ref.read(chatProvider.notifier).clear();
 

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/user_profile_cache_service.dart';
+import '../utils/zodiac_signs.dart';
+import 'planet_asset.dart';
+import 'zodiac_sign_icon.dart';
 
 class PlanetPlacementsCard extends StatefulWidget {
   const PlanetPlacementsCard({super.key});
@@ -176,7 +179,7 @@ class _PlanetPlacementsCardState extends State<PlanetPlacementsCard>
 
                               final name = planet['name'] ?? '';
                               final symbol = planet['symbol'] ?? '✦';
-                              final sign = planet['sign'] ?? '—';
+                              final sign = planet['sign']?.toString() ?? '—';
                               final degree = planet['degree'] ?? 0;
                               final house = planet['house'] ?? 1;
                               final retrograde = planet['retrograde'] == true;
@@ -260,17 +263,21 @@ class _PlanetPlacementsCardState extends State<PlanetPlacementsCard>
                                           ],
                                         ),
                                         child: Center(
-                                          child: Text(
-                                            symbol,
-                                            style: TextStyle(
-                                              fontSize: 28,
-                                              color: color,
-                                              shadows: [
-                                                Shadow(
-                                                  color: color,
-                                                  blurRadius: 8,
-                                                ),
-                                              ],
+                                          child: PlanetAsset(
+                                            planetName: name.toString(),
+                                            size: 42,
+                                            fallback: Text(
+                                              symbol.toString(),
+                                              style: TextStyle(
+                                                fontSize: 28,
+                                                color: color,
+                                                shadows: [
+                                                  Shadow(
+                                                    color: color,
+                                                    blurRadius: 8,
+                                                  ),
+                                                ],
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -290,12 +297,32 @@ class _PlanetPlacementsCardState extends State<PlanetPlacementsCard>
                                               ),
                                             ),
                                             const SizedBox(height: 4),
-                                            Text(
-                                              '$sign • ${degree.toString()}°${retrograde ? ' R' : ''}',
-                                              style: GoogleFonts.inter(
-                                                color: Colors.white70,
-                                                fontSize: 13,
-                                              ),
+                                            Row(
+                                              children: [
+                                                if (isKnownZodiacSign(
+                                                    sign)) ...[
+                                                  ZodiacSignIcon(
+                                                    sign: sign,
+                                                    size: 18,
+                                                    fallbackColor: const Color(
+                                                      0xFFC7A867,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                ],
+                                                Flexible(
+                                                  child: Text(
+                                                    '$sign • ${degree.toString()}°${retrograde ? ' R' : ''}',
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: GoogleFonts.inter(
+                                                      color: Colors.white70,
+                                                      fontSize: 13,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ],
                                         ),

@@ -33,6 +33,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   String _aiResponseLanguage = englishAiResponseLanguage;
 
   int _step = 0;
+  bool _saving = false;
+  String? _submitError;
 
   late AnimationController _plasmaController;
   late AnimationController _entranceController;
@@ -198,11 +200,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       },
     );
 
-    if (picked != null) {
-      setState(() {
-        _dob = picked;
-      });
-    }
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      _dob = picked;
+    });
   }
 
   Future<void> _pickTime() async {
@@ -224,11 +226,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       },
     );
 
-    if (picked != null) {
-      setState(() {
-        _tob = picked;
-      });
-    }
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      _tob = picked;
+    });
   }
 
   Future<void> _pickPlace() async {
@@ -244,7 +246,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       ),
     );
 
-    if (selected == null || selected.description.trim().isEmpty) return;
+    if (selected == null || selected.description.trim().isEmpty || !mounted) {
+      return;
+    }
 
     setState(() {
       _place = selected.description.trim();
@@ -254,17 +258,21 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   void _back() {
-    if (_step <= 0) return;
+    if (_step <= 0 || _saving) return;
 
     setState(() {
       _step--;
+      _submitError = null;
     });
   }
 
   Future<void> _next() async {
+    if (_saving) return;
+
     if (_step < 5) {
       setState(() {
         _step++;
+        _submitError = null;
       });
       return;
     }
@@ -279,10 +287,36 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       aiResponseLanguage: _aiResponseLanguage,
     );
 
-    await AuthService().saveUserData(user);
+    var saved = false;
 
-    if (mounted) {
+    setState(() {
+      _saving = true;
+      _submitError = null;
+    });
+
+    try {
+      await AuthService().saveUserData(user);
+
+      if (!mounted) return;
+
+      saved = true;
       context.go('/home');
+    } catch (e, stack) {
+      debugPrint('Onboarding save failed: $e');
+      debugPrintStack(stackTrace: stack);
+
+      if (!mounted) return;
+
+      setState(() {
+        _submitError =
+            'Could not save your birth profile. Please check your connection and try again.';
+      });
+    } finally {
+      if (mounted && !saved) {
+        setState(() {
+          _saving = false;
+        });
+      }
     }
   }
 
@@ -304,6 +338,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   @override
   Widget build(BuildContext context) {
+    final canTapNext = _canProceed && !_saving;
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       body: Container(
@@ -431,23 +467,36 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     child: _buildStep(key: ValueKey<int>(_step)),
                   ),
                 ),
+                if (_submitError != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    _submitError!,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFFE53E3E).withValues(alpha: 0.92),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
                 GestureDetector(
-                  onTap: _canProceed ? _next : null,
+                  onTap: canTapNext ? _next : null,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
-                      color: _canProceed
+                      color: canTapNext
                           ? const Color(0xFF1E1430)
                           : const Color(0xFF0F0A18),
                       border: Border.all(
-                        color: _canProceed
+                        color: canTapNext
                             ? const Color(0xFFB58E34).withValues(alpha: 0.6)
                             : const Color(0xFF3A2D50),
                       ),
-                      boxShadow: _canProceed
+                      boxShadow: canTapNext
                           ? [
                               BoxShadow(
                                 color: const Color(0xFFB58E34)
@@ -459,17 +508,26 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           : [],
                     ),
                     child: Center(
-                      child: Text(
-                        _buttonText,
-                        style: GoogleFonts.cinzel(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: _canProceed
-                              ? const Color(0xFFB58E34)
-                              : const Color(0xFF6B6080),
-                          letterSpacing: 3.0,
-                        ),
-                      ),
+                      child: _saving
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                color: Color(0xFFB58E34),
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Text(
+                              _buttonText,
+                              style: GoogleFonts.cinzel(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: canTapNext
+                                    ? const Color(0xFFB58E34)
+                                    : const Color(0xFF6B6080),
+                                letterSpacing: 3.0,
+                              ),
+                            ),
                     ),
                   ),
                 ),
@@ -1070,7 +1128,7 @@ class _OnboardingPlacePickerSheetState
       final results =
           detailedResults.isNotEmpty ? detailedResults : legacyResults;
 
-      if (!mounted) return;
+      if (!mounted || _searchController.text.trim() != query) return;
 
       setState(() {
         _loading = false;
@@ -1088,7 +1146,7 @@ class _OnboardingPlacePickerSheetState
         'Onboarding place search FirebaseFunctionsException details: ${e.details}',
       );
 
-      if (!mounted) return;
+      if (!mounted || _searchController.text.trim() != query) return;
 
       setState(() {
         _loading = false;
@@ -1100,7 +1158,7 @@ class _OnboardingPlacePickerSheetState
       debugPrint('Onboarding place search error: $e');
       debugPrint('Onboarding place search stack: $stack');
 
-      if (!mounted) return;
+      if (!mounted || _searchController.text.trim() != query) return;
 
       setState(() {
         _loading = false;

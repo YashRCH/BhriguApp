@@ -10,6 +10,8 @@ import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
 import '../services/auth_service.dart';
 import '../services/user_profile_cache_service.dart';
+import '../utils/zodiac_signs.dart';
+import '../widgets/zodiac_sign_icon.dart';
 import 'cosmic_blueprint_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -64,19 +66,39 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Future<void> _loadData() async {
-    final uid = await AuthService().getUserId();
+    try {
+      final uid = await AuthService().getUserId();
 
-    if (uid == null) return;
+      if (uid == null) {
+        if (!mounted) return;
 
-    final doc =
-        await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        setState(() {
+          _userData = null;
+          _loading = false;
+        });
+        return;
+      }
 
-    final info = await PackageInfo.fromPlatform();
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
 
-    if (mounted) {
+      final info = await PackageInfo.fromPlatform();
+
+      if (!mounted) return;
+
       setState(() {
         _userData = doc.data();
         _version = 'v${info.version}';
+        _loading = false;
+      });
+    } catch (e, stack) {
+      debugPrint('Profile data load failed: $e');
+      debugPrintStack(stackTrace: stack);
+
+      if (!mounted) return;
+
+      setState(() {
+        _userData = null;
         _loading = false;
       });
     }
@@ -122,63 +144,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         ),
       );
     }
-  }
-
-  String _sunSign(String? isoDate) {
-    if (isoDate == null) return '—';
-
-    final d = DateTime.tryParse(isoDate);
-
-    if (d == null) return '—';
-
-    final m = d.month;
-    final day = d.day;
-
-    if ((m == 3 && day >= 21) || (m == 4 && day <= 19)) {
-      return 'Aries ♈';
-    }
-
-    if ((m == 4 && day >= 20) || (m == 5 && day <= 20)) {
-      return 'Taurus ♉';
-    }
-
-    if ((m == 5 && day >= 21) || (m == 6 && day <= 20)) {
-      return 'Gemini ♊';
-    }
-
-    if ((m == 6 && day >= 21) || (m == 7 && day <= 22)) {
-      return 'Cancer ♋';
-    }
-
-    if ((m == 7 && day >= 23) || (m == 8 && day <= 22)) {
-      return 'Leo ♌';
-    }
-
-    if ((m == 8 && day >= 23) || (m == 9 && day <= 22)) {
-      return 'Virgo ♍';
-    }
-
-    if ((m == 9 && day >= 23) || (m == 10 && day <= 22)) {
-      return 'Libra ♎';
-    }
-
-    if ((m == 10 && day >= 23) || (m == 11 && day <= 21)) {
-      return 'Scorpio ♏';
-    }
-
-    if ((m == 11 && day >= 22) || (m == 12 && day <= 21)) {
-      return 'Sagittarius ♐';
-    }
-
-    if ((m == 12 && day >= 22) || (m == 1 && day <= 19)) {
-      return 'Capricorn ♑';
-    }
-
-    if ((m == 1 && day >= 20) || (m == 2 && day <= 18)) {
-      return 'Aquarius ♒';
-    }
-
-    return 'Pisces ♓';
   }
 
   String _formatDob(String? iso) {
@@ -641,6 +606,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _profileHeader() {
+    final sunSign = zodiacSignNameFromIso(_userData!['dob']?.toString());
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
@@ -710,14 +677,27 @@ class _ProfileScreenState extends State<ProfileScreen>
                 color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
               ),
             ),
-            child: Text(
-              _sunSign(_userData!['dob']),
-              style: const TextStyle(
-                fontSize: 13,
-                color: Color(0xFFF59E0B),
-                letterSpacing: 1,
-                fontWeight: FontWeight.w600,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isKnownZodiacSign(sunSign)) ...[
+                  ZodiacSignIcon(
+                    sign: sunSign,
+                    size: 24,
+                    fallbackColor: const Color(0xFFF59E0B),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Text(
+                  sunSign,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFFF59E0B),
+                    letterSpacing: 1,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
         ],

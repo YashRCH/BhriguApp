@@ -24,7 +24,7 @@ class StreakRewardState {
 
   factory StreakRewardState.fromMap(Map<String, dynamic> data) {
     return StreakRewardState(
-      rewardCycleDay: data['rewardCycleDay'] as int? ?? 0,
+      rewardCycleDay: _intFromValue(data['rewardCycleDay']),
       freeRewardAvailable: data['freeRewardAvailable'] == true,
       freeRewardType: data['freeRewardType'] as String?,
       lastClaimDate: data['lastClaimDate'] as String?,
@@ -60,6 +60,13 @@ class StreakRewardClaim {
 
   double get nextProgress {
     if (unlockedReward || carriedPendingReward) return 1.0;
-    return state.rewardCycleDay / 4.0;
+    return (state.rewardCycleDay / 4.0).clamp(0.0, 1.0).toDouble();
   }
+}
+
+int _intFromValue(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.round();
+  if (value is String) return num.tryParse(value)?.round() ?? 0;
+  return 0;
 }

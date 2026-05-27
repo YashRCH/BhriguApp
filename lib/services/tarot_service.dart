@@ -210,18 +210,26 @@ class TarotService {
         aiResponseLanguage: aiResponseLanguage,
       );
 
-      return snap.docs
-          .map((doc) {
-            return TarotSavedReading.fromJson(
-              id: doc.id,
-              json: doc.data(),
-            );
-          })
-          .where(
-            (reading) => reading.aiResponseLanguage == aiResponseLanguage,
-          )
-          .take(_savedReadingLimit)
-          .toList();
+      final readings = <TarotSavedReading>[];
+
+      for (final doc in snap.docs) {
+        try {
+          final reading = TarotSavedReading.fromJson(
+            id: doc.id,
+            json: doc.data(),
+          );
+
+          if (reading.aiResponseLanguage == aiResponseLanguage) {
+            readings.add(reading);
+          }
+
+          if (readings.length >= _savedReadingLimit) break;
+        } catch (e) {
+          debugPrint('Tarot history parse error: $e');
+        }
+      }
+
+      return readings;
     } catch (e) {
       debugPrint('Get tarot readings error: $e');
       return [];
@@ -242,13 +250,23 @@ class TarotService {
 
     final snap = await ref.get();
 
-    final batch = FirebaseFirestore.instance.batch();
+    var batch = FirebaseFirestore.instance.batch();
+    var writes = 0;
 
     for (final doc in snap.docs) {
       batch.delete(doc.reference);
+      writes++;
+
+      if (writes >= _firestoreBatchWriteLimit) {
+        await batch.commit();
+        batch = FirebaseFirestore.instance.batch();
+        writes = 0;
+      }
     }
 
-    await batch.commit();
+    if (writes > 0) {
+      await batch.commit();
+    }
   }
 
   Future<void> _pruneSavedReadings(

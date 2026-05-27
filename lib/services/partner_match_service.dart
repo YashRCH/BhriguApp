@@ -391,7 +391,7 @@ Total: ${marriageGunaMatch.totalScore}/${marriageGunaMatch.maxScore}
 Level: ${marriageGunaMatch.level}
 Summary: ${marriageGunaMatch.summary}
 Breakdown:
-${marriageGunaMatch.items.map((item) => '- ${item.name}: ${item.score}/${item.maxScore} — ${item.meaning}').join('\n')}
+${marriageGunaMatch.items.map((item) => '- ${item.name}: ${item.score}/${item.maxScore} - ${item.meaning}').join('\n')}
 
 Connection Type: $connectionType
 Verdict: $verdict
@@ -491,7 +491,12 @@ Retrieve astrology compatibility knowledge about:
             _fallbackReading(
               user: user,
               partner: partner,
+              scores: scores,
               marriageGunaMatch: marriageGunaMatch,
+              userSun: userSun,
+              partnerSun: partnerSun,
+              userMoon: userMoon,
+              partnerMoon: partnerMoon,
               connectionType: connectionType,
               verdict: verdict,
               aiResponseLanguage: responseLanguage,
@@ -502,98 +507,159 @@ Retrieve astrology compatibility knowledge about:
       debugPrint('Partner match Groq error: $e');
 
       return _PartnerMatchReadingResult(
-        text: normalizeAiResponseLanguage(aiResponseLanguage) ==
-                hinglishAiResponseLanguage
-            ? _fallbackReading(
-                user: user,
-                partner: partner,
-                marriageGunaMatch: marriageGunaMatch,
-                connectionType: connectionType,
-                verdict: verdict,
-                aiResponseLanguage: aiResponseLanguage,
-              )
-            : '''Verdict:
-${partner.name} and ${user.name} show $verdict through a $connectionType pattern. This bond has a clear emotional shape rather than being random.
-
-36 Guna Marriage Match:
-${marriageGunaMatch.totalScore}/${marriageGunaMatch.maxScore} - ${marriageGunaMatch.level}
-${marriageGunaMatch.summary}
-
-Heart Signal:
-"${partner.emotionalPrompt}"
-These exact words show what your heart is reacting to before your mind fully explains the connection.
-
-Emotional Bond:
-The emotional pattern suggests that both people may feel a real pull, but the ease of understanding depends on patience and emotional clarity. If the bond feels intense, both people need to slow down enough to understand what is actually being felt.
-
-Attraction:
-The attraction pattern shows that chemistry is present in the connection. Strong pull can create closeness, but it should not be mistaken for emotional safety by itself.
-
-Long-Term Potential:
-The long-term potential depends on communication, consistency, and how both people behave under real pressure. This connection needs honesty more than fantasy.
-
-Bhrigu Warning:
-Do not confuse intensity with peace, because a bond can feel powerful and still require maturity before it becomes safe.''',
+        text: _fallbackReading(
+          user: user,
+          partner: partner,
+          scores: scores,
+          marriageGunaMatch: marriageGunaMatch,
+          userSun: userSun,
+          partnerSun: partnerSun,
+          userMoon: userMoon,
+          partnerMoon: partnerMoon,
+          connectionType: connectionType,
+          verdict: verdict,
+          aiResponseLanguage: aiResponseLanguage,
+        ),
         aiResponseLanguage: aiResponseLanguage,
       );
     }
   }
 
+  String _strongestArea(CompatibilityScores scores) {
+    return _scoreExtreme(scores, highest: true).key;
+  }
+
+  String _softestArea(CompatibilityScores scores) {
+    return _scoreExtreme(scores, highest: false).key;
+  }
+
+  MapEntry<String, int> _scoreExtreme(
+    CompatibilityScores scores, {
+    required bool highest,
+  }) {
+    final areas = <String, int>{
+      'emotional harmony': scores.emotional,
+      'attraction pull': scores.attraction,
+      'communication': scores.communication,
+      'long-term stability': scores.stability,
+      'karmic bond': scores.karmic,
+    };
+
+    return areas.entries.reduce((current, next) {
+      if (highest) {
+        return next.value > current.value ? next : current;
+      }
+
+      return next.value < current.value ? next : current;
+    });
+  }
+
+  String _scoreQuality(int score) {
+    if (score >= 82) return 'strong';
+    if (score >= 72) return 'steady';
+    if (score >= 64) return 'workable';
+    return 'delicate';
+  }
+
   String _fallbackReading({
     required PartnerBirthProfile user,
     required PartnerBirthProfile partner,
+    required CompatibilityScores scores,
     required MarriageGunaMatch marriageGunaMatch,
+    required String userSun,
+    required String partnerSun,
+    required String userMoon,
+    required String partnerMoon,
     required String connectionType,
     required String verdict,
     required String aiResponseLanguage,
   }) {
+    final strongest = _strongestArea(scores);
+    final softest = _softestArea(scores);
+    final heartSignal = partner.emotionalPrompt.trim().isEmpty
+        ? 'No emotional prompt was provided.'
+        : '"${partner.emotionalPrompt.trim()}"';
+    final emotionalQuality = _scoreQuality(scores.emotional);
+    final attractionQuality = _scoreQuality(scores.attraction);
+    final communicationQuality = _scoreQuality(scores.communication);
+    final stabilityQuality = _scoreQuality(scores.stability);
+    final karmicQuality = _scoreQuality(scores.karmic);
+
     if (normalizeAiResponseLanguage(aiResponseLanguage) ==
         hinglishAiResponseLanguage) {
       return '''Verdict:
 ${partner.name} aur ${user.name} ka connection $verdict dikhata hai, $connectionType pattern ke through. Yeh bond random nahi lagta; isme ek clear emotional shape hai.
 
-36 Guna Marriage Match:
-${marriageGunaMatch.totalScore}/${marriageGunaMatch.maxScore} - ${marriageGunaMatch.level}
-${marriageGunaMatch.summary}
+Compatibility Snapshot:
+Is match ka strongest area $strongest hai, aur sabse zyada care $softest mein chahiye. Isliye is connection ko simple yes ya no ke bajay mature handling ke saath dekhna hoga.
 
 Heart Signal:
-"${partner.emotionalPrompt}"
+$heartSignal
 Yeh exact words dikhate hain ki aapka heart kis cheez par react kar raha hai, mind ke fully explain karne se pehle.
 
 Emotional Bond:
-Emotional pattern real pull dikhata hai, lekin samajh aur comfort patience par depend karega. Agar bond intense feel ho raha hai, dono logon ko slow down karke actual feelings samajhni hongi.
+${user.name} ka Moon style $userMoon hai, aur ${partner.name} ka Moon style $partnerMoon hai. Emotional bond $emotionalQuality hai, lekin comfort tabhi badhega jab dono log apni feelings ko calmly express karenge.
 
-Attraction:
-Attraction present hai. Strong pull closeness create kar sakta hai, lekin usse emotional safety ka proof mat samjhiye.
+Attraction & Chemistry:
+Attraction pull $attractionQuality hai, isliye chemistry ya curiosity naturally activate ho sakti hai. Lekin attraction ko emotional safety ka proof samajhne se pehle consistency dekhni hogi.
 
-Long-Term Potential:
-Long-term potential communication, consistency, aur pressure ke time behavior par depend karta hai. Is connection ko fantasy se zyada honesty chahiye.
+Communication Pattern:
+Communication $communicationQuality hai, isliye baat-cheet mein clarity aur ego-management important rahega. Silence, mixed signals, ya overthinking aaye to direct but soft conversation is bond ko better sambhalegi.
+
+Long-Term Stability:
+Long-term stability $stabilityQuality hai, isliye real-life pressure mein behavior dekhna zaroori hai. $userSun aur $partnerSun ka dynamic tabhi mature hoga jab attraction ke saath patience bhi rahe.
+
+36 Guna Marriage Reading:
+36 Guna reading ${marriageGunaMatch.totalScore}/${marriageGunaMatch.maxScore} dikhati hai, ${marriageGunaMatch.level}. ${marriageGunaMatch.summary}
+
+Karmic Lesson:
+Karmic bond $karmicQuality hai, isliye yeh connection kuch lesson ya mirror lekar aa sakta hai. Dono logon ko attachment aur expectation ko maturity ke saath handle karna hoga.
+
+Growth Edge:
+Growth edge $softest hai, kyunki yahi area future friction bana sakta hai. Is match ko fantasy se zyada honest behavior aur repeat consistency chahiye.
 
 Bhrigu Warning:
-Intensity ko peace samajhne ki mistake mat kijiye; powerful bond bhi mature hone se pehle safe nahi hota.''';
+Intensity ko peace samajhne ki mistake mat kijiye; powerful bond bhi mature hone se pehle safe nahi hota.
+
+Bhrigu's Guidance:
+Slowly observe whether their actions match the feeling they create in you.''';
     }
 
     return '''Verdict:
 ${partner.name} and ${user.name} show $verdict through a $connectionType pattern. This bond has a clear emotional shape rather than being random.
 
-36 Guna Marriage Match:
-${marriageGunaMatch.totalScore}/${marriageGunaMatch.maxScore} - ${marriageGunaMatch.level}
-${marriageGunaMatch.summary}
+Compatibility Snapshot:
+The strongest area in this match is $strongest, while $softest needs the most care. This means the connection should be read with nuance, not as a simple yes or no.
 
 Heart Signal:
-"${partner.emotionalPrompt}"
+$heartSignal
 These exact words show what your heart is reacting to before your mind fully explains the connection.
 
 Emotional Bond:
-The emotional pattern suggests that both people may feel a real pull, but the ease of understanding depends on patience and emotional clarity. If the bond feels intense, both people need to slow down enough to understand what is actually being felt.
+${user.name} carries a $userMoon Moon style, while ${partner.name} carries a $partnerMoon Moon style. The emotional bond is $emotionalQuality, but comfort grows only when both people can name their feelings without pressure.
 
-Attraction:
-The attraction pattern shows that chemistry is present in the connection. Strong pull can create closeness, but it should not be mistaken for emotional safety by itself.
+Attraction & Chemistry:
+The attraction pull is $attractionQuality, so chemistry or curiosity can rise naturally between them. Strong pull can create closeness, but it should not be mistaken for emotional safety by itself.
 
-Long-Term Potential:
-The long-term potential depends on communication, consistency, and how both people behave under real pressure. This connection needs honesty more than fantasy.
+Communication Pattern:
+Communication is $communicationQuality, so repair after misunderstanding matters more than perfect conversation. If silence, mixed signals, or ego appear, this bond needs direct but gentle truth.
+
+Long-Term Stability:
+Long-term stability is $stabilityQuality, so the future depends on consistency under real pressure. The $userSun and $partnerSun dynamic can mature when patience supports the attraction.
+
+36 Guna Marriage Reading:
+The 36 Guna reading shows ${marriageGunaMatch.totalScore}/${marriageGunaMatch.maxScore}, ${marriageGunaMatch.level}. ${marriageGunaMatch.summary}
+
+Karmic Lesson:
+The karmic bond is $karmicQuality, so this connection may mirror attachment, timing, or expectation patterns. Its lesson is to stay honest without forcing certainty too early.
+
+Growth Edge:
+The main growth edge is $softest, because that area can become the future friction point. This match needs repeated behavior, not only strong feeling.
 
 Bhrigu Warning:
-Do not confuse intensity with peace, because a bond can feel powerful and still require maturity before it becomes safe.''';
+Do not confuse intensity with peace, because a bond can feel powerful and still require maturity before it becomes safe.
+
+Bhrigu's Guidance:
+Move slowly and observe whether their actions match the feeling they create in you.''';
   }
 }

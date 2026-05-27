@@ -75,7 +75,7 @@ class _PartnerMatchShareButtonState extends State<PartnerMatchShareButton> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Could not share card: $e'),
-          backgroundColor: const Color(0xFF6B21A8),
+          backgroundColor: const Color(0xFF0D0B08),
         ),
       );
     } finally {
@@ -101,9 +101,15 @@ class _PartnerMatchShareButtonState extends State<PartnerMatchShareButton> {
               borderRadius: BorderRadius.circular(20),
               gradient: const LinearGradient(
                 colors: [
-                  Color(0xFFB58E34),
-                  Color(0xFFFFD88A),
+                  Color(0xFF0D0B08),
+                  Color(0xFF15110A),
                 ],
+              ),
+              border: const Border.fromBorderSide(
+                BorderSide(
+                  color: Color(0xFFFFD88A),
+                  width: 1.1,
+                ),
               ),
               boxShadow: [
                 BoxShadow(
@@ -120,7 +126,7 @@ class _PartnerMatchShareButtonState extends State<PartnerMatchShareButton> {
                       height: 21,
                       child: CircularProgressIndicator(
                         strokeWidth: 2.3,
-                        color: Color(0xFF21103D),
+                        color: Color(0xFFFFD88A),
                       ),
                     )
                   : const Row(
@@ -128,14 +134,14 @@ class _PartnerMatchShareButtonState extends State<PartnerMatchShareButton> {
                       children: [
                         Icon(
                           Icons.ios_share_rounded,
-                          color: Color(0xFF21103D),
+                          color: Color(0xFFFFD88A),
                           size: 19,
                         ),
                         SizedBox(width: 9),
                         Text(
                           'Share Match Card',
                           style: TextStyle(
-                            color: Color(0xFF21103D),
+                            color: Colors.white,
                             fontSize: 14.5,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 0.5,

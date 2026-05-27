@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
 import '../utils/date_keys.dart';
+import '../utils/zodiac_signs.dart';
 import 'firebase_session_service.dart';
 import 'user_profile_cache_service.dart';
 
@@ -739,59 +740,7 @@ Do not ask questions at the end. Do not sound like a newspaper horoscope. Do not
   }
 
   String getSunSign(String? isoDate) {
-    if (isoDate == null) return '—';
-
-    final d = DateTime.tryParse(isoDate);
-    if (d == null) return '—';
-
-    final m = d.month;
-    final day = d.day;
-
-    if ((m == 3 && day >= 21) || (m == 4 && day <= 19)) {
-      return 'Aries ♈';
-    }
-
-    if ((m == 4 && day >= 20) || (m == 5 && day <= 20)) {
-      return 'Taurus ♉';
-    }
-
-    if ((m == 5 && day >= 21) || (m == 6 && day <= 20)) {
-      return 'Gemini ♊';
-    }
-
-    if ((m == 6 && day >= 21) || (m == 7 && day <= 22)) {
-      return 'Cancer ♋';
-    }
-
-    if ((m == 7 && day >= 23) || (m == 8 && day <= 22)) {
-      return 'Leo ♌';
-    }
-
-    if ((m == 8 && day >= 23) || (m == 9 && day <= 22)) {
-      return 'Virgo ♍';
-    }
-
-    if ((m == 9 && day >= 23) || (m == 10 && day <= 22)) {
-      return 'Libra ♎';
-    }
-
-    if ((m == 10 && day >= 23) || (m == 11 && day <= 21)) {
-      return 'Scorpio ♏';
-    }
-
-    if ((m == 11 && day >= 22) || (m == 12 && day <= 21)) {
-      return 'Sagittarius ♐';
-    }
-
-    if ((m == 12 && day >= 22) || (m == 1 && day <= 19)) {
-      return 'Capricorn ♑';
-    }
-
-    if ((m == 1 && day >= 20) || (m == 2 && day <= 18)) {
-      return 'Aquarius ♒';
-    }
-
-    return 'Pisces ♓';
+    return zodiacSignNameFromIso(isoDate);
   }
 }
 

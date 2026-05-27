@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -34,22 +37,42 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
           .limit(50)
           .get();
 
-      state = snap.docs.where((d) {
+      final messages = <ChatMessage>[];
+
+      for (final d in snap.docs) {
         final data = d.data();
-        return normalizeAiResponseLanguage(data['aiResponseLanguage']) ==
-            _activeLanguage;
-      }).map((d) {
-        final data = d.data();
-        return ChatMessage(
-          role: data['role'] as String,
-          content: data['content'] as String,
-          timestamp: DateTime.parse(data['timestamp'] as String),
-          aiResponseLanguage: data['aiResponseLanguage'] as String?,
-        );
-      }).toList();
+        final message = _messageFromData(data);
+
+        if (message != null && message.aiResponseLanguage == _activeLanguage) {
+          messages.add(message);
+        }
+      }
+
+      state = messages;
     } catch (_) {
       state = [];
     }
+  }
+
+  ChatMessage? _messageFromData(Map<String, dynamic> data) {
+    final role = data['role'];
+    final content = data['content'];
+    final timestampValue = data['timestamp'];
+
+    if (role is! String || content is! String || timestampValue is! String) {
+      return null;
+    }
+
+    final timestamp = DateTime.tryParse(timestampValue);
+
+    if (timestamp == null) return null;
+
+    return ChatMessage(
+      role: role,
+      content: content,
+      timestamp: timestamp,
+      aiResponseLanguage: data['aiResponseLanguage'],
+    );
   }
 
   Future<String> ensureActiveLanguage() async {
@@ -86,7 +109,11 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     state = [...state, msg];
 
     if (msg.role == 'user') {
-      _save(msg);
+      unawaited(
+        _save(msg).catchError((Object e) {
+          debugPrint('Save chat message error: $e');
+        }),
+      );
     }
   }
 
@@ -94,10 +121,14 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     if (state.isEmpty) return;
 
     final updated = List<ChatMessage>.from(state);
+    final previous = updated.last;
+
+    if (previous.role != 'assistant') return;
 
     updated[updated.length - 1] = ChatMessage(
       role: 'assistant',
       content: content,
+      timestamp: previous.timestamp,
       aiResponseLanguage: _activeLanguage,
     );
 
@@ -107,20 +138,26 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
   Future<void> finalizeLastMessage(String content) async {
     updateLast(content);
 
+    if (content.trim().isEmpty) return;
+
     final uid = await _uid();
 
     if (uid == null) return;
 
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('chat')
-        .add({
-      'role': 'assistant',
-      'content': content,
-      'timestamp': DateTime.now().toIso8601String(),
-      'aiResponseLanguage': _activeLanguage,
-    });
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('chat')
+          .add({
+        'role': 'assistant',
+        'content': content,
+        'timestamp': DateTime.now().toIso8601String(),
+        'aiResponseLanguage': _activeLanguage,
+      });
+    } catch (e) {
+      debugPrint('Save assistant chat message error: $e');
+    }
   }
 
   Future<void> clear() async {

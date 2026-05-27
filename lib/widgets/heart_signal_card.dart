@@ -78,7 +78,7 @@ class HeartSignalCard extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF9D6FE8).withValues(alpha: 0.1),
+            color: const Color(0xFFFFD88A).withValues(alpha: 0.1),
             blurRadius: 28,
             spreadRadius: 2,
             offset: const Offset(0, 12),
@@ -104,7 +104,7 @@ class HeartSignalCard extends StatelessWidget {
             decoration: const BoxDecoration(
               border: Border(
                 left: BorderSide(
-                  color: Color(0xFFE040FB),
+                  color: Color(0xFFFFD88A),
                   width: 3,
                 ),
               ),
@@ -112,9 +112,9 @@ class HeartSignalCard extends StatelessWidget {
             child: Text(
               cleanPrompt.isEmpty
                   ? 'No emotional prompt provided.'
-                  : '“$cleanPrompt”',
+                  : '"$cleanPrompt"',
               style: GoogleFonts.cormorantGaramond(
-                color: const Color(0xFFE5D5F5),
+                color: Colors.white,
                 fontSize: 22,
                 height: 1.35,
                 fontStyle: FontStyle.italic,

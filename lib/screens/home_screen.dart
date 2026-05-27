@@ -10,7 +10,10 @@ import '../models/streak_reward_model.dart';
 import '../services/horoscope_service.dart';
 import '../services/streak_reward_service.dart';
 import '../services/user_profile_cache_service.dart';
+import '../utils/zodiac_signs.dart';
 import '../widgets/ai_report_button.dart';
+import '../widgets/planet_asset.dart';
+import '../widgets/zodiac_sign_icon.dart';
 
 part 'home/home_screen_sections.dart';
 part 'home/home_screen_visuals.dart';

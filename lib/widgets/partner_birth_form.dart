@@ -8,6 +8,14 @@ import '../constants/firebase_constants.dart';
 import '../models/birth_place_suggestion.dart';
 import '../models/partner_match_model.dart';
 
+const _matchBlack = Color(0xFF050505);
+const _matchPanel = Color(0xFF0D0B08);
+const _matchPanelSoft = Color(0xFF15110A);
+const _matchGold = Color(0xFFFFD88A);
+const _matchWhite = Color(0xFFFFFFFF);
+const _matchMuted = Color(0xCCFFFFFF);
+const _matchLine = Color(0xFF3A301C);
+
 class PartnerBirthForm extends StatefulWidget {
   final bool loading;
   final ValueChanged<PartnerBirthProfile> onSubmit;
@@ -174,7 +182,7 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
           data: ThemeData.dark().copyWith(
             colorScheme: const ColorScheme.dark(
               primary: Color(0xFFF59E0B),
-              surface: Color(0xFF1A1630),
+              surface: _matchPanel,
             ),
           ),
           child: child!,
@@ -182,7 +190,7 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
       },
     );
 
-    if (picked == null) return;
+    if (picked == null || !mounted) return;
 
     setState(() {
       _selectedDob = picked;
@@ -200,15 +208,15 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
           data: ThemeData.dark().copyWith(
             colorScheme: const ColorScheme.dark(
               primary: Color(0xFFF59E0B),
-              surface: Color(0xFF1A1630),
+              surface: _matchPanel,
             ),
             timePickerTheme: const TimePickerThemeData(
-              backgroundColor: Color(0xFF151126),
-              hourMinuteTextColor: Color(0xFFF0ECF8),
-              dayPeriodTextColor: Color(0xFFF0ECF8),
+              backgroundColor: _matchPanel,
+              hourMinuteTextColor: _matchWhite,
+              dayPeriodTextColor: _matchWhite,
               dialHandColor: Color(0xFFF59E0B),
-              dialBackgroundColor: Color(0xFF090712),
-              entryModeIconColor: Color(0xFFFFD88A),
+              dialBackgroundColor: _matchBlack,
+              entryModeIconColor: _matchGold,
             ),
           ),
           child: child!,
@@ -216,7 +224,7 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
       },
     );
 
-    if (picked == null) return;
+    if (picked == null || !mounted) return;
 
     setState(() {
       _selectedTime = picked;
@@ -237,7 +245,9 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
       ),
     );
 
-    if (selected == null || selected.description.trim().isEmpty) return;
+    if (selected == null || selected.description.trim().isEmpty || !mounted) {
+      return;
+    }
 
     setState(() {
       _placeController.text = selected.description.trim();
@@ -264,7 +274,7 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Fill partner name, DOB, time, and place.'),
-          backgroundColor: Color(0xFF6B21A8),
+          backgroundColor: _matchPanel,
         ),
       );
       return;
@@ -274,7 +284,7 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Tell Bhrigu what you like or dislike about them.'),
-          backgroundColor: Color(0xFF6B21A8),
+          backgroundColor: _matchPanel,
         ),
       );
       return;
@@ -325,7 +335,7 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
           const Text(
             'Select their birth blueprint and what your heart notices about them.',
             style: TextStyle(
-              color: Color(0xFF8E83B5),
+              color: _matchMuted,
               fontSize: 13,
               height: 1.4,
             ),
@@ -374,7 +384,7 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
             minLines: 3,
             textCapitalization: TextCapitalization.sentences,
             style: const TextStyle(
-              color: Color(0xFFF0ECF8),
+              color: _matchWhite,
               fontSize: 14,
               height: 1.45,
               fontWeight: FontWeight.w600,
@@ -382,12 +392,12 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
             decoration: InputDecoration(
               hintText: _rotatingHints[_hintIndex],
               hintStyle: const TextStyle(
-                color: Color(0xFF6B6080),
+                color: Colors.white54,
                 fontSize: 13,
                 height: 1.45,
               ),
               filled: true,
-              fillColor: const Color(0xFF090712).withAlpha(140),
+              fillColor: _matchBlack.withAlpha(190),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide.none,
@@ -402,7 +412,7 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
           const Text(
             'This helps Bhrigu understand what your heart is responding to.',
             style: TextStyle(
-              color: Color(0xFF6B6080),
+              color: Colors.white60,
               fontSize: 11,
               height: 1.4,
             ),
@@ -417,13 +427,17 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
                 borderRadius: BorderRadius.circular(20),
                 gradient: const LinearGradient(
                   colors: [
-                    Color(0xFF6B21A8),
-                    Color(0xFF9D6FE8),
+                    _matchPanel,
+                    _matchPanelSoft,
                   ],
+                ),
+                border: Border.all(
+                  color: _matchGold.withAlpha(150),
+                  width: 1.1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF9D6FE8).withAlpha(80),
+                    color: _matchGold.withAlpha(70),
                     blurRadius: 22,
                     spreadRadius: 1,
                   ),
@@ -481,8 +495,7 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color:
-                      empty ? const Color(0xFF6B6080) : const Color(0xFFF0ECF8),
+                  color: empty ? Colors.white54 : _matchWhite,
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
@@ -490,7 +503,7 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
             ),
             const Icon(
               Icons.keyboard_arrow_down,
-              color: Color(0xFF6B6080),
+              color: _matchMuted,
             ),
           ],
         ),
@@ -507,20 +520,20 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
       controller: controller,
       enabled: !widget.loading,
       style: const TextStyle(
-        color: Color(0xFFF0ECF8),
+        color: _matchWhite,
         fontSize: 14,
         fontWeight: FontWeight.w600,
       ),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: Color(0xFF6B6080)),
+        hintStyle: const TextStyle(color: Colors.white54),
         prefixIcon: Icon(
           icon,
           color: const Color(0xFFFFD88A),
           size: 20,
         ),
         filled: true,
-        fillColor: const Color(0xFF090712).withAlpha(140),
+        fillColor: _matchBlack.withAlpha(190),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
@@ -539,12 +552,12 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Color(0xFF151126),
-          Color(0xFF0D0B1E),
+          _matchPanelSoft,
+          _matchPanel,
         ],
       ),
       borderRadius: BorderRadius.circular(26),
-      border: Border.all(color: const Color(0xFF2E2650)),
+      border: Border.all(color: _matchGold.withAlpha(80)),
       boxShadow: [
         BoxShadow(
           color: Colors.black.withAlpha(70),
@@ -557,9 +570,9 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
 
   BoxDecoration _inputBox() {
     return BoxDecoration(
-      color: const Color(0xFF090712).withAlpha(140),
+      color: _matchBlack.withAlpha(190),
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: const Color(0xFF2E2650)),
+      border: Border.all(color: _matchLine),
     );
   }
 }
@@ -696,7 +709,7 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
 
       final resolvedResults = results.isNotEmpty ? results : legacyResults;
 
-      if (!mounted) return;
+      if (!mounted || _searchController.text.trim() != query) return;
 
       setState(() {
         _loading = false;
@@ -715,7 +728,7 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
         'Birth place search FirebaseFunctionsException details: ${e.details}',
       );
 
-      if (!mounted) return;
+      if (!mounted || _searchController.text.trim() != query) return;
 
       setState(() {
         _loading = false;
@@ -727,7 +740,7 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
       debugPrint('Birth place search error: $e');
       debugPrint('Birth place search stack: $stack');
 
-      if (!mounted) return;
+      if (!mounted || _searchController.text.trim() != query) return;
 
       setState(() {
         _loading = false;
@@ -748,7 +761,7 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
       builder: (context, scrollController) {
         return Container(
           decoration: const BoxDecoration(
-            color: Color(0xFF090712),
+            color: _matchBlack,
             borderRadius: BorderRadius.vertical(
               top: Radius.circular(30),
             ),
@@ -760,7 +773,7 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
                 width: 44,
                 height: 5,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2E2650),
+                  color: _matchLine,
                   borderRadius: BorderRadius.circular(30),
                 ),
               ),
@@ -795,14 +808,14 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
                   controller: _searchController,
                   autofocus: true,
                   style: const TextStyle(
-                    color: Color(0xFFF0ECF8),
+                    color: _matchWhite,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
                   decoration: InputDecoration(
                     hintText: 'Type city, town, district, or country',
                     hintStyle: const TextStyle(
-                      color: Color(0xFF6B6080),
+                      color: Colors.white54,
                       fontSize: 13,
                     ),
                     prefixIcon: const Icon(
@@ -823,7 +836,7 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
                           )
                         : null,
                     filled: true,
-                    fillColor: const Color(0xFF151126),
+                    fillColor: _matchPanelSoft,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(18),
                       borderSide: BorderSide.none,
@@ -838,7 +851,7 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
                   child: Text(
                     _error!,
                     style: const TextStyle(
-                      color: Color(0xFF8E83B5),
+                      color: _matchMuted,
                       fontSize: 11.5,
                       height: 1.35,
                     ),
@@ -858,7 +871,7 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF151126),
+                        color: _matchPanelSoft,
                         borderRadius: BorderRadius.circular(18),
                         border: Border.all(
                           color: const Color(0xFFF59E0B).withAlpha(100),
@@ -876,7 +889,7 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
                             child: Text(
                               'Use "$typedValue"',
                               style: const TextStyle(
-                                color: Color(0xFFF0ECF8),
+                                color: _matchWhite,
                                 fontSize: 13.5,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -897,7 +910,7 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
                             'Start typing a city, town, district, or country.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: Color(0xFF8E83B5),
+                              color: _matchMuted,
                               fontSize: 13,
                               height: 1.4,
                             ),
@@ -920,10 +933,10 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
                                 vertical: 13,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF151126),
+                                color: _matchPanelSoft,
                                 borderRadius: BorderRadius.circular(18),
                                 border: Border.all(
-                                  color: const Color(0xFF2E2650),
+                                  color: _matchLine,
                                 ),
                               ),
                               child: Row(
@@ -938,7 +951,7 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
                                     child: Text(
                                       place.description,
                                       style: const TextStyle(
-                                        color: Color(0xFFF0ECF8),
+                                        color: _matchWhite,
                                         fontSize: 13.5,
                                         fontWeight: FontWeight.w600,
                                       ),

@@ -29,7 +29,7 @@ class CompatibilityMetricCard extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF9D6FE8).withValues(alpha: 0.1),
+            color: const Color(0xFFFFD88A).withValues(alpha: 0.1),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -42,7 +42,7 @@ class CompatibilityMetricCard extends StatelessWidget {
             height: 42,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFF21163A),
+              color: const Color(0xFF15110A),
               border: Border.all(
                 color: const Color(0xFFF59E0B).withAlpha(80),
               ),
@@ -73,7 +73,7 @@ class CompatibilityMetricCard extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.inter(
-                    color: const Color(0xFF8E83B5),
+                    color: Colors.white70,
                     fontSize: 11,
                     height: 1.3,
                   ),
@@ -84,7 +84,7 @@ class CompatibilityMetricCard extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: safeScore / 100,
                     minHeight: 6,
-                    backgroundColor: const Color(0xFF151126),
+                    backgroundColor: Colors.black,
                     valueColor: const AlwaysStoppedAnimation<Color>(
                       Color(0xFFE8B530),
                     ),

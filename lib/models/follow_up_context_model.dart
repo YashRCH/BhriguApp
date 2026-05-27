@@ -40,14 +40,15 @@ class FollowUpContext {
 
     return FollowUpContext(
       id: doc.id,
-      uid: data['uid'] ?? '',
-      sourceType: data['sourceType'] ?? '',
-      originalQuestion: data['originalQuestion'] ?? '',
-      selectedFollowUpQuestion: data['selectedFollowUpQuestion'] ?? '',
-      readingTitle: data['readingTitle'] ?? '',
-      readingSummary: data['readingSummary'] ?? '',
-      sourceData: Map<String, dynamic>.from(data['sourceData'] ?? {}),
-      userSnapshot: Map<String, dynamic>.from(data['userSnapshot'] ?? {}),
+      uid: data['uid'] as String? ?? '',
+      sourceType: data['sourceType'] as String? ?? '',
+      originalQuestion: data['originalQuestion'] as String? ?? '',
+      selectedFollowUpQuestion:
+          data['selectedFollowUpQuestion'] as String? ?? '',
+      readingTitle: data['readingTitle'] as String? ?? '',
+      readingSummary: data['readingSummary'] as String? ?? '',
+      sourceData: _mapFromValue(data['sourceData']),
+      userSnapshot: _mapFromValue(data['userSnapshot']),
       createdAt: _parseDate(data['createdAt']),
       aiResponseLanguage: normalizeAiResponseLanguage(
         data['aiResponseLanguage'],
@@ -84,5 +85,10 @@ class FollowUpContext {
     }
 
     return DateTime.now();
+  }
+
+  static Map<String, dynamic> _mapFromValue(dynamic value) {
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return <String, dynamic>{};
   }
 }

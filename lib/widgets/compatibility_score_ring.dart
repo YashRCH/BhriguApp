@@ -49,7 +49,7 @@ class CompatibilityScoreRing extends StatelessWidget {
                   const Text(
                     'MATCH',
                     style: TextStyle(
-                      color: Color(0xFF9D6FE8),
+                      color: Colors.white,
                       fontSize: 11,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 1.4,
@@ -78,7 +78,7 @@ class _ScoreRingPainter extends CustomPainter {
     final radius = size.width / 2 - 9;
 
     final basePaint = Paint()
-      ..color = const Color(0xFF2E2650)
+      ..color = const Color(0xFF3A301C)
       ..strokeWidth = 10
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -93,7 +93,7 @@ class _ScoreRingPainter extends CustomPainter {
     final progressPaint = Paint()
       ..shader = const SweepGradient(
         colors: [
-          Color(0xFF9D6FE8),
+          Color(0xFFC7A867),
           Color(0xFFF59E0B),
           Color(0xFFFFD88A),
         ],

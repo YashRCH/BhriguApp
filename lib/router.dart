@@ -21,23 +21,28 @@ final appRouter = GoRouter(
   refreshListenable: GoRouterRefreshStream(_routerAuth.authStateChanges),
   redirect: (context, state) async {
     final user = _routerAuth.currentUser;
-    final loc = state.uri.toString();
+    final path = state.uri.path;
 
     // If not logged in, force them to login
     if (user == null) {
-      return loc == '/login' ? null : '/login';
+      return path == '/login' ? null : '/login';
     }
 
+    final completed = await _routerAuth.hasCompletedOnboarding();
+
     // If logged in but trying to access login, redirect based on onboarding
-    if (loc == '/login') {
-      final completed = await _routerAuth.hasCompletedOnboarding();
+    if (path == '/login') {
       return completed ? '/home' : '/onboarding';
     }
 
     // If trying to access onboarding but already completed it, go home
-    if (loc == '/onboarding') {
-      final completed = await _routerAuth.hasCompletedOnboarding();
+    if (path == '/onboarding') {
       return completed ? '/home' : null;
+    }
+
+    // A signed-in user must finish onboarding before entering the main shell.
+    if (!completed) {
+      return '/onboarding';
     }
 
     return null;
@@ -64,7 +69,8 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/chat',
           builder: (ctx, state) {
-            final followUpContextId = state.extra as String?;
+            final extra = state.extra;
+            final followUpContextId = extra is String ? extra : null;
 
             return ChatScreen(
               followUpContextId: followUpContextId,
