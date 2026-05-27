@@ -216,11 +216,17 @@ extension _HomeScreenSections on _HomeScreenState {
   Widget _sectionLabel(String label) {
     return Text(
       label,
-      style: const TextStyle(
-        fontSize: 11,
-        color: Color(0xFF6B6080),
-        letterSpacing: 2,
+      style: GoogleFonts.cinzelDecorative(
+        fontSize: 12.5,
+        color: const Color(0xFFC7A867), // Matches envelope lines perfectly
+        letterSpacing: 3.0,
         fontWeight: FontWeight.bold,
+        shadows: [
+          Shadow(
+            color: const Color(0xFFC7A867).withValues(alpha: 0.35),
+            blurRadius: 4,
+          ),
+        ],
       ),
     );
   }
@@ -231,27 +237,30 @@ extension _HomeScreenSections on _HomeScreenState {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 400),
         width: double.infinity,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF2E1065), Color(0xFF1A1630)],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF6B21A8), width: 0.5),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
+        // When locked, the envelope itself is the card. When revealed, _horoscopePremiumReading has its own background.
+        // We only show the default card background when loading or error.
+        decoration: (_horoscopeLoading || _horoscope == null)
+            ? BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF2E1065), Color(0xFF1A1630)],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF6B21A8), width: 0.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              )
+            : const BoxDecoration(), // Transparent for envelope/revealed states
         child: _horoscopeLoading
-            ? const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
+            ? const Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(
                   child: CircularProgressIndicator(
                     color: Color(0xFF9D6FE8),
                     strokeWidth: 2,
@@ -259,9 +268,14 @@ extension _HomeScreenSections on _HomeScreenState {
                 ),
               )
             : _horoscope == null
-                ? const Text(
-                    'Could not load today\'s reading. Pull to refresh.',
-                    style: TextStyle(color: Color(0xFF6B6080)),
+                ? const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(
+                      child: Text(
+                        'Could not load today\'s reading. Pull to refresh.',
+                        style: TextStyle(color: Color(0xFF6B6080)),
+                      ),
+                    ),
                   )
                 : _horoscopeRevealed
                     ? FadeTransition(
@@ -275,26 +289,72 @@ extension _HomeScreenSections on _HomeScreenState {
 
   Widget _envelopeLocked() {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          width: 72,
-          height: 54,
-          child: CustomPaint(painter: _EnvelopePainter()),
+        Container(
+          width: 280,
+          height: 160,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF283149), // Deep muted medieval blue
+                Color(0xFF1E243B),
+                Color(0xFF15192C),
+              ],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.5),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
+              ),
+              BoxShadow(
+                color: const Color(0xFFC7A867).withValues(alpha: 0.1),
+                blurRadius: 2,
+                spreadRadius: -1,
+              ),
+            ],
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: CustomPaint(
+                  size: Size.infinite,
+                  painter: _RealisticEnvelopePainter(),
+                ),
+              ),
+              // Extracted Gold Seal Image positioned precisely at the flap junction
+              Positioned(
+                top: 72, // 160 * 0.65 (junction center = 104) - 32 (half of 64)
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: SizedBox(
+                    width: 64,
+                    height: 64,
+                    child: Image.asset(
+                      'assets/images/gold_seal.png',
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 16),
         const Text(
-          'TAP TO OPEN YOUR READING',
+          'tap to open reading',
           style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF9D6FE8),
-            letterSpacing: 1.5,
+            fontSize: 13,
+            color: Color(0xFF6B6080),
+            letterSpacing: 0.5,
           ),
-        ),
-        const SizedBox(height: 6),
-        const Text(
-          'Sealed with cosmic intent',
-          style: TextStyle(fontSize: 12, color: Color(0xFF6B6080)),
         ),
       ],
     );
@@ -1193,8 +1253,14 @@ extension _HomeScreenSections on _HomeScreenState {
             style: const TextStyle(
               fontSize: 34,
               fontWeight: FontWeight.bold,
-              color: Color(0xFFF59E0B),
+              color: Color(0xFFE5D5F5), // Moonlight silver
               height: 1,
+              shadows: [
+                Shadow(
+                  color: Color(0xFFE5D5F5),
+                  blurRadius: 4,
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 10),

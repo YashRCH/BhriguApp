@@ -110,6 +110,7 @@ flutter:
     - assets/zodiac/
     - assets/planets/
     - assets/animations/
+    - assets/images/
 
 flutter_launcher_icons:
   android: true

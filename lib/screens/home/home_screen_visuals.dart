@@ -1,63 +1,60 @@
 part of '../home_screen.dart';
 
-class _EnvelopePainter extends CustomPainter {
+class _RealisticEnvelopePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF9D6FE8)
+    // Shading for side and bottom flaps to give depth
+
+    // Bottom Flap
+    final bottomPath = Path()
+      ..moveTo(0, size.height)
+      ..lineTo(size.width * 0.38, size.height * 0.65)
+      ..quadraticBezierTo(size.width * 0.5, size.height * 0.72, size.width * 0.62, size.height * 0.65)
+      ..lineTo(size.width, size.height)
+      ..close();
+    canvas.drawPath(bottomPath, Paint()..color = Colors.black.withValues(alpha: 0.25)..style = PaintingStyle.fill);
+
+    // Left Flap
+    final leftPath = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width * 0.42, size.height * 0.52)
+      ..quadraticBezierTo(size.width * 0.48, size.height * 0.6, size.width * 0.38, size.height * 0.65)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(leftPath, Paint()..color = Colors.black.withValues(alpha: 0.45)..style = PaintingStyle.fill);
+
+    // Right Flap
+    final rightPath = Path()
+      ..moveTo(size.width, 0)
+      ..lineTo(size.width * 0.58, size.height * 0.52)
+      ..quadraticBezierTo(size.width * 0.52, size.height * 0.6, size.width * 0.62, size.height * 0.65)
+      ..lineTo(size.width, size.height)
+      ..close();
+    canvas.drawPath(rightPath, Paint()..color = Colors.black.withValues(alpha: 0.35)..style = PaintingStyle.fill);
+
+    // Top Flap
+    final topPath = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width * 0.42, size.height * 0.52)
+      ..quadraticBezierTo(size.width * 0.5, size.height * 0.68, size.width * 0.58, size.height * 0.52)
+      ..lineTo(size.width, 0)
+      ..close();
+    
+    // Drop shadow for top flap
+    canvas.drawPath(topPath, Paint()..color = Colors.black.withValues(alpha: 0.4)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10));
+    canvas.drawPath(topPath, Paint()..color = Colors.black.withValues(alpha: 0.15)..style = PaintingStyle.fill);
+
+    // Thin, subtle gold lines for the flap edges
+    final goldLine = Paint()
+      ..color = const Color(0xFFC7A867).withValues(alpha: 0.4)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.round;
+      ..strokeWidth = 0.8
+      ..strokeJoin = StrokeJoin.round;
 
-    final fillPaint = Paint()
-      ..color = const Color(0xFF2E1065)
-      ..style = PaintingStyle.fill;
-
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      const Radius.circular(8),
-    );
-
-    canvas.drawRRect(rect, fillPaint);
-    canvas.drawRRect(rect, paint);
-
-    canvas.drawLine(
-      const Offset(0, 4),
-      Offset(size.width / 2, size.height * 0.6),
-      paint,
-    );
-    canvas.drawLine(
-      Offset(size.width, 4),
-      Offset(size.width / 2, size.height * 0.6),
-      paint,
-    );
-
-    final dimPaint = Paint()
-      ..color = const Color(0xFF6B21A8)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-
-    canvas.drawLine(
-      Offset(0, size.height),
-      Offset(size.width * 0.35, size.height * 0.55),
-      dimPaint,
-    );
-    canvas.drawLine(
-      Offset(size.width, size.height),
-      Offset(size.width * 0.65, size.height * 0.55),
-      dimPaint,
-    );
-
-    final sealPaint = Paint()
-      ..color = const Color(0xFF6B21A8)
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(Offset(size.width / 2, size.height * 0.62), 7, sealPaint);
-    canvas.drawCircle(
-      Offset(size.width / 2, size.height * 0.62),
-      7,
-      paint..strokeWidth = 1,
-    );
+    canvas.drawPath(topPath, goldLine);
+    canvas.drawPath(leftPath, goldLine);
+    canvas.drawPath(rightPath, goldLine);
+    canvas.drawPath(bottomPath, goldLine);
   }
 
   @override
