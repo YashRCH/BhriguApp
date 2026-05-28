@@ -7,6 +7,7 @@ import 'package:astrology_guru_app/models/birth_place_suggestion.dart';
 import 'package:astrology_guru_app/models/payment_feature.dart';
 import 'package:astrology_guru_app/models/planet_model.dart';
 import 'package:astrology_guru_app/models/streak_reward_model.dart';
+import 'package:astrology_guru_app/models/owl_companion_state.dart';
 import 'package:astrology_guru_app/constants/tarot_hints.dart';
 import 'package:astrology_guru_app/models/geomancy_figure_model.dart';
 import 'package:astrology_guru_app/models/geomancy_reading_flow.dart';
@@ -645,5 +646,37 @@ void main() {
     expect(delhi.westernChart.risingSign,
         isNot(losAngeles.westernChart.risingSign));
     expect(delhi.vedicChart.ascendant, isNot(losAngeles.vedicChart.ascendant));
+  });
+
+  group('OwlCompanionState tests', () {
+    test('empty state has correct defaults', () {
+      const state = OwlCompanionState.empty();
+      expect(state.owlName, "Bhrigu's Owl");
+      expect(state.petProgress, 0);
+      expect(state.lastPetDate, isNull);
+      expect(state.rewardAvailable, isFalse);
+      expect(state.rewardClaimedCount, 0);
+    });
+
+    test('fromMap parses correct types', () {
+      final map = {
+        'owlName': 'Hedwig',
+        'petProgress': 3,
+        'lastPetDate': '2023-10-31',
+        'rewardAvailable': true,
+        'rewardClaimedCount': '5', // string number
+        'createdAt': '2023-10-01T12:00:00.000Z',
+      };
+      
+      final state = OwlCompanionState.fromMap(map);
+      
+      expect(state.owlName, 'Hedwig');
+      expect(state.petProgress, 3);
+      expect(state.lastPetDate, '2023-10-31');
+      expect(state.rewardAvailable, true);
+      expect(state.rewardClaimedCount, 5); // parsed to int
+      expect(state.createdAt?.year, 2023);
+    });
+
   });
 }

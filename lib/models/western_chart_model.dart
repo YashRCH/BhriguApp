@@ -6,12 +6,14 @@ class WesternChartModel {
   final String risingSign;
 
   final List<PlanetModel> planets;
+  final List<String> aspects;
 
   WesternChartModel({
     required this.sunSign,
     required this.moonSign,
     required this.risingSign,
     required this.planets,
+    this.aspects = const [],
   });
 
   Map<String, dynamic> toJson() {
@@ -20,6 +22,7 @@ class WesternChartModel {
       'moonSign': moonSign,
       'risingSign': risingSign,
       'planets': planets.map((planet) => planet.toJson()).toList(),
+      'aspects': aspects,
     };
   }
 
@@ -36,6 +39,9 @@ class WesternChartModel {
               Map<String, dynamic>.from(planet),
             ),
           )
+          .toList(),
+      aspects: (json['aspects'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
           .toList(),
     );
   }

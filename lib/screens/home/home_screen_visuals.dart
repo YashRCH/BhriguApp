@@ -61,6 +61,7 @@ class _RealisticEnvelopePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
+// ignore: unused_element
 class _StreakRoadPainter extends CustomPainter {
   final double progress;
   final double pulse;

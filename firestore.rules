@@ -210,6 +210,11 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /users/{userId}/owlCompanion/{docId} {
+      allow read, create, update: if isOwner(userId);
+      allow delete: if false;
+    }
+
     match /users/{userId}/aiReadingCache/{cacheId} {
       allow read, write: if false;
     }

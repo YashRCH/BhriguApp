@@ -13,6 +13,7 @@ import '../services/user_profile_cache_service.dart';
 import '../utils/zodiac_signs.dart';
 import '../widgets/ai_report_button.dart';
 import '../widgets/planet_asset.dart';
+import '../widgets/owl_home_card.dart';
 import '../widgets/zodiac_sign_icon.dart';
 
 part 'home/home_screen_sections.dart';
@@ -42,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool _showCosmicBlueprintHint = false;
   Timer? _cosmicBlueprintHintTimer;
 
+  // ignore: unused_field
   bool _streakLoading = true;
   bool _claimingStreak = false;
   bool _openingReward = false;
@@ -288,6 +290,7 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  // ignore: unused_element
   Future<void> _claimDailyStreak() async {
     if (_claimingStreak) return;
 
@@ -341,6 +344,7 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  // ignore: unused_element
   Future<void> _openFreeReward() async {
     if (!_freeRewardAvailable || _openingReward) return;
 
@@ -564,7 +568,7 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 ),
                 const SizedBox(height: 16),
-                _dreamCard(),
+                OwlHomeCard(uid: FirebaseAuth.instance.currentUser?.uid ?? ''),
                 const SizedBox(height: 20),
               ],
             ),

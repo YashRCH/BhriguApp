@@ -125,12 +125,32 @@ class CosmicChartCalculator {
     final westernRisingSign = _signName(tropicalAscendant);
     final vedicMoon = siderealBodies['Moon']!;
 
+    final aspects = <String>[];
+    final planetKeys = tropicalBodies.keys.toList();
+    for (int i = 0; i < planetKeys.length; i++) {
+      for (int j = i + 1; j < planetKeys.length; j++) {
+        final p1 = planetKeys[i];
+        final p2 = planetKeys[j];
+        final deg1 = tropicalBodies[p1]!;
+        final deg2 = tropicalBodies[p2]!;
+        final dist = ((deg1 - deg2).abs() % 360);
+        final shortestDist = dist > 180 ? 360 - dist : dist;
+        
+        if ((shortestDist - 60).abs() <= 6) aspects.add('$p1 Sextile $p2');
+        else if ((shortestDist - 90).abs() <= 8) aspects.add('$p1 Square $p2');
+        else if ((shortestDist - 120).abs() <= 8) aspects.add('$p1 Trine $p2');
+        else if ((shortestDist - 180).abs() <= 8) aspects.add('$p1 Opposition $p2');
+        else if (shortestDist <= 8) aspects.add('$p1 Conjunction $p2');
+      }
+    }
+
     return CosmicChartResult(
       westernChart: WesternChartModel(
         sunSign: westernSunSign,
         moonSign: westernMoonSign,
         risingSign: westernRisingSign,
         planets: westernPlanets,
+        aspects: aspects,
       ),
       vedicChart: VedicChartModel(
         ascendant: _signName(siderealAscendant),

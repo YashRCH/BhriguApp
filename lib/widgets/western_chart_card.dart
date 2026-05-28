@@ -181,21 +181,26 @@ class _WesternChartCardState extends State<WesternChartCard>
                   ),
                 )
               : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text(
-                      'WESTERN\nBLUEPRINT',
-                      style: GoogleFonts.cinzel(
-                        color: const Color(0xFFE5D5F5),
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2.0,
-                        height: 1.2,
+                    SizedBox(
+                      width: double.infinity,
+                      child: Text(
+                        'WESTERN\nBLUEPRINT',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.cinzel(
+                          color: const Color(0xFFE5D5F5),
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2.0,
+                          height: 1.2,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Your celestial personality matrix',
+                      textAlign: TextAlign.center,
                       style: GoogleFonts.cormorantGaramond(
                         color: Colors.white60,
                         fontStyle: FontStyle.italic,
@@ -727,24 +732,46 @@ class WesternWheelPainter extends CustomPainter {
     }
 
     // 3. Draw the aspect web using true planetary degrees.
-    final aspectPoints = planets.map((planet) {
-      final angle = _getPlanetAngle(planet);
-      return Offset(
-        center.dx + cos(angle) * innerPlanetRadius,
-        center.dy + sin(angle) * innerPlanetRadius,
-      );
-    }).toList();
+    for (int i = 0; i < planets.length; i++) {
+      for (int j = i + 1; j < planets.length; j++) {
+        final deg1 = _getPlanetDegree(planets[i]);
+        final deg2 = _getPlanetDegree(planets[j]);
+        final dist = _degreeDistance(deg1, deg2);
 
-    for (int i = 0; i < aspectPoints.length; i++) {
-      for (int j = i + 1; j < aspectPoints.length; j++) {
-        _drawPremiumLine(
-          canvas,
-          aspectPoints[i],
-          aspectPoints[j],
-          _goldLine,
-          strokeWidth: 0.55,
-          alpha: 0.26,
-        );
+        final isSextile = (dist - 60).abs() <= 6;
+        final isSquare = (dist - 90).abs() <= 8;
+        final isTrine = (dist - 120).abs() <= 8;
+        final isOpposition = (dist - 180).abs() <= 8;
+
+        if (isSextile || isSquare || isTrine || isOpposition) {
+          final angle1 = _getPlanetAngle(planets[i]);
+          final angle2 = _getPlanetAngle(planets[j]);
+
+          final p1 = Offset(
+            center.dx + cos(angle1) * innerPlanetRadius,
+            center.dy + sin(angle1) * innerPlanetRadius,
+          );
+          final p2 = Offset(
+            center.dx + cos(angle2) * innerPlanetRadius,
+            center.dy + sin(angle2) * innerPlanetRadius,
+          );
+
+          Color aspectColor = _goldLine;
+          if (isSquare || isOpposition) {
+            aspectColor = const Color(0xFFE57373); // Reddish for hard aspects
+          } else if (isTrine || isSextile) {
+            aspectColor = const Color(0xFF81C784); // Greenish for soft aspects
+          }
+
+          _drawPremiumLine(
+            canvas,
+            p1,
+            p2,
+            aspectColor,
+            strokeWidth: 0.75,
+            alpha: 0.4,
+          );
+        }
       }
     }
 

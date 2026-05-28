@@ -111,6 +111,17 @@ flutter:
     - assets/planets/
     - assets/animations/
     - assets/images/
+    - assets/images/owl/frames/idle/
+    - assets/images/owl/frames/blink/
+    - assets/images/owl/frames/takeoff/
+    - assets/images/owl/frames/flying/
+    - assets/images/owl/frames/landing/
+    - assets/images/owl/frames/walking/
+    - assets/images/owl/frames/sleeping/
+    - assets/images/owl/frames/alerted/
+    - assets/images/owl/frames/waking_up/
+    - assets/images/owl/frames/nesting/
+    - assets/images/owl/frames/perching/
 
 flutter_launcher_icons:
   android: true

@@ -3,7 +3,7 @@ part of '../home_screen.dart';
 extension _HomeScreenSections on _HomeScreenState {
   Widget _homeLoadingPage() {
     return Scaffold(
-      backgroundColor: const Color(0xFF03010A),
+      backgroundColor: const Color(0xFF020006),
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -13,10 +13,10 @@ extension _HomeScreenSections on _HomeScreenState {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Color(0xFF020008),
-                  Color(0xFF080214),
-                  Color(0xFF17062A),
-                  Color(0xFF07010F),
+                  Color(0xFF010004),
+                  Color(0xFF05010D),
+                  Color(0xFF0E031A),
+                  Color(0xFF040008),
                 ],
                 stops: [0.0, 0.38, 0.72, 1.0],
               ),
@@ -28,8 +28,8 @@ extension _HomeScreenSections on _HomeScreenState {
                 center: const Alignment(0.18, -0.12),
                 radius: 0.82,
                 colors: [
-                  const Color(0xFF4A148C).withValues(alpha: 0.36),
-                  const Color(0xFF14051F).withValues(alpha: 0.18),
+                  const Color(0xFF2E0959).withValues(alpha: 0.36),
+                  const Color(0xFF0C0314).withValues(alpha: 0.18),
                   Colors.transparent,
                 ],
                 stops: const [0.0, 0.46, 1.0],
@@ -1354,213 +1354,4 @@ extension _HomeScreenSections on _HomeScreenState {
     );
   }
 
-  Widget _dreamCard() {
-    final todayClaimed = _isTodayClaimed();
-    final progressPercent = (_displayedRoadProgress * 100).round();
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF1A1630),
-            Color(0xFF211637),
-            Color(0xFF0D0B1E),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: const Color(0xFFB58E34).withValues(alpha: 0.42),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: _streakLoading
-          ? const Center(
-              child: Padding(
-                padding: EdgeInsets.all(12),
-                child: CircularProgressIndicator(
-                  color: Color(0xFFB58E34),
-                  strokeWidth: 2,
-                ),
-              ),
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    AnimatedBuilder(
-                      animation: _plasmaController,
-                      builder: (context, child) {
-                        final glow = 0.35 +
-                            math.sin(_plasmaController.value * math.pi * 2) *
-                                0.18;
-
-                        return Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: const Color(0xFF2E1065),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFFB58E34)
-                                    .withValues(alpha: glow),
-                                blurRadius: 15,
-                                spreadRadius: 1.5,
-                              ),
-                            ],
-                            border: Border.all(
-                              color: const Color(0xFFB58E34)
-                                  .withValues(alpha: 0.62),
-                            ),
-                          ),
-                          child: const Center(
-                            child: Icon(
-                              Icons.local_fire_department_rounded,
-                              color: Color(0xFFF59E0B),
-                              size: 20,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'STREAK REWARDS',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.6,
-                              color: Color(0xFFC7A867),
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Gift unlocks every 4 days',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFF0ECF8),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 44,
-                  width: double.infinity,
-                  child: AnimatedBuilder(
-                    animation: _plasmaController,
-                    builder: (context, child) {
-                      final pulse = 0.75 +
-                          math.sin(_plasmaController.value * math.pi * 2) *
-                              0.25;
-
-                      return CustomPaint(
-                        painter: _StreakRoadPainter(
-                          progress: _displayedRoadProgress.clamp(0.0, 1.0),
-                          pulse: pulse,
-                          unlocked: _freeRewardAvailable,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 9),
-                Text(
-                  _freeRewardAvailable
-                      ? 'Your gift contains a free ${_freeRewardType == 'geomancy' ? 'Geomancy' : 'Tarot'} reading.'
-                      : todayClaimed
-                          ? 'Claimed today. Reward path is $progressPercent% complete.'
-                          : 'Claim today to fill the golden path toward your gift.',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    height: 1.35,
-                    color: Color(0xFFE5D5F5),
-                  ),
-                ),
-                const SizedBox(height: 11),
-                Row(
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: _openingReward
-                            ? null
-                            : () {
-                                if (_freeRewardAvailable) {
-                                  _openFreeReward();
-                                } else {
-                                  _claimDailyStreak();
-                                }
-                              },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 250),
-                          padding: const EdgeInsets.symmetric(vertical: 11),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(13),
-                            gradient: LinearGradient(
-                              colors: _freeRewardAvailable
-                                  ? const [
-                                      Color(0xFFB58E34),
-                                      Color(0xFFF59E0B),
-                                    ]
-                                  : todayClaimed
-                                      ? const [
-                                          Color(0xFF2E2650),
-                                          Color(0xFF2E2650),
-                                        ]
-                                      : const [
-                                          Color(0xFF6B21A8),
-                                          Color(0xFF9D6FE8),
-                                        ],
-                            ),
-                          ),
-                          child: Center(
-                            child: Text(
-                              _openingReward
-                                  ? 'OPENING...'
-                                  : _claimingStreak
-                                      ? 'CLAIMING...'
-                                      : _freeRewardAvailable
-                                          ? 'OPEN GIFT'
-                                          : todayClaimed
-                                              ? 'CLAIMED TODAY'
-                                              : 'CLAIM TODAY',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.1,
-                                color: todayClaimed && !_freeRewardAvailable
-                                    ? const Color(0xFF6B6080)
-                                    : Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-    );
-  }
 }
