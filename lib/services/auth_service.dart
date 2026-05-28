@@ -64,7 +64,10 @@ class AuthService {
     await cred.user?.reload();
     final user = _auth.currentUser ?? cred.user;
 
-    if (user != null && !user.emailVerified) {
+    // TODO: Set this back to true before full public release
+    const requireEmailVerification = false;
+
+    if (user != null && !user.emailVerified && requireEmailVerification) {
       try {
         await user.sendEmailVerification();
       } catch (e) {
@@ -234,7 +237,10 @@ class AuthService {
   }
 
   Future<bool> _refreshOnboardingCompletion(String uid) async {
-    final doc = await _db.collection('users').doc(uid).get();
+    final doc = await _db.collection('users').doc(uid).get().timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => throw TimeoutException('Firestore request timed out'),
+    );
     final data = doc.data();
     final completed = doc.exists;
 

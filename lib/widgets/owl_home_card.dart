@@ -370,6 +370,19 @@ class _OwlHomeCardState extends State<OwlHomeCard>
                 ],
                 // Action button
                 _buildActionButton(),
+                const SizedBox(height: 12),
+                // Footer message
+                const Center(
+                  child: Text(
+                    'Owl brings a gift when moon bond is filled or when he feels like it',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFF8B80A0),
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
               ],
             ),
     );
@@ -378,75 +391,32 @@ class _OwlHomeCardState extends State<OwlHomeCard>
   Widget _buildHeader() {
     return Row(
       children: [
-        AnimatedBuilder(
-          animation: _glowController,
-          builder: (context, child) {
-            final glow =
-                0.35 + math.sin(_glowController.value * math.pi * 2) * 0.18;
-            return Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF2E1065),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFB58E34).withValues(alpha: glow),
-                    blurRadius: 15,
-                    spreadRadius: 1.5,
-                  ),
-                ],
-                border: Border.all(
-                  color: const Color(0xFFB58E34).withValues(alpha: 0.62),
-                ),
-              ),
-              child: const Center(
-                child: Text('🦉', style: TextStyle(fontSize: 18)),
-              ),
-            );
-          },
-        ),
-        const SizedBox(width: 10),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'BHRIGU\'S OWL',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.6,
-                  color: Color(0xFFC7A867),
-                ),
-              ),
-              const SizedBox(height: 3),
-              GestureDetector(
-                onTap: _showRenameDialog,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        _state.owlName,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFF0ECF8),
-                        ),
-                      ),
+          child: GestureDetector(
+            onTap: _showRenameDialog,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    _state.owlName.toUpperCase(),
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.6,
+                      color: Color(0xFFC7A867),
                     ),
-                    const SizedBox(width: 6),
-                    Icon(
-                      Icons.edit_outlined,
-                      size: 13,
-                      color: const Color(0xFFC7A867).withValues(alpha: 0.7),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.edit_outlined,
+                  size: 14,
+                  color: const Color(0xFFC7A867).withValues(alpha: 0.7),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -576,7 +546,7 @@ class _OwlHomeCardState extends State<OwlHomeCard>
                 gradient: LinearGradient(
                   colors: _state.rewardAvailable
                       ? const [Color(0xFFB58E34), Color(0xFFF59E0B)]
-                      : const [Color(0xFF6B21A8), Color(0xFF9D6FE8)],
+                      : const [Color(0xFF5D4037), Color(0xFF3E2723)], // Branch-like brown
                 ),
               ),
               child: Center(

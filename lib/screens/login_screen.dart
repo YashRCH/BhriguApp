@@ -62,6 +62,8 @@ class _LoginScreenState extends State<LoginScreen> {
           password,
         );
 
+        // TODO: Uncomment this when re-enabling email verification for full release
+        /*
         await _auth.signOut();
 
         if (!mounted) return;
@@ -73,6 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
               'Verification email sent. Please verify your email, then sign in.';
         });
         return;
+        */
       }
       if (mounted) {
         final completed = await _auth.hasCompletedOnboarding();

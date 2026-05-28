@@ -28,7 +28,21 @@ final appRouter = GoRouter(
       return path == '/login' ? null : '/login';
     }
 
-    final completed = await _routerAuth.hasCompletedOnboarding();
+    // Prevent navigation away from login if the user is signing up/in with email but hasn't verified.
+    // This stops the app from bouncing to /onboarding and back to /login, which destroys the error state.
+    final isPasswordProvider = user.providerData.any((p) => p.providerId == 'password');
+    if (isPasswordProvider && !user.emailVerified) {
+      return path == '/login' ? null : '/login';
+    }
+
+    bool completed = false;
+    try {
+      completed = await _routerAuth.hasCompletedOnboarding();
+    } catch (e) {
+      debugPrint('Router error checking onboarding status: $e');
+      if (path == '/login') return null;
+      return '/login';
+    }
 
     // If logged in but trying to access login, redirect based on onboarding
     if (path == '/login') {
