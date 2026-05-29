@@ -148,7 +148,7 @@ exports.generateBhriguChat = onCall(
     secrets: [GROQ_API_KEY, GEMINI_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 120,
-    memory: "512MiB",
+    memory: "1GiB",
   }),
   async (request) => {
     const auth = requireCallableAuth(request);
