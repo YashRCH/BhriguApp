@@ -56,91 +56,36 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
   ];
 
   static const List<String> _fallbackPlaces = [
-    'New Delhi, India',
-    'Delhi, India',
-    'Mumbai, Maharashtra, India',
-    'Bengaluru, Karnataka, India',
-    'Kolkata, West Bengal, India',
-    'Chennai, Tamil Nadu, India',
-    'Hyderabad, Telangana, India',
-    'Pune, Maharashtra, India',
-    'Ahmedabad, Gujarat, India',
-    'Jaipur, Rajasthan, India',
-    'Lucknow, Uttar Pradesh, India',
-    'Kanpur, Uttar Pradesh, India',
-    'Varanasi, Uttar Pradesh, India',
-    'Prayagraj, Uttar Pradesh, India',
-    'Indore, Madhya Pradesh, India',
-    'Bhopal, Madhya Pradesh, India',
-    'Gwalior, Madhya Pradesh, India',
-    'Jabalpur, Madhya Pradesh, India',
-    'Patna, Bihar, India',
-    'Ranchi, Jharkhand, India',
-    'Bhubaneswar, Odisha, India',
-    'Guwahati, Assam, India',
-    'Chandigarh, India',
-    'Ludhiana, Punjab, India',
-    'Amritsar, Punjab, India',
-    'Dehradun, Uttarakhand, India',
-    'Haridwar, Uttarakhand, India',
-    'Shimla, Himachal Pradesh, India',
-    'Jammu, Jammu and Kashmir, India',
-    'Srinagar, Jammu and Kashmir, India',
-    'Raipur, Chhattisgarh, India',
-    'Nagpur, Maharashtra, India',
-    'Nashik, Maharashtra, India',
-    'Surat, Gujarat, India',
-    'Vadodara, Gujarat, India',
-    'Rajkot, Gujarat, India',
-    'Udaipur, Rajasthan, India',
-    'Jodhpur, Rajasthan, India',
-    'Kota, Rajasthan, India',
-    'Agra, Uttar Pradesh, India',
-    'Meerut, Uttar Pradesh, India',
-    'Noida, Uttar Pradesh, India',
-    'Ghaziabad, Uttar Pradesh, India',
-    'Gurugram, Haryana, India',
-    'Faridabad, Haryana, India',
-    'Mysuru, Karnataka, India',
-    'Mangaluru, Karnataka, India',
-    'Kochi, Kerala, India',
-    'Thiruvananthapuram, Kerala, India',
-    'Coimbatore, Tamil Nadu, India',
-    'Madurai, Tamil Nadu, India',
-    'Vijayawada, Andhra Pradesh, India',
-    'Visakhapatnam, Andhra Pradesh, India',
-    'Warangal, Telangana, India',
-    'Dubai, United Arab Emirates',
-    'Abu Dhabi, United Arab Emirates',
-    'Doha, Qatar',
-    'London, United Kingdom',
-    'Manchester, United Kingdom',
-    'Birmingham, United Kingdom',
     'New York, United States',
     'Los Angeles, United States',
     'Chicago, United States',
     'Houston, United States',
     'San Francisco, United States',
+    'London, United Kingdom',
+    'Paris, France',
+    'Berlin, Germany',
+    'Rome, Italy',
+    'Madrid, Spain',
     'Toronto, Canada',
     'Vancouver, Canada',
     'Sydney, Australia',
     'Melbourne, Australia',
-    'Singapore',
-    'Bangkok, Thailand',
-    'Kuala Lumpur, Malaysia',
     'Tokyo, Japan',
-    'Osaka, Japan',
+    'Beijing, China',
+    'Hong Kong, China',
+    'Singapore',
+    'Dubai, United Arab Emirates',
+    'Mumbai, India',
+    'New Delhi, India',
+    'São Paulo, Brazil',
+    'Buenos Aires, Argentina',
+    'Mexico City, Mexico',
+    'Cairo, Egypt',
+    'Cape Town, South Africa',
     'Seoul, South Korea',
-    'Paris, France',
-    'Berlin, Germany',
-    'Munich, Germany',
-    'Rome, Italy',
-    'Milan, Italy',
-    'Madrid, Spain',
-    'Barcelona, Spain',
-    'Amsterdam, Netherlands',
-    'Zurich, Switzerland',
-    'Geneva, Switzerland',
+    'Istanbul, Turkey',
+    'Bangkok, Thailand',
+    'Jakarta, Indonesia',
   ];
 
   @override
@@ -377,34 +322,32 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
             ),
           ),
           const SizedBox(height: 8),
-          TextField(
-            controller: _promptController,
-            enabled: !widget.loading,
-            maxLines: 4,
-            minLines: 3,
-            textCapitalization: TextCapitalization.sentences,
-            style: const TextStyle(
-              color: _matchWhite,
-              fontSize: 14,
-              height: 1.45,
-              fontWeight: FontWeight.w600,
-            ),
-            decoration: InputDecoration(
-              hintText: _rotatingHints[_hintIndex],
-              hintStyle: const TextStyle(
-                color: Colors.white54,
-                fontSize: 13,
+          Container(
+            decoration: _inputBox(),
+            child: TextField(
+              controller: _promptController,
+              enabled: !widget.loading,
+              maxLines: 4,
+              minLines: 3,
+              textCapitalization: TextCapitalization.sentences,
+              style: const TextStyle(
+                color: _matchWhite,
+                fontSize: 14,
                 height: 1.45,
+                fontWeight: FontWeight.w600,
               ),
-              filled: true,
-              fillColor: _matchBlack.withAlpha(190),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 14,
+              decoration: InputDecoration(
+                hintText: _rotatingHints[_hintIndex],
+                hintStyle: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 13,
+                  height: 1.45,
+                ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
               ),
             ),
           ),
@@ -422,23 +365,15 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
             onTap: widget.loading ? null : _submit,
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(vertical: 18),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                gradient: const LinearGradient(
-                  colors: [
-                    _matchPanel,
-                    _matchPanelSoft,
-                  ],
-                ),
-                border: Border.all(
-                  color: _matchGold.withAlpha(150),
-                  width: 1.1,
-                ),
+                color: const Color(0xFF1E1430),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF8A6B22)),
                 boxShadow: [
                   BoxShadow(
-                    color: _matchGold.withAlpha(70),
-                    blurRadius: 22,
+                    color: const Color(0xFF8A6B22).withValues(alpha: 0.2),
+                    blurRadius: 12,
                     spreadRadius: 1,
                   ),
                 ],
@@ -456,7 +391,7 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
                     : const Text(
                         'Reveal Compatibility',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: Color(0xFFC7A867),
                           fontSize: 15,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 0.7,
@@ -516,31 +451,29 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
     required String hint,
     required IconData icon,
   }) {
-    return TextField(
-      controller: controller,
-      enabled: !widget.loading,
-      style: const TextStyle(
-        color: _matchWhite,
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-      ),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(color: Colors.white54),
-        prefixIcon: Icon(
-          icon,
-          color: const Color(0xFFFFD88A),
-          size: 20,
+    return Container(
+      decoration: _inputBox(),
+      child: TextField(
+        controller: controller,
+        enabled: !widget.loading,
+        style: const TextStyle(
+          color: _matchWhite,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
         ),
-        filled: true,
-        fillColor: _matchBlack.withAlpha(190),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 15,
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(color: Colors.white54),
+          prefixIcon: Icon(
+            icon,
+            color: const Color(0xFFFFD88A),
+            size: 20,
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 15,
+          ),
         ),
       ),
     );
@@ -548,20 +481,13 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
 
   BoxDecoration _box() {
     return BoxDecoration(
-      gradient: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          _matchPanelSoft,
-          _matchPanel,
-        ],
-      ),
-      borderRadius: BorderRadius.circular(26),
-      border: Border.all(color: _matchGold.withAlpha(80)),
+      color: const Color(0xFF0F0A18),
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: const Color(0xFF2E1A4A), width: 1),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withAlpha(70),
-          blurRadius: 24,
+          color: Colors.black.withValues(alpha: 0.5),
+          blurRadius: 20,
           offset: const Offset(0, 10),
         ),
       ],
@@ -570,9 +496,16 @@ class _PartnerBirthFormState extends State<PartnerBirthForm> {
 
   BoxDecoration _inputBox() {
     return BoxDecoration(
-      color: _matchBlack.withAlpha(190),
+      color: const Color(0xFF0A0812),
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _matchLine),
+      border: Border.all(color: const Color(0xFF3A2D50)),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.6),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
     );
   }
 }

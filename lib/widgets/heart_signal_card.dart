@@ -71,17 +71,14 @@ class HeartSignalCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F0A18).withValues(alpha: 0.5),
+        color: const Color(0xFF0F0A18),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: const Color(0xFFC7A867).withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: const Color(0xFF2E1A4A), width: 1),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFFD88A).withValues(alpha: 0.1),
-            blurRadius: 28,
-            spreadRadius: 2,
-            offset: const Offset(0, 12),
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),

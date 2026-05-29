@@ -264,7 +264,7 @@ exports.retrieveCompatibilityKnowledge = onCall(
 
 exports.generatePartnerMatchReading = onCall(
   callableRuntimeOptions({
-    secrets: [GROQ_API_KEY, GEMINI_API_KEY],
+    secrets: [GEMINI_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 180,
     memory: "512MiB",
@@ -437,22 +437,13 @@ ${languageInstruction(aiResponseLanguage)}
 
     const systemInstruction =
       `Follow the compatibility reading format exactly with every requested section label once and in order. Do not use markdown. Do not use bullet points. Do not ask a question at the end. Do not write percentage numbers.\n${languageInstruction(aiResponseLanguage)}`;
-    let providerUsed = "groq";
-    let modelUsed = GROQ_PARTNER_MATCH_MODEL;
+    let providerUsed = "gemini";
+    let modelUsed = GEMINI_FLASH_LITE_MODEL;
 
     try {
-      let text = await generateGroqReadingText({
-        messages: [
-          {
-            role: "system",
-            content: systemInstruction,
-          },
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-        model: GROQ_PARTNER_MATCH_MODEL,
+      let text = await generateGeminiReadingText({
+        systemInstruction,
+        prompt,
         maxTokens: 1050,
         temperature: 0.35,
       });
@@ -477,47 +468,9 @@ ${languageInstruction(aiResponseLanguage)}
       };
     } catch (error) {
       console.error(
-        "Partner match Groq error:",
+        "Partner match Gemini error:",
         error.response?.data || error.message
       );
-
-      if (isRetryableAiError(error)) {
-        try {
-          let text = await generateGeminiReadingText({
-            systemInstruction,
-            prompt,
-            maxTokens: 1050,
-            temperature: 0.35,
-          });
-          text = await ensureHinglishText({
-            text,
-            aiResponseLanguage,
-            preserveFormatInstruction:
-              "Preserve Verdict, Compatibility Snapshot, Heart Signal, Emotional Bond, Attraction & Chemistry, Communication Pattern, Long-Term Stability, 36 Guna Marriage Reading, Karmic Lesson, Growth Edge, Bhrigu Warning, and Bhrigu's Guidance labels exactly.",
-            maxTokens: 1050,
-          });
-
-          providerUsed = "gemini";
-          modelUsed = GEMINI_FLASH_LITE_MODEL;
-
-          await recordUsageEvent(decodedToken.uid, {
-            feature: "partner_match",
-            provider: providerUsed,
-            model: modelUsed,
-            cached: false,
-          });
-
-          return {
-            text: text.trim(),
-            aiResponseLanguage,
-          };
-        } catch (fallbackError) {
-          console.error(
-            "Partner match Gemini fallback error:",
-            fallbackError.response?.data || fallbackError.message
-          );
-        }
-      }
 
       throw new HttpsError(
         "internal",
@@ -529,7 +482,7 @@ ${languageInstruction(aiResponseLanguage)}
 
 exports.generateCompatibilityInsight = onCall(
   callableRuntimeOptions({
-    secrets: [GROQ_API_KEY, GEMINI_API_KEY],
+    secrets: [GEMINI_API_KEY],
     region: FUNCTION_REGION,
   }),
   async (request) => {

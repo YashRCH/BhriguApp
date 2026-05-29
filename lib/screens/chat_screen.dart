@@ -49,7 +49,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   int _hintIndex = 0;
 
   static const String _ephemerisTrustLine =
-      'Planetary positions calculated using NASA/JPL Horizons ephemeris data.';
+      'Powered by NASA/JPL Horizons Data';
   static const int _apiHistoryLimit = 5;
 
   late final AnimationController _pulseController;
@@ -502,14 +502,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       body: Container(
         decoration: const BoxDecoration(
           gradient: RadialGradient(
-            center: Alignment(-0.8, -0.8),
-            radius: 1.5,
+            center: Alignment(0, -0.2),
+            radius: 1.2,
             colors: [
-              Color(0xFF2A1B4D),
-              Color(0xFF0D0B1E),
-              Color(0xFF080512),
+              Color(0xFF1E1430),
+              Color(0xFF0F0A18),
+              Color(0xFF050408),
             ],
-            stops: [0.0, 0.5, 1.0],
+            stops: [0.0, 0.6, 1.0],
           ),
         ),
         child: SafeArea(
@@ -613,9 +613,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     Text(
                       'BHRIGU',
                       style: GoogleFonts.cinzel(
-                        color: Colors.white,
+                        color: const Color(0xFFC7A867),
                         fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
                         letterSpacing: 2.0,
                       ),
                     ),
@@ -629,12 +629,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                           _ephemerisTrustLine,
                           maxLines: 1,
                           style: GoogleFonts.inter(
-                            color:
-                                const Color(0xFFB58E34).withValues(alpha: 0.52),
-                            fontSize: 8.8,
+                            color: Colors.white.withValues(alpha: 0.6),
+                            fontSize: 10.0,
                             height: 1.2,
-                            fontWeight: FontWeight.w400,
-                            letterSpacing: 0,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.5,
                           ),
                         ),
                       ),

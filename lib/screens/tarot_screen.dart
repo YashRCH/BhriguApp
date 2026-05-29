@@ -312,6 +312,7 @@ class _TarotScreenState extends State<TarotScreen>
   }
 
   Widget _initialState() {
+    final canDraw = _questionController.text.trim().isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -354,6 +355,7 @@ class _TarotScreenState extends State<TarotScreen>
           ),
           child: TextField(
             controller: _questionController,
+            onChanged: (_) => setState(() {}),
             style: GoogleFonts.cormorantGaramond(
               fontSize: 18,
               color: const Color(0xFFC7A867),
@@ -375,15 +377,18 @@ class _TarotScreenState extends State<TarotScreen>
         ),
         const SizedBox(height: 30),
         GestureDetector(
-          onTap: _drawCards,
-          child: Container(
+          onTap: canDraw ? _drawCards : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 18),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              color: const Color(0xFF1E1430),
+              color: canDraw ? const Color(0xFF1E1430) : const Color(0xFF0F0A18),
               border: Border.all(
-                color: const Color(0xFF8A6B22).withValues(alpha: 0.5),
+                color: canDraw 
+                    ? const Color(0xFF8A6B22).withValues(alpha: 0.5)
+                    : const Color(0xFF3A2D50),
               ),
             ),
             child: Center(
@@ -392,7 +397,7 @@ class _TarotScreenState extends State<TarotScreen>
                 style: GoogleFonts.cinzel(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: const Color(0xFFB58E34),
+                  color: canDraw ? const Color(0xFFB58E34) : const Color(0xFF6B6080),
                   letterSpacing: 3.0,
                 ),
               ),
@@ -432,54 +437,7 @@ class _TarotScreenState extends State<TarotScreen>
                       ),
                     ),
                   ),
-                  Positioned(
-                    top: 258,
-                    child: Container(
-                      width: 162,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(100),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.96),
-                            blurRadius: 26,
-                            spreadRadius: 10,
-                          ),
-                          BoxShadow(
-                            color: const Color(0xFFFFD88A).withValues(
-                              alpha: 0.16 * _breathAnimation.value,
-                            ),
-                            blurRadius: 42,
-                            spreadRadius: 8,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 94,
-                    child: Transform.translate(
-                      offset: const Offset(7, 7),
-                      child: Transform.rotate(
-                        angle: 0.065,
-                        child: _cardBack(width: 104, height: 172),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 90,
-                    child: Transform.translate(
-                      offset: const Offset(-6, 3),
-                      child: Transform.rotate(
-                        angle: -0.038,
-                        child: _cardBack(width: 104, height: 172),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 86,
-                    child: _cardBack(width: 104, height: 172, isCenter: true),
-                  ),
+
                 ],
               );
             },
@@ -1445,225 +1403,224 @@ class _PentacleAltarPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width * 0.435;
 
-    final auraPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          const Color(0xFFFFD88A).withValues(alpha: 0.22 * glow),
-          const Color(0xFFB58E34).withValues(alpha: 0.14 * glow),
-          const Color(0xFF9D6FE8).withValues(alpha: 0.10 * glow),
-          Colors.transparent,
-        ],
-        stops: const [0.0, 0.42, 0.70, 1.0],
-      ).createShader(
-        Rect.fromCircle(center: center, radius: radius * 1.42),
-      );
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
 
-    canvas.drawCircle(center, radius * 1.42, auraPaint);
-
-    final altarPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          const Color(0xFF1E1430).withValues(alpha: 0.90),
-          const Color(0xFF0F0A18).withValues(alpha: 0.94),
-          const Color(0xFF050408).withValues(alpha: 0.99),
-        ],
-        stops: const [0.0, 0.68, 1.0],
-      ).createShader(Rect.fromCircle(center: center, radius: radius * 1.10))
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(center, radius * 1.10, altarPaint);
-
-    final outerGlowPaint = Paint()
-      ..color = const Color(0xFFFFD88A).withValues(alpha: 0.22 + (0.18 * glow))
+    final linePaint = Paint()
+      ..color = const Color(0xFFC7A867).withValues(alpha: 0.5 + 0.3 * glow)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.4
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+      ..strokeWidth = 1.0 + (0.5 * glow);
 
-    final outerPaint = Paint()
-      ..color = const Color(0xFFFFD88A).withValues(alpha: 0.92)
+    final highlightPaint = Paint()
+      ..color = const Color(0xFFE5D5F5).withValues(alpha: 0.5 + 0.3 * glow)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2;
+      ..strokeWidth = 0.8;
 
-    final antiquePaint = Paint()
-      ..color = const Color(0xFFB58E34).withValues(alpha: 0.72)
+    final glowPaint = Paint()
+      ..color = const Color(0xFFFFD88A).withValues(alpha: 0.2 + 0.2 * glow)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
+      ..strokeWidth = 3.0
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
 
-    final violetPaint = Paint()
-      ..color = const Color(0xFF9D6FE8).withValues(alpha: 0.28)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-
-    canvas.drawCircle(center, radius, outerGlowPaint);
-    canvas.drawCircle(center, radius, outerPaint);
-    canvas.drawCircle(center, radius * 0.90, antiquePaint);
-    canvas.drawCircle(center, radius * 0.78, violetPaint);
-    canvas.drawCircle(center, radius * 0.62, antiquePaint);
-    canvas.drawCircle(center, radius * 0.44, violetPaint);
-
-    final points = <Offset>[];
-    final innerPoints = <Offset>[];
-
-    for (int i = 0; i < 5; i++) {
-      final angle = -math.pi / 2 + (2 * math.pi * i / 5);
-      points.add(
-        Offset(
-          center.dx + math.cos(angle) * radius * 0.88,
-          center.dy + math.sin(angle) * radius * 0.88,
-        ),
-      );
-      innerPoints.add(
-        Offset(
-          center.dx + math.cos(angle + math.pi / 5) * radius * 0.35,
-          center.dy + math.sin(angle + math.pi / 5) * radius * 0.35,
-        ),
-      );
+    // -------------------------------------------------------------
+    // Shuffling Animated Geometric Cards (Looping Fan Out / Fan In)
+    // -------------------------------------------------------------
+    
+    // We want a precise timing: Fan out (1.5s), Wait (4s), Fan in (1.5s), Wait (4s)
+    final timeMs = DateTime.now().millisecondsSinceEpoch;
+    final cycleMs = timeMs % 11000;
+    
+    double fanProgress = 0.0;
+    if (cycleMs < 1500) {
+      // Fan out smooth ease
+      final t = cycleMs / 1500;
+      fanProgress = (1 - math.cos(t * math.pi)) / 2;
+    } else if (cycleMs < 5500) {
+      // Wait 4 sec fanned out
+      fanProgress = 1.0;
+    } else if (cycleMs < 7000) {
+      // Fan in smooth ease
+      final t = (cycleMs - 5500) / 1500;
+      fanProgress = (1 + math.cos(t * math.pi)) / 2;
+    } else {
+      // Wait 4 sec fanned in
+      fanProgress = 0.0;
     }
 
-    final starPath = Path()..moveTo(points[0].dx, points[0].dy);
-    const order = [0, 2, 4, 1, 3, 0];
-    for (int i = 1; i < order.length; i++) {
-      starPath.lineTo(points[order[i]].dx, points[order[i]].dy);
-    }
+    // Bigger cards
+    final cardWidth = size.width * 0.35;
+    final cardHeight = cardWidth * 1.6;
+    final cardRect = Rect.fromCenter(center: Offset.zero, width: cardWidth, height: cardHeight);
+    final cardRRect = RRect.fromRectAndRadius(cardRect, const Radius.circular(8));
 
-    final starGlowPaint = Paint()
-      ..color = const Color(0xFFFFD88A).withValues(alpha: 0.24 + (0.14 * glow))
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4.0
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7);
+    // The pivot point for fanning is near the bottom of the card
+    final pivot = Offset(0, cardHeight * 0.35);
 
-    final starPaint = Paint()
-      ..color = const Color(0xFFC7A867).withValues(alpha: 0.96)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-
-    canvas.drawPath(starPath, starGlowPaint);
-    canvas.drawPath(starPath, starPaint);
-
-    final innerPentagon = Path()..moveTo(innerPoints[0].dx, innerPoints[0].dy);
-    for (int i = 1; i < innerPoints.length; i++) {
-      innerPentagon.lineTo(innerPoints[i].dx, innerPoints[i].dy);
-    }
-    innerPentagon.close();
-    canvas.drawPath(innerPentagon, antiquePaint);
-
-    for (int i = 0; i < 5; i++) {
-      final a = points[i];
-      final b = innerPoints[i];
-      final c = innerPoints[(i + 4) % 5];
-      canvas.drawLine(a, b, antiquePaint);
-      canvas.drawLine(a, c, antiquePaint);
-    }
-
-    final runePaint = Paint()
-      ..color = const Color(0xFFFFD88A).withValues(alpha: 0.44)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..strokeCap = StrokeCap.round;
-
-    final dotPaint = Paint()
-      ..color = const Color(0xFFFFD88A).withValues(alpha: 0.70 + (0.18 * glow))
-      ..style = PaintingStyle.fill
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.8);
-
-    for (int i = 0; i < points.length; i++) {
-      final shimmer = 0.5 + 0.5 * math.sin((progress * 2 * math.pi) + i);
-      canvas.drawCircle(points[i], 3.4 + shimmer, dotPaint);
-
-      final angle = -math.pi / 2 + (2 * math.pi * i / 5);
-      final runeCenter = Offset(
-        center.dx + math.cos(angle) * radius * 0.72,
-        center.dy + math.sin(angle) * radius * 0.72,
-      );
-      canvas.drawLine(
-        Offset(runeCenter.dx - 4.5, runeCenter.dy),
-        Offset(runeCenter.dx + 4.5, runeCenter.dy),
-        runePaint,
-      );
-      canvas.drawLine(
-        Offset(runeCenter.dx, runeCenter.dy - 4.5),
-        Offset(runeCenter.dx, runeCenter.dy + 4.5),
-        runePaint,
-      );
-      canvas.drawCircle(runeCenter, 8.5, violetPaint);
-    }
-
-    final moonPaint = Paint()
-      ..color = const Color(0xFFC7A867).withValues(alpha: 0.66)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.1;
-
-    void drawCrescent(Offset moonCenter, double r, bool leftFacing) {
-      canvas.drawCircle(moonCenter, r, moonPaint);
-      final cutPaint = Paint()
-        ..color = const Color(0xFF0F0A18).withValues(alpha: 0.96)
-        ..style = PaintingStyle.fill;
-      final shift = leftFacing ? r * 0.50 : -r * 0.50;
-      canvas.drawCircle(
-          Offset(moonCenter.dx + shift, moonCenter.dy), r, cutPaint);
-      canvas.drawCircle(moonCenter, r, moonPaint);
-    }
-
-    final topMoonCenter = Offset(center.dx, center.dy - radius * 0.54);
-    canvas.drawCircle(topMoonCenter, radius * 0.10, moonPaint);
-    drawCrescent(Offset(center.dx - radius * 0.18, center.dy - radius * 0.54),
-        radius * 0.11, false);
-    drawCrescent(Offset(center.dx + radius * 0.18, center.dy - radius * 0.54),
-        radius * 0.11, true);
-
-    final bottomMoonCenter = Offset(center.dx, center.dy + radius * 0.54);
-    canvas.drawCircle(bottomMoonCenter, radius * 0.08, violetPaint);
-
-    final spiralPaint = Paint()
-      ..color = const Color(0xFF9D6FE8).withValues(alpha: 0.24)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.9;
-
-    for (int i = 0; i < 3; i++) {
+    // We draw 7 cards
+    for (int i = 0; i < 7; i++) {
       canvas.save();
-      canvas.translate(center.dx, center.dy);
-      canvas.rotate((progress * 0.30) + (i * math.pi / 3));
-      final rect = Rect.fromCenter(
-        center: Offset.zero,
-        width: radius * (1.26 - i * 0.10),
-        height: radius * (0.38 + i * 0.08),
+      
+      // Calculate rotation for this specific card
+      // Card indices: 0, 1, 2, 3 (center), 4, 5, 6
+      final offsetFromCenter = i - 3; 
+      
+      // Max rotation for the outermost cards (0 and 6)
+      // A slightly tighter spread since there are more cards
+      final maxAngle = offsetFromCenter * (math.pi / 9); 
+      final currentAngle = maxAngle * fanProgress;
+
+      // Translate to pivot, rotate, translate back
+      canvas.translate(pivot.dx, pivot.dy);
+      canvas.rotate(currentAngle);
+      canvas.translate(-pivot.dx, -pivot.dy);
+
+      // Card Background (dark to hide lines behind it)
+      final cardBgPaint = Paint()
+        ..color = const Color(0xFF0F0A18).withValues(alpha: 0.95)
+        ..style = PaintingStyle.fill;
+      canvas.drawRRect(cardRRect, cardBgPaint);
+
+      // Card Geometric Outline
+      canvas.drawRRect(cardRRect, linePaint);
+      canvas.drawRRect(cardRRect, highlightPaint);
+
+      // Draw an elegant double inner geometric border
+      final innerRRect = RRect.fromRectAndRadius(
+        cardRect.deflate(6), 
+        const Radius.circular(4),
       );
-      canvas.drawOval(rect, spiralPaint);
+      canvas.drawRRect(innerRRect, linePaint);
+
+      final innerRRect2 = RRect.fromRectAndRadius(
+        cardRect.deflate(10), 
+        const Radius.circular(3),
+      );
+      canvas.drawRRect(innerRRect2, highlightPaint);
+
+      // -------------------------------------------------------------
+      // Mystical Esoteric Card Back Design (Highly Ornate)
+      // -------------------------------------------------------------
+
+      // 1. Ornate Double Border
+      final border1 = RRect.fromRectAndRadius(cardRect.deflate(4), const Radius.circular(6));
+      final border2 = RRect.fromRectAndRadius(cardRect.deflate(8), const Radius.circular(4));
+      canvas.drawRRect(border1, linePaint);
+      canvas.drawRRect(border2, highlightPaint);
+
+      // 2. Corner Mystical 4-Pointed Stars
+      void drawCornerStar(double dx, double dy) {
+        canvas.save();
+        canvas.translate(dx, dy);
+        final star = Path()
+          ..moveTo(0, -8)
+          ..lineTo(2, -2)
+          ..lineTo(8, 0)
+          ..lineTo(2, 2)
+          ..lineTo(0, 8)
+          ..lineTo(-2, 2)
+          ..lineTo(-8, 0)
+          ..lineTo(-2, -2)
+          ..close();
+        canvas.drawPath(star, glowPaint);
+        canvas.drawPath(star, highlightPaint);
+        canvas.restore();
+      }
+      final cx = cardWidth / 2 - 16;
+      final cy = cardHeight / 2 - 16;
+      drawCornerStar(cx, cy);
+      drawCornerStar(-cx, cy);
+      drawCornerStar(cx, -cy);
+      drawCornerStar(-cx, -cy);
+
+      // 3. Central Radiant Sunburst Core
+      final coreRadius = cardWidth * 0.16;
+      
+      // Radiant Sunburst spanning out
+      for (int k = 0; k < 36; k++) {
+        final angle = k * (2 * math.pi / 36);
+        final innerR = coreRadius * 1.1;
+        // Alternating ray lengths for mystical effect
+        final outerR = k % 2 == 0 ? cardWidth * 0.42 : cardWidth * 0.32;
+        canvas.drawLine(
+          Offset(innerR * math.cos(angle), innerR * math.sin(angle)),
+          Offset(outerR * math.cos(angle), outerR * math.sin(angle)),
+          linePaint,
+        );
+      }
+
+      // Inner Core Rings
+      canvas.drawCircle(Offset.zero, coreRadius, linePaint);
+      canvas.drawCircle(Offset.zero, coreRadius * 0.8, glowPaint);
+
+      // 4. The World Symbol (Large Geometric Mandorla/Wreath)
+      // Representing the laurel wreath of The World card
+      final wreathHeight = cardHeight * 0.42;
+      final wreathWidth = cardWidth * 0.35;
+      
+      final worldWreath = Path()
+        ..moveTo(0, -wreathHeight) // Top point
+        ..quadraticBezierTo(wreathWidth, 0, 0, wreathHeight) // Right curve
+        ..quadraticBezierTo(-wreathWidth, 0, 0, -wreathHeight) // Left curve
+        ..close();
+      
+      canvas.drawPath(worldWreath, linePaint);
+      
+      final innerWreath = Path()
+        ..moveTo(0, -wreathHeight * 0.9)
+        ..quadraticBezierTo(wreathWidth * 0.8, 0, 0, wreathHeight * 0.9)
+        ..quadraticBezierTo(-wreathWidth * 0.8, 0, 0, -wreathHeight * 0.9)
+        ..close();
+      
+      canvas.drawPath(innerWreath, highlightPaint);
+      
+      // Infinity bindings (lemniscates) traditionally tied at the top and bottom of The World wreath
+      void drawInfinityTie(double yPos) {
+        final tie = Path()
+          ..moveTo(0, yPos)
+          ..quadraticBezierTo(12, yPos - 8, 16, yPos)
+          ..quadraticBezierTo(12, yPos + 8, 0, yPos)
+          ..quadraticBezierTo(-12, yPos - 8, -16, yPos)
+          ..quadraticBezierTo(-12, yPos + 8, 0, yPos)
+          ..close();
+        canvas.drawPath(tie, glowPaint);
+        canvas.drawPath(tie, highlightPaint);
+      }
+      
+      drawInfinityTie(-wreathHeight);
+      drawInfinityTie(wreathHeight);
+
+      // 5. Crescent Moons Flanking the Core (Left and Right)
+      void drawCrescent(double xOffset, bool flip) {
+        canvas.save();
+        canvas.translate(xOffset, 0);
+        if (flip) canvas.rotate(math.pi);
+        // Draw an elegant crescent
+        final cPath = Path()
+          ..addArc(Rect.fromCircle(center: Offset.zero, radius: coreRadius * 0.6), math.pi / 2, math.pi)
+          ..addArc(Rect.fromCircle(center: Offset(-coreRadius * 0.25, 0), radius: coreRadius * 0.5), -math.pi / 2, -math.pi)
+          ..close();
+        canvas.drawPath(cPath, linePaint);
+        canvas.drawPath(cPath, glowPaint);
+        canvas.restore();
+      }
+      
+      drawCrescent(-cardWidth * 0.26, false); // Left facing left
+      drawCrescent(cardWidth * 0.26, true);   // Right facing right
+
+      // 6. Central Mystical Seed / Eye geometry
+      final seed = Path()
+        ..moveTo(0, -coreRadius * 0.5)
+        ..quadraticBezierTo(coreRadius * 0.5, 0, 0, coreRadius * 0.5)
+        ..quadraticBezierTo(-coreRadius * 0.5, 0, 0, -coreRadius * 0.5)
+        ..close();
+      canvas.drawPath(seed, highlightPaint);
+      canvas.drawCircle(Offset.zero, 3, glowPaint);
+
       canvas.restore();
     }
 
-    final tickPaint = Paint()
-      ..color = const Color(0xFFC7A867).withValues(alpha: 0.46)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-
-    for (int i = 0; i < 48; i++) {
-      final angle = (2 * math.pi * i / 48);
-      final longTick = i % 6 == 0;
-      final start = Offset(
-        center.dx + math.cos(angle) * radius * (longTick ? 1.02 : 1.05),
-        center.dy + math.sin(angle) * radius * (longTick ? 1.02 : 1.05),
-      );
-      final end = Offset(
-        center.dx + math.cos(angle) * radius * (longTick ? 1.15 : 1.10),
-        center.dy + math.sin(angle) * radius * (longTick ? 1.15 : 1.10),
-      );
-      canvas.drawLine(start, end, tickPaint);
-    }
-
-    final dottedPaint = Paint()
-      ..color = const Color(0xFFFFD88A).withValues(alpha: 0.34)
-      ..style = PaintingStyle.fill;
-    for (int i = 0; i < 20; i++) {
-      final angle = (2 * math.pi * i / 20) + (progress * 0.25);
-      final dot = Offset(
-        center.dx + math.cos(angle) * radius * 0.53,
-        center.dy + math.sin(angle) * radius * 0.53,
-      );
-      canvas.drawCircle(dot, 1.6, dottedPaint);
-    }
+    canvas.restore();
   }
 
   @override

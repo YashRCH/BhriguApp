@@ -35,9 +35,13 @@ class PartnerMatchScreen extends StatefulWidget {
   State<PartnerMatchScreen> createState() => _PartnerMatchScreenState();
 }
 
-class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
+class _PartnerMatchScreenState extends State<PartnerMatchScreen> with TickerProviderStateMixin {
   final PartnerMatchService _service = PartnerMatchService();
   final FollowUpContextService _followUpService = FollowUpContextService();
+
+  late final AnimationController _breathController;
+  late final Animation<double> _breathAnimation;
+  late final AnimationController _emblemController;
 
   PartnerMatchFlow _flow = PartnerMatchFlow.initial();
   int _readingRequestId = 0;
@@ -84,6 +88,31 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
     setState(() {
       _flow = PartnerMatchFlow.initial();
     });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _breathController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    )..repeat(reverse: true);
+
+    _breathAnimation = Tween<double>(begin: 0.1, end: 0.35).animate(
+      CurvedAnimation(parent: _breathController, curve: Curves.easeInOutSine),
+    );
+
+    _emblemController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 30),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _emblemController.dispose();
+    _breathController.dispose();
+    super.dispose();
   }
 
   Future<void> _openHistory() async {
@@ -158,89 +187,144 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _matchBlack,
+      backgroundColor: const Color(0xFF050408),
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        title: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            'BHRIGU MATCH',
+            style: GoogleFonts.cinzel(
+              color: const Color(0xFFB58E34).withValues(alpha: 0.9),
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 4.0,
+            ),
+          ),
+        ),
+        iconTheme: const IconThemeData(color: Color(0xFFB58E34)),
         leading: IconButton(
           onPressed: _openHistory,
-          icon: const Icon(
-            Icons.menu_book_rounded,
-            color: _matchGold,
-          ),
+          icon: const Icon(Icons.menu_book_rounded),
           tooltip: 'Match history',
         ),
-        title: const Text(
-          'Bhrigu Match',
-          style: TextStyle(
-            color: Color(0xFFFFD88A),
-            fontWeight: FontWeight.w900,
-            letterSpacing: 0.8,
-          ),
-        ),
-        centerTitle: true,
-        backgroundColor: _matchBlack,
-        elevation: 0,
         actions: [
           IconButton(
             onPressed: _reset,
-            icon: const Icon(
-              Icons.refresh,
-              color: _matchGold,
-            ),
+            icon: const Icon(Icons.refresh),
             tooltip: 'Reset',
           ),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0, -0.7),
-            radius: 1.25,
-            colors: [
-              Color(0xFF241903),
-              _matchBlack,
-            ],
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(0, -0.4),
+                radius: 1.2,
+                colors: [
+                  Color(0xFF1E1430),
+                  Color(0xFF0F0A18),
+                  Color(0xFF050408),
+                ],
+              ),
+            ),
           ),
-        ),
-        child: SafeArea(
+          Opacity(
+            opacity: 0.08,
+            child: CustomPaint(
+              size: Size.infinite,
+              painter: _CelestialConnectionPainter(),
+            ),
+          ),
+          AnimatedBuilder(
+            animation: _breathAnimation,
+            builder: (context, child) {
+              return Container(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: const Alignment(0, -0.6),
+                    radius: 1.5,
+                    colors: [
+                      const Color(0xFFC7A867).withValues(alpha: _breathAnimation.value * 0.5),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          SafeArea(
           child: ListView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
             children: [
-              _heroCard(),
-              const SizedBox(height: 16),
-              PartnerBirthForm(
-                loading: _loading,
-                onSubmit: _createReading,
-              ),
-              if (_loading) ...[
-                const SizedBox(height: 16),
-                _loadingCard(),
-              ],
-              if (_reading != null) ...[
-                const SizedBox(height: 16),
-                _resultCard(_reading!),
-                if (_flow.canFollowUp) ...[
+              if (!_flow.isRevealed) ...[
+                _heroCard(),
+                const SizedBox(height: 24),
+                Center(
+                  child: SizedBox(
+                    width: 210,
+                    height: 210,
+                    child: AnimatedBuilder(
+                      animation: Listenable.merge([_emblemController, _breathAnimation]),
+                      builder: (context, _) => CustomPaint(
+                        painter: _MatchEmblemPainter(
+                          rotationProgress: _emblemController.value,
+                          pulse: _breathAnimation.value,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                PartnerBirthForm(
+                  loading: _loading,
+                  onSubmit: _createReading,
+                ),
+                if (_loading) ...[
                   const SizedBox(height: 16),
-                  _followUpCard(_reading!),
+                  _loadingCard(),
                 ],
               ],
+              AnimatedSize(
+                duration: const Duration(milliseconds: 900),
+                curve: Curves.easeOutQuart,
+                alignment: Alignment.topCenter,
+                child: _flow.isRevealed
+                    ? Column(
+                        children: [
+                          _resultCard(_reading!),
+                          if (_flow.canFollowUp) ...[
+                            const SizedBox(height: 16),
+                            _followUpCard(_reading!),
+                          ],
+                        ],
+                      )
+                    : const SizedBox.shrink(),
+              ),
             ],
           ),
         ),
+        ],
       ),
     );
   }
 
   Widget _heroCard() {
     return _glassCard(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Compare two birth blueprints',
             style: GoogleFonts.cinzel(
-              color: _matchWhite,
+              color: const Color(0xFFE5D5F5),
               fontSize: 23,
               fontWeight: FontWeight.bold,
               letterSpacing: 0.4,
@@ -250,7 +334,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
           Text(
             'Bhrigu reads emotional harmony, attraction, stability, karmic bond, and 36 Guna marriage compatibility.',
             style: GoogleFonts.cormorantGaramond(
-              color: _matchMuted,
+              color: const Color(0xFFE5D5F5).withValues(alpha: 0.7),
               fontSize: 18,
               height: 1.45,
             ),
@@ -262,7 +346,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
 
   Widget _loadingCard() {
     return _glassCard(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(24),
       child: Row(
         children: [
           const _TeslaGlobeLoader(size: 46),
@@ -271,7 +355,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
             child: Text(
               'Bhrigu is reading the two birth blueprints...',
               style: GoogleFonts.cormorantGaramond(
-                color: _matchMuted,
+                color: const Color(0xFFE5D5F5).withValues(alpha: 0.7),
                 fontSize: 18,
                 height: 1.4,
               ),
@@ -1335,75 +1419,191 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> {
 
   Widget _glassCard({
     required Widget child,
-    EdgeInsetsGeometry padding = EdgeInsets.zero,
-    double borderRadius = 26,
+    EdgeInsetsGeometry padding = const EdgeInsets.all(24),
     double? width,
-    Color? borderColor,
-  }) {
-    final radius = BorderRadius.circular(borderRadius);
-
-    return Container(
-      width: width,
-      decoration: BoxDecoration(
-        borderRadius: radius,
-        boxShadow: [
-          BoxShadow(
-            color: _matchGold.withValues(alpha: 0.1),
-            blurRadius: 28,
-            spreadRadius: 2,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: radius,
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            padding: padding,
-            decoration: BoxDecoration(
-              color: _matchPanel.withValues(alpha: 0.78),
-              borderRadius: radius,
-              border: Border.all(
-                color: borderColor ??
-                    const Color(0xFFC7A867).withValues(alpha: 0.3),
-              ),
-            ),
-            child: child,
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ignore: unused_element
-  BoxDecoration _cardDecoration({
-    Color? borderColor,
     Color? glowColor,
   }) {
-    return BoxDecoration(
-      gradient: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          _matchPanelSoft,
-          _matchPanel,
+    final effectiveGlow = glowColor ?? const Color(0xFFC7A867).withAlpha(22);
+
+    return Container(
+      width: width ?? double.infinity,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F0A18),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFF2E1A4A), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+          if (effectiveGlow.alpha > 0)
+            BoxShadow(
+              color: effectiveGlow,
+              blurRadius: 36,
+              spreadRadius: 2,
+            ),
         ],
       ),
-      borderRadius: BorderRadius.circular(26),
-      border: Border.all(
-        color: borderColor ?? _matchLine,
-        width: 1.2,
-      ),
-      boxShadow: [
-        BoxShadow(
-          color: glowColor ?? Colors.black.withAlpha(70),
-          blurRadius: glowColor != null ? 34 : 22,
-          spreadRadius: glowColor != null ? 3 : 0,
-          offset: const Offset(0, 10),
-        ),
-      ],
+      child: child,
     );
+  }
+}
+
+class _CelestialConnectionPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFC7A867).withValues(alpha: 0.15)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    final center1 = Offset(size.width * 0.3, size.height * 0.4);
+    final center2 = Offset(size.width * 0.7, size.height * 0.6);
+
+    canvas.drawLine(center1, center2, paint);
+
+    for (int i = 1; i <= 3; i++) {
+      canvas.drawCircle(center1, 30.0 * i, paint);
+      canvas.drawCircle(center2, 30.0 * i, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class _MatchEmblemPainter extends CustomPainter {
+  final double rotationProgress;
+  final double pulse;
+
+  _MatchEmblemPainter({required this.rotationProgress, required this.pulse});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final maxRadius = size.width * 0.42;
+
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+
+    // Heartbeat Math (lub-dub)
+    final timeMs = DateTime.now().millisecondsSinceEpoch;
+    final tCycle = timeMs % 1200; // 1.2 second resting heart rate
+    double beatScale = 1.0;
+    if (tCycle < 150) {
+      beatScale = 1.0 + 0.06 * math.sin((tCycle / 150) * math.pi); // Lub
+    } else if (tCycle > 250 && tCycle < 450) {
+      beatScale = 1.0 + 0.04 * math.sin(((tCycle - 250) / 200) * math.pi); // Dub
+    }
+
+    // Outer rotating dotted orbit (with heartbeat pulse)
+    canvas.save();
+    canvas.rotate(-rotationProgress * 2 * math.pi * 0.5);
+    final orbitPaint = Paint()
+      ..color = const Color(0xFFC7A867).withValues(alpha: 0.2 + 0.1 * pulse + (beatScale - 1.0))
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0 + ((beatScale - 1.0) * 20); // Thickens slightly on beat
+      
+    final currentRadius = maxRadius * beatScale;
+    _drawDashedCircle(canvas, Offset.zero, currentRadius, orbitPaint);
+    canvas.restore();
+
+    // Rotate the inner geometric construct
+    canvas.rotate(rotationProgress * 2 * math.pi);
+
+    final linePaint = Paint()
+      ..color = const Color(0xFFC7A867).withValues(alpha: 0.35 + 0.25 * pulse)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2 + (0.3 * pulse);
+
+    final highlightPaint = Paint()
+      ..color = const Color(0xFFE5D5F5).withValues(alpha: 0.5 + 0.3 * pulse)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+
+    // 1. Double Vesica Piscis (vertical and horizontal)
+    final vpRadius = maxRadius * 0.45;
+    for (int i = 0; i < 4; i++) {
+      canvas.save();
+      canvas.rotate(i * math.pi / 2);
+      canvas.drawCircle(Offset(vpRadius * 0.8, 0), vpRadius, linePaint);
+      canvas.restore();
+    }
+
+    // 2. The central hexagonal star (Merkabah / Star of David)
+    final hexRadius = maxRadius * 0.75;
+    final triangle1 = Path();
+    final triangle2 = Path();
+    
+    for (int i = 0; i < 3; i++) {
+      final angle1 = i * (2 * math.pi / 3) - math.pi / 2;
+      final p1 = Offset(hexRadius * math.cos(angle1), hexRadius * math.sin(angle1));
+      if (i == 0) triangle1.moveTo(p1.dx, p1.dy);
+      else triangle1.lineTo(p1.dx, p1.dy);
+
+      final angle2 = i * (2 * math.pi / 3) + math.pi / 2;
+      final p2 = Offset(hexRadius * math.cos(angle2), hexRadius * math.sin(angle2));
+      if (i == 0) triangle2.moveTo(p2.dx, p2.dy);
+      else triangle2.lineTo(p2.dx, p2.dy);
+    }
+    triangle1.close();
+    triangle2.close();
+    
+    canvas.drawPath(triangle1, linePaint);
+    canvas.drawPath(triangle2, linePaint);
+
+    // 3. Connect the vertices to the center to form 3D geometry rays
+    for (int i = 0; i < 6; i++) {
+      final angle = i * (math.pi / 3) + math.pi / 6;
+      final p = Offset(hexRadius * math.cos(angle), hexRadius * math.sin(angle));
+      canvas.drawLine(Offset.zero, p, highlightPaint);
+    }
+
+    // 4. Central diamond focus point
+    final diamondRadius = maxRadius * 0.15;
+    final diamond = Path()
+      ..moveTo(0, -diamondRadius)
+      ..lineTo(diamondRadius, 0)
+      ..lineTo(0, diamondRadius)
+      ..lineTo(-diamondRadius, 0)
+      ..close();
+    
+    final fillPaint = Paint()
+      ..color = const Color(0xFFC7A867).withValues(alpha: 0.15 + 0.15 * pulse)
+      ..style = PaintingStyle.fill;
+    
+    canvas.drawPath(diamond, fillPaint);
+    canvas.drawPath(diamond, highlightPaint);
+
+    // 5. Outer enclosing ring bounding the hexagram
+    canvas.drawCircle(Offset.zero, hexRadius, linePaint);
+
+    canvas.restore();
+  }
+
+  void _drawDashedCircle(Canvas canvas, Offset center, double radius, Paint paint) {
+    const int dashCount = 36;
+    final double dashLength = (2 * math.pi * radius) / (dashCount * 2);
+    final double dashAngle = dashLength / radius;
+
+    for (int i = 0; i < dashCount; i++) {
+      final startAngle = i * 2 * dashAngle;
+      final path = Path()
+        ..arcTo(
+          Rect.fromCircle(center: center, radius: radius),
+          startAngle,
+          dashAngle,
+          true,
+        );
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _MatchEmblemPainter oldDelegate) {
+    return oldDelegate.rotationProgress != rotationProgress || oldDelegate.pulse != pulse;
   }
 }
 

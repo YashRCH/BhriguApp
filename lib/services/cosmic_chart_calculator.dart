@@ -136,8 +136,9 @@ class CosmicChartCalculator {
         final dist = ((deg1 - deg2).abs() % 360);
         final shortestDist = dist > 180 ? 360 - dist : dist;
         
-        if ((shortestDist - 60).abs() <= 6) aspects.add('$p1 Sextile $p2');
-        else if ((shortestDist - 90).abs() <= 8) aspects.add('$p1 Square $p2');
+        if ((shortestDist - 60).abs() <= 6) {
+          aspects.add('$p1 Sextile $p2');
+        } else if ((shortestDist - 90).abs() <= 8) aspects.add('$p1 Square $p2');
         else if ((shortestDist - 120).abs() <= 8) aspects.add('$p1 Trine $p2');
         else if ((shortestDist - 180).abs() <= 8) aspects.add('$p1 Opposition $p2');
         else if (shortestDist <= 8) aspects.add('$p1 Conjunction $p2');

@@ -14,6 +14,7 @@ import '../utils/zodiac_signs.dart';
 import '../widgets/ai_report_button.dart';
 import '../widgets/planet_asset.dart';
 import '../widgets/owl_home_card.dart';
+import '../widgets/owl_sprite_animator.dart';
 import '../widgets/zodiac_sign_icon.dart';
 
 part 'home/home_screen_sections.dart';
@@ -508,11 +509,24 @@ class _HomeScreenState extends State<HomeScreen>
         (_horoscope?['dailyEnergyLine'] as String? ?? '').trim();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0B1E),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _loadData,
-          color: const Color(0xFF9D6FE8),
+      extendBodyBehindAppBar: true,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0, -0.2),
+            radius: 1.2,
+            colors: [
+              Color(0xFF1E1430),
+              Color(0xFF0F0A18),
+              Color(0xFF050408),
+            ],
+            stops: [0.0, 0.6, 1.0],
+          ),
+        ),
+        child: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _loadData,
+            color: const Color(0xFFC7A867),
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(20),
@@ -574,6 +588,7 @@ class _HomeScreenState extends State<HomeScreen>
             ),
           ),
         ),
+      ),
       ),
     );
   }

@@ -14,6 +14,7 @@ const {
   GROQ_API_KEY,
   GEMINI_API_KEY,
   GEMINI_FLASH_LITE_MODEL,
+  BHRIGU_TUNED_MODEL,
   GROQ_PARTNER_MATCH_MODEL,
   GROQ_BHRIGU_CHAT_MODEL,
   TAROT_READING_CONTENT_VERSION,
@@ -145,7 +146,7 @@ const {
 } = require("../core");
 exports.generateBhriguChat = onCall(
   callableRuntimeOptions({
-    secrets: [GROQ_API_KEY, GEMINI_API_KEY],
+    secrets: [GEMINI_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 120,
     memory: "1GiB",
@@ -273,12 +274,6 @@ Ascendant: ${vedicChart.ascendant || "Unknown"}
 Moon sign: ${vedicChart.moonSign || "Unknown"}
 Nakshatra: ${vedicChart.nakshatra || "Unknown"}
 Planets: ${chartPlanetLine(vedicChart) || "Unknown"}
-
-Raw Western chart JSON:
-${safeJson(westernChart)}
-
-Raw Vedic chart JSON:
-${safeJson(vedicChart)}
 
 Chart source: ${data.chartGeneratedBy || "Unknown"}
 Chart calculation source: ${data.chartCalculationSource || "Unknown"}
@@ -663,84 +658,29 @@ ${safeJson(userSnapshot)}
     ];
 
     const isDeepFollowUp = Boolean(activeFollowUpContext);
-    let text;
-    let providerUsed = isDeepFollowUp ? "gemini" : "groq";
-    let modelUsed = isDeepFollowUp
-      ? GEMINI_FLASH_LITE_MODEL
-      : GROQ_BHRIGU_CHAT_MODEL;
+    let providerUsed = "gemini";
+    let modelUsed = BHRIGU_TUNED_MODEL;
 
     try {
-      if (isDeepFollowUp) {
-        text = await generateGeminiReadingText({
-          systemInstruction: activeSystemPrompt,
-          prompt: messageListToPrompt(chatMessages.slice(1)),
-          temperature: 0.55,
-          maxTokens: 512,
-        });
-      } else {
-        text = await generateGroqReadingText({
-          messages: chatMessages,
-          model: GROQ_BHRIGU_CHAT_MODEL,
-          temperature: 0.8,
-          maxTokens: 512,
-        });
-      }
+      text = await generateGeminiReadingText({
+        systemInstruction: activeSystemPrompt,
+        prompt: messageListToPrompt(chatMessages.slice(1)),
+        temperature: isDeepFollowUp ? 0.55 : 0.8,
+        maxTokens: 4096,
+        model: modelUsed,
+      });
     } catch (error) {
-      if (isDeepFollowUp) {
-        try {
-          text = await generateGroqReadingText({
-            messages: chatMessages,
-            model: GROQ_BHRIGU_CHAT_MODEL,
-            temperature: 0.65,
-            maxTokens: 512,
-          });
-          providerUsed = "groq";
-          modelUsed = GROQ_BHRIGU_CHAT_MODEL;
-        } catch (fallbackError) {
-          const fallbackAiError = fallbackError.response?.data || {};
-          console.error("Bhrigu follow-up Groq fallback error:", {
-            status: fallbackError.response?.status || null,
-            code: fallbackAiError.error?.code || fallbackAiError.code || null,
-            type: fallbackAiError.error?.type || fallbackAiError.type || null,
-            message:
-              fallbackAiError.error?.message ||
-              fallbackAiError.message ||
-              fallbackError.message,
-          });
-        }
-      } else if (isRetryableAiError(error)) {
-        try {
-          text = await generateGeminiReadingText({
-            systemInstruction: activeSystemPrompt,
-            prompt: messageListToPrompt(chatMessages.slice(1)),
-            temperature: 0.55,
-            maxTokens: 512,
-          });
-          providerUsed = "gemini";
-          modelUsed = GEMINI_FLASH_LITE_MODEL;
-        } catch (fallbackError) {
-          const fallbackAiError = fallbackError.response?.data || {};
-          console.error("Bhrigu Gemini fallback error:", {
-            status: fallbackError.response?.status || null,
-            code: fallbackAiError.error?.code || fallbackAiError.code || null,
-            type: fallbackAiError.error?.type || fallbackAiError.type || null,
-            message:
-              fallbackAiError.error?.message ||
-              fallbackAiError.message ||
-              fallbackError.message,
-          });
-        }
-      }
-
-      if (!text) {
       const aiError = error.response?.data || {};
       const aiDetails = {
         status: error.response?.status || null,
         code: aiError.error?.code || aiError.code || null,
         type: aiError.error?.type || aiError.type || null,
         message: aiError.error?.message || aiError.message || error.message,
-        model: isDeepFollowUp ? GEMINI_FLASH_LITE_MODEL : GROQ_BHRIGU_CHAT_MODEL,
-        provider: isDeepFollowUp ? "gemini" : "groq",
+        usage: {
+          totalTokens: 0,
+          model: GEMINI_FLASH_LITE_MODEL,
+          provider: "gemini",
+        },
       };
 
       console.error("Bhrigu AI error:", aiDetails);
@@ -750,7 +690,6 @@ ${safeJson(userSnapshot)}
         "Bhrigu connection failed. Please try again.",
         aiDetails
       );
-      }
     }
 
     text = await ensureHinglishText({

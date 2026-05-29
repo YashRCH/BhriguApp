@@ -17,8 +17,11 @@ class OwlPose {
   static const sleeping = OwlPose._('sleeping', 2);
   static const alerted = OwlPose._('alerted', 2);
   static const wakingUp = OwlPose._('waking_up', 4);
-  static const nesting = OwlPose._('nesting', 5);
+  static const nesting = OwlPose._('nesting', 4);
   static const perching = OwlPose._('perching', 4);
+  static const grooming = OwlPose._('grooming', 7);
+  static const writing = OwlPose._('writing', 6);
+  static const eating = OwlPose._('eating', 6);
 }
 
 /// Animates extracted owl sprite frames at a configurable frame rate.
@@ -70,6 +73,7 @@ class _OwlSpriteAnimatorState extends State<OwlSpriteAnimator> {
     if (oldWidget.pose.name != widget.pose.name ||
         oldWidget.frameDuration != widget.frameDuration) {
       _currentFrame = 0;
+      _hasError = false;
       _startAnimation();
     }
   }
@@ -120,6 +124,7 @@ class _OwlSpriteAnimatorState extends State<OwlSpriteAnimator> {
         height: widget.size,
         fit: BoxFit.contain,
         filterQuality: FilterQuality.none, // pixel-art crisp rendering
+        gaplessPlayback: true, // Prevents black flashes between frames
         errorBuilder: (_, __, ___) {
           // Set error flag to avoid repeated asset loading attempts
           WidgetsBinding.instance.addPostFrameCallback((_) {

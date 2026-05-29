@@ -244,6 +244,23 @@ exports.searchBirthPlaces = onCall(
             };
           }
 
+          // 1. Check Firestore Cache
+          const cacheRef = admin.firestore().collection("googlePlacesCache").doc(place.placeId);
+          try {
+            const cacheDoc = await cacheRef.get();
+            if (cacheDoc.exists) {
+              const cachedData = cacheDoc.data() || {};
+              return {
+                description: place.description,
+                latitude: typeof cachedData.latitude === "number" ? cachedData.latitude : null,
+                longitude: typeof cachedData.longitude === "number" ? cachedData.longitude : null,
+              };
+            }
+          } catch (cacheErr) {
+            console.warn("Places cache read error:", cacheErr.message);
+          }
+
+          // 2. Fetch from Google API
           try {
             const detailResponse = await fetch(
               `https://places.googleapis.com/v1/places/${place.placeId}`,
@@ -267,17 +284,27 @@ exports.searchBirthPlaces = onCall(
 
             const detailJson = await detailResponse.json();
             const location = detailJson.location || {};
+            const lat = typeof location.latitude === "number" ? location.latitude : null;
+            const lng = typeof location.longitude === "number" ? location.longitude : null;
+
+            // 3. Cache the result in Firestore
+            if (lat !== null && lng !== null) {
+              try {
+                await cacheRef.set({
+                  latitude: lat,
+                  longitude: lng,
+                  description: place.description,
+                  cachedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+              } catch (cacheWriteErr) {
+                console.warn("Places cache write error:", cacheWriteErr.message);
+              }
+            }
 
             return {
               description: place.description,
-              latitude:
-                typeof location.latitude === "number"
-                  ? location.latitude
-                  : null,
-              longitude:
-                typeof location.longitude === "number"
-                  ? location.longitude
-                  : null,
+              latitude: lat,
+              longitude: lng,
             };
           } catch (detailError) {
             console.error("Google Place detail error:", detailError);

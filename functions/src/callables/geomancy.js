@@ -248,28 +248,12 @@ Keep it under 70 words. Stay in the user's question domain. No markdown.
       "The figure pattern suggests a movement from visible circumstances toward a deeper hidden lesson.";
 
     try {
-      const geminiResponse = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_FLASH_LITE_MODEL}:generateContent?key=${GEMINI_API_KEY.value()}`,
-        {
-          contents: [
-            {
-              parts: [
-                {
-                  text: geminiPrompt,
-                },
-              ],
-            },
-          ],
-        }
-      );
-
-      const candidates = geminiResponse.data.candidates || [];
-      const content = candidates[0]?.content || {};
-      const parts = content.parts || [];
-
-      if (parts[0]?.text) {
-        geminiContext = parts[0].text;
-      }
+      geminiContext = await generateGeminiReadingText({
+        prompt: geminiPrompt,
+        maxTokens: 150,
+        temperature: GEOMANCY_READING_TEMPERATURE,
+        model: GEMINI_FLASH_LITE_MODEL,
+      });
     } catch (error) {
       console.error(
         "Geomancy Gemini error:",

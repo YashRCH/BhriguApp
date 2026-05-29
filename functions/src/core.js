@@ -5,6 +5,9 @@ const axios = require("axios");
 const crypto = require("crypto");
 const moment = require("moment-timezone");
 const tzLookup = require("tz-lookup");
+const { GoogleAuth } = require("google-auth-library");
+
+// Environment / API Variables
 const GOOGLE_PLACES_API_KEY = defineSecret("GOOGLE_PLACES_API_KEY");
 const FUNCTION_REGION = "us-central1";
 const AI_REQUEST_TIMEOUT_MS = 25000;
@@ -17,8 +20,11 @@ admin.initializeApp();
 const GROQ_API_KEY = defineSecret("GROQ_API_KEY");
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 const GEMINI_FLASH_LITE_MODEL = "gemini-2.5-flash-lite";
+const BHRIGU_TUNED_MODEL = "endpoints/6058371191452729344";
+// Deprecated: Groq models removed in favour of Gemini 2.5 Flash Lite.
 const GROQ_PARTNER_MATCH_MODEL = "llama-3.3-70b-versatile";
-const GROQ_BHRIGU_CHAT_MODEL = "llama-3.1-8b-instant";
+const GROQ_BHRIGU_CHAT_MODEL = "llama-3.3-70b-versatile";
+
 const TAROT_READING_CONTENT_VERSION = "tarot_gemini25_lite_v3";
 const GEOMANCY_READING_CONTENT_VERSION = "geomancy_gemini25_lite_v3";
 const TAROT_MAX_OUTPUT_TOKENS = 1400;
@@ -430,6 +436,20 @@ function isRetryableAiError(error) {
   );
 }
 
+let authClient = null;
+
+async function getVertexAuth() {
+  if (!authClient) {
+    authClient = new GoogleAuth({
+      scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+    });
+  }
+  const client = await authClient.getClient();
+  const tokenResponse = await client.getAccessToken();
+  const projectId = await authClient.getProjectId();
+  return { token: tokenResponse.token, projectId };
+}
+
 async function generateGeminiReadingText({
   prompt,
   systemInstruction,
@@ -437,6 +457,9 @@ async function generateGeminiReadingText({
   temperature,
   model = GEMINI_FLASH_LITE_MODEL,
 }) {
+  const { token, projectId } = await getVertexAuth();
+  const region = FUNCTION_REGION || "us-central1";
+
   const body = {
     contents: [
       {
@@ -464,9 +487,20 @@ async function generateGeminiReadingText({
     };
   }
 
+  const isEndpoint = model.startsWith("endpoints/");
+  const modelPath = isEndpoint 
+    ? model 
+    : `publishers/google/models/${model}`;
+
   const response = await axios.post(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY.value()}`,
-    body
+    `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/${modelPath}:generateContent`,
+    body,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }
   );
 
   const candidates = response.data.candidates || [];
@@ -513,51 +547,20 @@ async function generateUserReadingText({
   maxTokens,
   temperature,
 }) {
-  const chatMessages =
-    messages ||
-    [
-      ...(systemInstruction
-        ? [
-            {
-              role: "system",
-              content: systemInstruction,
-            },
-          ]
-        : []),
-      {
-        role: "user",
-        content: prompt,
-      },
-    ];
-
-  if (shouldUsePremiumReadingModel(requestData)) {
-    return generateGroqReadingText({
-      messages: chatMessages,
-      maxTokens,
-      temperature,
-    });
-  }
-
-  try {
-    return await generateGeminiReadingText({
-      prompt: prompt || messageListToPrompt(chatMessages),
-      systemInstruction,
-      maxTokens,
-      temperature,
-    });
-  } catch (error) {
-    console.error(
-      "Gemini Lite reading failed, falling back to Groq fast model:",
-      error.response?.data || error.message
-    );
-
-    return generateGroqReadingText({
-      messages: chatMessages,
-      maxTokens,
-      temperature,
-      model: GROQ_BHRIGU_CHAT_MODEL,
-    });
-  }
+  return generateGeminiReadingText({
+    prompt: prompt || messageListToPrompt(
+      messages ||
+      [
+        ...(systemInstruction
+          ? [{ role: "system", content: systemInstruction }]
+          : []),
+        { role: "user", content: prompt },
+      ]
+    ),
+    systemInstruction,
+    maxTokens,
+    temperature,
+  });
 }
 
 function normalizeDegrees(value) {
@@ -950,14 +953,24 @@ function signedAngularDistance(a, b) {
 }
 
 async function fetchHorizonsLongitude(body, utcDate) {
-  const ecliptic = await fetchHorizonsObserverEcliptic(body, utcDate);
-  let retrograde = false;
-
-  if (body.name !== "Sun" && body.name !== "Moon") {
-    const nextDate = new Date(utcDate.getTime() + MILLISECONDS_PER_DAY);
-    const nextEcliptic = await fetchHorizonsObserverEcliptic(body, nextDate);
-    retrograde = signedAngularDistance(nextEcliptic.longitude, ecliptic.longitude) < 0;
+  if (body.name === "Sun" || body.name === "Moon") {
+    const ecliptic = await fetchHorizonsObserverEcliptic(body, utcDate);
+    return {
+      name: body.name,
+      symbol: body.symbol,
+      longitude: ecliptic.longitude,
+      eclipticLatitude: ecliptic.latitude,
+      retrograde: false,
+    };
   }
+
+  const nextDate = new Date(utcDate.getTime() + MILLISECONDS_PER_DAY);
+  const [ecliptic, nextEcliptic] = await Promise.all([
+    fetchHorizonsObserverEcliptic(body, utcDate),
+    fetchHorizonsObserverEcliptic(body, nextDate),
+  ]);
+
+  const retrograde = signedAngularDistance(nextEcliptic.longitude, ecliptic.longitude) < 0;
 
   return {
     name: body.name,
@@ -1092,11 +1105,9 @@ async function calculateNatalChartForBirthData({
     longitude,
   });
   const utcBirth = birthTime.utcDate;
-  const tropicalBodies = [];
-
-  for (const body of HORIZONS_BODIES) {
-    tropicalBodies.push(await fetchHorizonsLongitude(body, utcBirth));
-  }
+  const tropicalBodies = await Promise.all(
+    HORIZONS_BODIES.map((body) => fetchHorizonsLongitude(body, utcBirth))
+  );
   const ayanamsa = calculateLahiriAyanamsa(utcBirth);
   const tropicalAscendant = calculateAscendant({
     utcDate: utcBirth,
@@ -1152,11 +1163,9 @@ function parseDateKeyToUtcNoon(dateKey) {
 
 async function calculateDailyTransitsForDateKey(dateKey) {
   const utcNoon = parseDateKeyToUtcNoon(dateKey);
-  const tropicalBodies = [];
-
-  for (const body of HORIZONS_BODIES) {
-    tropicalBodies.push(await fetchHorizonsLongitude(body, utcNoon));
-  }
+  const tropicalBodies = await Promise.all(
+    HORIZONS_BODIES.map((body) => fetchHorizonsLongitude(body, utcNoon))
+  );
 
   const ayanamsa = calculateLahiriAyanamsa(utcNoon);
   const tropicalPlanets = planetModelsFromLongitudes(tropicalBodies, 0);
@@ -2238,6 +2247,7 @@ module.exports = {
   GROQ_API_KEY,
   GEMINI_API_KEY,
   GEMINI_FLASH_LITE_MODEL,
+  BHRIGU_TUNED_MODEL,
   GROQ_PARTNER_MATCH_MODEL,
   GROQ_BHRIGU_CHAT_MODEL,
   TAROT_READING_CONTENT_VERSION,

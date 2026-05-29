@@ -38,12 +38,16 @@ class _GeomancyScreenState extends State<GeomancyScreen>
     'What is hidden beneath this situation?',
     'What does my heart need to know?',
     'Is this connection meant to grow?',
+
     'What energy surrounds this decision?',
     'Where should I place my trust now?',
   ];
 
+  late final AnimationController _breathController;
+  late final Animation<double> _breathAnimation;
   late final AnimationController _holdController;
   late final AnimationController _plasmaController;
+  late final AnimationController _emblemController;
 
   final List<GeomancyCastLine> _lines = [];
 
@@ -57,6 +61,7 @@ class _GeomancyScreenState extends State<GeomancyScreen>
   double _currentMaxLength = 120;
 
   bool _isHolding = false;
+  bool _isQuestionSubmitted = false;
   static const double _minLineLength = 40;
   static const double _absoluteMaxLength = 160;
 
@@ -72,6 +77,15 @@ class _GeomancyScreenState extends State<GeomancyScreen>
   void initState() {
     super.initState();
 
+    _breathController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat(reverse: true);
+
+    _breathAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(parent: _breathController, curve: Curves.easeInOut),
+    );
+
     _holdController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2800),
@@ -80,6 +94,11 @@ class _GeomancyScreenState extends State<GeomancyScreen>
     _plasmaController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
+    )..repeat();
+
+    _emblemController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 30),
     )..repeat();
 
     _holdController.addStatusListener((status) {
@@ -102,8 +121,10 @@ class _GeomancyScreenState extends State<GeomancyScreen>
   @override
   void dispose() {
     _questionHintTimer?.cancel();
+    _breathController.dispose();
     _holdController.dispose();
     _plasmaController.dispose();
+    _emblemController.dispose();
     _questionController.dispose();
     super.dispose();
   }
@@ -270,6 +291,7 @@ class _GeomancyScreenState extends State<GeomancyScreen>
       _currentStart = null;
       _currentControl = null;
       _isHolding = false;
+      _isQuestionSubmitted = false;
     });
   }
 
@@ -340,6 +362,7 @@ class _GeomancyScreenState extends State<GeomancyScreen>
               _currentStart = null;
               _currentControl = null;
               _isHolding = false;
+              _isQuestionSubmitted = true;
               _questionController.text = savedReading.reading.question;
             });
           },
@@ -350,6 +373,7 @@ class _GeomancyScreenState extends State<GeomancyScreen>
               _currentStart = null;
               _currentControl = null;
               _isHolding = false;
+              _isQuestionSubmitted = false;
             });
           },
         );
@@ -520,101 +544,172 @@ class _GeomancyScreenState extends State<GeomancyScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF090712),
       extendBodyBehindAppBar: true,
       appBar: AppBar(
+        leading: IconButton(
+          onPressed: _openHistory,
+          icon: const Icon(
+            Icons.menu_book_rounded,
+            color: Color(0xFFB58E34),
+          ),
+          tooltip: 'Geomancy history',
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
         title: FittedBox(
           fit: BoxFit.scaleDown,
           child: Text(
-            'Geomancy By Bhrigu',
-            maxLines: 1,
-            overflow: TextOverflow.visible,
+            'GEOMANCY',
             style: GoogleFonts.cinzel(
-              color: const Color(0xFFD4B872),
-              fontWeight: FontWeight.bold,
-              letterSpacing: 2.0,
-              fontSize: 18,
-              shadows: [
-                Shadow(
-                  color: const Color(0xFFE8B530).withAlpha(155),
-                  blurRadius: 16,
-                ),
-              ],
+              color: const Color(0xFFB58E34).withValues(alpha: 0.9),
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 4.0,
             ),
           ),
         ),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
+        iconTheme: const IconThemeData(color: Color(0xFFB58E34)),
         actions: [
           IconButton(
-            onPressed: _openHistory,
-            icon: const Icon(Icons.menu_book_rounded, color: Color(0xFFFFD88A)),
-            tooltip: 'Geomancy history',
-          ),
-          IconButton(
             onPressed: _showInfo,
-            icon: const Icon(Icons.info_outline, color: Color(0xFFFFD88A)),
+            icon: const Icon(Icons.info_outline, color: Color(0xFFB58E34)),
             tooltip: 'What is Geomancy?',
           ),
           IconButton(
             onPressed: _resetCast,
-            icon: const Icon(Icons.refresh, color: Color(0xFF9D6FE8)),
+            icon: const Icon(Icons.refresh, color: Color(0xFFB58E34)),
             tooltip: 'Reset Ritual',
           ),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0, -0.6),
-            radius: 1.2,
-            colors: [
-              Color(0xFF1A0C2E),
-              Color(0xFF090712),
-            ],
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(0, -0.2),
+                radius: 1.2,
+                colors: [
+                  Color(0xFF1E1430),
+                  Color(0xFF0F0A18),
+                  Color(0xFF050408),
+                ],
+                stops: [0.0, 0.6, 1.0],
+              ),
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: ListView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-            children: [
-              _questionCard(),
-              const SizedBox(height: 18),
-              _ritualCard(),
-              const SizedBox(height: 18),
-              if (_isReadingLoading) _loadingCard(),
-              if (_flow.readyToReveal) _readyCard(),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 900),
-                curve: Curves.easeOutQuart,
-                alignment: Alignment.topCenter,
-                child: _flow.canShowResult
-                    ? Column(
-                        children: [
-                          _resultCard(_reading!),
-                          const SizedBox(height: 18),
-                          GeomancyShareButton(
-                            reading: _reading!,
-                            lineValues: _flow.lineValuesForShare(_lineValues),
-                            drawnLines: List<GeomancyCastLine>.unmodifiable(
-                              _lines,
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.08,
+              child: CustomPaint(
+                painter: _SacredGeometryPainter(),
+              ),
+            ),
+          ),
+          AnimatedBuilder(
+            animation: _breathAnimation,
+            builder: (context, _) => Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: const Alignment(0, -0.5),
+                    radius: 1.5,
+                    colors: [
+                      const Color(0xFFB58E34).withValues(
+                        alpha: 0.04 * _breathAnimation.value,
+                      ),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              children: [
+                if (!_isQuestionSubmitted) ...[
+                  if (_lineCount == 0 && _reading == null) ...[
+                    const SizedBox(height: 20),
+                    Center(
+                      child: SizedBox(
+                        width: 140,
+                        height: 140,
+                        child: AnimatedBuilder(
+                          animation: Listenable.merge([_emblemController, _breathAnimation]),
+                          builder: (context, _) => CustomPaint(
+                            painter: _ShieldEmblemPainter(
+                              rotationProgress: _emblemController.value,
+                              pulse: _breathAnimation.value,
                             ),
                           ),
-                          if (_flow.canFollowUp) ...[
-                            const SizedBox(height: 18),
-                            _geomancyFollowUpCard(),
-                          ],
-                          const SizedBox(height: 18),
-                          _shieldCard(_reading!.chart),
-                        ],
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Ask the Earth',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.cinzel(
+                        fontSize: 30,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFFC7A867),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Quiet your mind. Hold your question.\nThe marks await your hand.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.cormorantGaramond(
+                        fontSize: 18,
+                        color: Colors.white60,
+                        fontStyle: FontStyle.italic,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                  ],
+                  _questionCard(),
+                ] else ...[
+                  _ritualCard(),
+                  const SizedBox(height: 18),
+                  if (_isReadingLoading) _loadingCard(),
+                  if (_flow.readyToReveal) _readyCard(),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 900),
+                    curve: Curves.easeOutQuart,
+                    alignment: Alignment.topCenter,
+                    child: _flow.canShowResult
+                        ? Column(
+                            children: [
+                              _resultCard(_reading!),
+                              const SizedBox(height: 18),
+                              GeomancyShareButton(
+                                reading: _reading!,
+                                lineValues: _flow.lineValuesForShare(_lineValues),
+                                drawnLines: List<GeomancyCastLine>.unmodifiable(
+                                  _lines,
+                                ),
+                              ),
+                              if (_flow.canFollowUp) ...[
+                                const SizedBox(height: 18),
+                                _geomancyFollowUpCard(),
+                              ],
+                              const SizedBox(height: 18),
+                              _shieldCard(_reading!.chart),
+                              const SizedBox(height: 40),
+                            ],
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -635,50 +730,95 @@ class _GeomancyScreenState extends State<GeomancyScreen>
             ),
           ),
           const SizedBox(height: 14),
-          TextField(
-            controller: _questionController,
-            enabled: !_isReadingLoading && !_isRevealed,
-            style: GoogleFonts.cormorantGaramond(
-              color: const Color(0xFFE5D5F5),
-              fontSize: 20,
-              fontStyle: FontStyle.italic,
-              fontWeight: FontWeight.w600,
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF0A0812),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFF3A2D50)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.6),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-            maxLines: 2,
-            minLines: 1,
-            textInputAction: TextInputAction.done,
-            decoration: InputDecoration(
-              hintText: _questionHints[_questionHintIndex],
-              hintStyle: GoogleFonts.cormorantGaramond(
-                color: const Color(0xFFE5D5F5).withAlpha(105),
+            child: TextField(
+              controller: _questionController,
+              enabled: !_isReadingLoading && !_isRevealed,
+              style: GoogleFonts.cormorantGaramond(
+                color: const Color(0xFFE5D5F5),
                 fontSize: 20,
                 fontStyle: FontStyle.italic,
+                fontWeight: FontWeight.w600,
               ),
-              filled: true,
-              fillColor: const Color(0xFF090712).withAlpha(95),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(
-                  color: const Color(0xFFC7A867).withAlpha(45),
+              maxLines: 2,
+              minLines: 1,
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(
+                hintText: _questionHints[_questionHintIndex],
+                hintStyle: GoogleFonts.cormorantGaramond(
+                  color: const Color(0xFFE5D5F5).withValues(alpha: 0.4),
+                  fontSize: 20,
+                  fontStyle: FontStyle.italic,
                 ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(
-                  color: const Color(0xFFC7A867).withAlpha(45),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 18,
                 ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(
-                  color: const Color(0xFFE8B530).withAlpha(140),
-                ),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 18,
-                vertical: 16,
               ),
             ),
+          ),
+          const SizedBox(height: 24),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _questionController,
+            builder: (context, value, child) {
+              final hasText = value.text.trim().isNotEmpty;
+              return GestureDetector(
+                onTap: hasText
+                    ? () {
+                        setState(() {
+                          _isQuestionSubmitted = true;
+                        });
+                      }
+                    : null,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  decoration: BoxDecoration(
+                    color: hasText ? const Color(0xFF1E1430) : const Color(0xFF151126),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: hasText ? const Color(0xFF8A6B22) : const Color(0xFF3A2D50),
+                    ),
+                    boxShadow: hasText
+                        ? [
+                            BoxShadow(
+                              color: const Color(0xFF8A6B22).withValues(alpha: 0.2),
+                              blurRadius: 12,
+                              spreadRadius: 1,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Center(
+                    child: Text(
+                      'BEGIN RITUAL',
+                      style: GoogleFonts.cinzel(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 2.0,
+                        color: hasText
+                            ? const Color(0xFFC7A867)
+                            : const Color(0xFFE5D5F5).withValues(alpha: 0.4),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -777,23 +917,28 @@ class _GeomancyScreenState extends State<GeomancyScreen>
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 20),
+        padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          gradient: LinearGradient(
-            colors: disabled
-                ? [const Color(0xFF21163A), const Color(0xFF151126)]
-                : [const Color(0xFFC7A867), const Color(0xFFE8B530)],
+          color: disabled
+              ? const Color(0xFF151126)
+              : _isHolding
+                  ? const Color(0xFF2E1A4A)
+                  : const Color(0xFF1E1430),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: disabled
+                ? const Color(0xFF3A2D50)
+                : const Color(0xFF8A6B22),
           ),
           boxShadow: disabled
               ? null
               : [
                   BoxShadow(
-                    color: const Color(0xFFE8B530).withAlpha(
-                      _isHolding ? 135 : 95,
+                    color: const Color(0xFF8A6B22).withValues(
+                      alpha: _isHolding ? 0.5 : 0.2,
                     ),
-                    blurRadius: _isHolding ? 32 : 24,
-                    spreadRadius: _isHolding ? 4 : 2,
+                    blurRadius: _isHolding ? 24 : 12,
+                    spreadRadius: _isHolding ? 2 : 1,
                   ),
                 ],
         ),
@@ -805,12 +950,12 @@ class _GeomancyScreenState extends State<GeomancyScreen>
                     ? 'RELEASE TO LOCK'
                     : 'HOLD TO FORM SEAL',
             style: GoogleFonts.cinzel(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 2.0,
               color: disabled
-                  ? const Color(0xFFE5D5F5).withAlpha(135)
-                  : const Color(0xFF050408),
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 3.0,
+                  ? const Color(0xFFE5D5F5).withValues(alpha: 0.4)
+                  : const Color(0xFFC7A867),
             ),
           ),
         ),
@@ -1180,37 +1325,27 @@ class _GeomancyScreenState extends State<GeomancyScreen>
     final effectiveGlow = glowColor ?? const Color(0xFFC7A867).withAlpha(22);
 
     return Container(
-      width: width,
+      width: width ?? double.infinity,
+      padding: padding,
       decoration: BoxDecoration(
+        color: const Color(0xFF0F0A18),
         borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: effectiveBorder, width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(115),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
-          BoxShadow(
-            color: effectiveGlow,
-            blurRadius: 36,
-            spreadRadius: 2,
-          ),
+          if (effectiveGlow.alpha > 0)
+            BoxShadow(
+              color: effectiveGlow,
+              blurRadius: 36,
+              spreadRadius: 2,
+            ),
         ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(radius),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            padding: padding,
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F0A18).withAlpha(128),
-              borderRadius: BorderRadius.circular(radius),
-              border: Border.all(color: effectiveBorder, width: 1),
-            ),
-            child: child,
-          ),
-        ),
-      ),
+      child: child,
     );
   }
 }
@@ -1736,5 +1871,97 @@ class _TeslaGlobePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _TeslaGlobePainter oldDelegate) {
     return oldDelegate.progress != progress;
+  }
+}
+
+class _SacredGeometryPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFC7A867).withValues(alpha: 0.1)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    
+    // Draw some concentric circles and diamonds
+    for (int i = 1; i <= 5; i++) {
+      final radius = size.width * 0.15 * i;
+      canvas.drawCircle(center, radius, paint);
+      
+      final path = Path()
+        ..moveTo(center.dx, center.dy - radius)
+        ..lineTo(center.dx + radius, center.dy)
+        ..lineTo(center.dx, center.dy + radius)
+        ..lineTo(center.dx - radius, center.dy)
+        ..close();
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class _ShieldEmblemPainter extends CustomPainter {
+  final double rotationProgress;
+  final double pulse;
+
+  _ShieldEmblemPainter({required this.rotationProgress, required this.pulse});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFC7A867).withValues(alpha: 0.5 + 0.3 * pulse)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0 + (0.5 * pulse);
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width * 0.45;
+
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.rotate(rotationProgress * 2 * math.pi);
+
+    // Outer circle
+    canvas.drawCircle(Offset.zero, radius, paint);
+
+    // Inner circle
+    canvas.drawCircle(Offset.zero, radius * 0.65, paint);
+
+    // Draw square 1
+    _drawPolygon(canvas, 4, radius, 0, paint);
+
+    // Draw square 2 (rotated by 45 degrees to form an 8-pointed star shape with square 1)
+    _drawPolygon(canvas, 4, radius, math.pi / 4, paint);
+
+    // Draw triangle
+    _drawPolygon(canvas, 3, radius * 0.65, -math.pi / 2, paint);
+
+    // Draw an inner hexagram
+    _drawPolygon(canvas, 3, radius * 0.4, -math.pi / 2, paint);
+    _drawPolygon(canvas, 3, radius * 0.4, math.pi / 2, paint);
+
+    canvas.restore();
+  }
+
+  void _drawPolygon(Canvas canvas, int sides, double radius, double offsetAngle, Paint paint) {
+    final path = Path();
+    for (int i = 0; i < sides; i++) {
+      final angle = offsetAngle + i * (2 * math.pi / sides);
+      final point = Offset(radius * math.cos(angle), radius * math.sin(angle));
+      if (i == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
+      }
+    }
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ShieldEmblemPainter oldDelegate) {
+    return oldDelegate.rotationProgress != rotationProgress || oldDelegate.pulse != pulse;
   }
 }

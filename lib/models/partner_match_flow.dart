@@ -6,12 +6,14 @@ class PartnerMatchFlow {
   final bool loading;
   final bool isFreshReading;
   final bool creatingFollowUp;
+  final bool isRevealed;
 
   const PartnerMatchFlow({
     required this.reading,
     required this.loading,
     required this.isFreshReading,
     required this.creatingFollowUp,
+    required this.isRevealed,
   });
 
   factory PartnerMatchFlow.initial() {
@@ -20,6 +22,7 @@ class PartnerMatchFlow {
       loading: false,
       isFreshReading: false,
       creatingFollowUp: false,
+      isRevealed: false,
     );
   }
 
@@ -36,12 +39,14 @@ class PartnerMatchFlow {
     bool? loading,
     bool? isFreshReading,
     bool? creatingFollowUp,
+    bool? isRevealed,
   }) {
     return PartnerMatchFlow(
       reading: reading ?? this.reading,
       loading: loading ?? this.loading,
       isFreshReading: isFreshReading ?? this.isFreshReading,
       creatingFollowUp: creatingFollowUp ?? this.creatingFollowUp,
+      isRevealed: isRevealed ?? this.isRevealed,
     );
   }
 
@@ -51,6 +56,7 @@ class PartnerMatchFlow {
       loading: true,
       isFreshReading: false,
       creatingFollowUp: false,
+      isRevealed: false,
     );
   }
 
@@ -60,6 +66,7 @@ class PartnerMatchFlow {
       loading: false,
       isFreshReading: true,
       creatingFollowUp: false,
+      isRevealed: true,
     );
   }
 
@@ -69,7 +76,12 @@ class PartnerMatchFlow {
       loading: false,
       isFreshReading: false,
       creatingFollowUp: false,
+      isRevealed: true,
     );
+  }
+
+  PartnerMatchFlow reveal() {
+    return copyWith(isRevealed: true);
   }
 
   PartnerMatchFlow withFollowUpLoading(bool loading) {

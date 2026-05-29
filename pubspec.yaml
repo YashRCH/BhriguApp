@@ -122,6 +122,9 @@ flutter:
     - assets/images/owl/frames/waking_up/
     - assets/images/owl/frames/nesting/
     - assets/images/owl/frames/perching/
+    - assets/images/owl/frames/grooming/
+    - assets/images/owl/frames/writing/
+    - assets/images/owl/frames/eating/
 
 flutter_launcher_icons:
   android: true

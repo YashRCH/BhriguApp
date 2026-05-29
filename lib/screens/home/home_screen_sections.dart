@@ -100,18 +100,18 @@ extension _HomeScreenSections on _HomeScreenState {
                   children: [
                     TextSpan(
                       text: '${_greeting()}, ',
-                      style: const TextStyle(
+                      style: GoogleFonts.cinzel(
                         fontSize: 26,
-                        fontWeight: FontWeight.w300,
-                        color: Color(0xFFF0ECF8),
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFFF0ECF8),
                       ),
                     ),
                     TextSpan(
                       text: name,
-                      style: const TextStyle(
+                      style: GoogleFonts.cinzel(
                         fontSize: 26,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF9D6FE8),
+                        color: const Color(0xFFC7A867),
                       ),
                     ),
                   ],
@@ -261,9 +261,9 @@ extension _HomeScreenSections on _HomeScreenState {
             ? const Padding(
                 padding: EdgeInsets.all(32),
                 child: Center(
-                  child: CircularProgressIndicator(
-                    color: Color(0xFF9D6FE8),
-                    strokeWidth: 2,
+                  child: OwlSpriteAnimator(
+                    pose: OwlPose.writing,
+                    size: 64,
                   ),
                 ),
               )

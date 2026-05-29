@@ -40,7 +40,8 @@ class _OwlHomeCardState extends State<OwlHomeCard>
   String? _statusMessage;
 
   OwlPose _currentPose = OwlPose.idle;
-  Timer? _blinkTimer;
+  bool _isSleeping = false;
+  Timer? _idleTimer;
 
   late final AnimationController _glowController;
 
@@ -52,34 +53,56 @@ class _OwlHomeCardState extends State<OwlHomeCard>
       duration: const Duration(seconds: 4),
     )..repeat();
     _loadState();
-    _scheduleNextBlink();
+    _scheduleNextIdleAction();
   }
 
   @override
   void dispose() {
-    _blinkTimer?.cancel();
+    _idleTimer?.cancel();
     _glowController.dispose();
     super.dispose();
   }
 
-  void _scheduleNextBlink() {
-    _blinkTimer?.cancel();
+  void _scheduleNextIdleAction() {
+    _idleTimer?.cancel();
     final delay = math.Random().nextInt(6) + 3; // 3 to 8 seconds
-    _blinkTimer = Timer(Duration(seconds: delay), _playBlink);
+    _idleTimer = Timer(Duration(seconds: delay), _playIdleAction);
   }
 
-  void _playBlink() {
+  void _playIdleAction() {
     if (!mounted) return;
+    if (_isSleeping) {
+      _scheduleNextIdleAction();
+      return;
+    }
     if (_currentPose == OwlPose.idle) {
-      setState(() => _currentPose = OwlPose.blink);
-      Future.delayed(const Duration(milliseconds: 750), () {
-        if (mounted && _currentPose == OwlPose.blink) {
+      final rand = math.Random().nextDouble();
+      OwlPose pose;
+      int duration;
+      
+      if (rand < 0.25) {
+        pose = OwlPose.walking;
+        duration = 1000;
+      } else if (rand < 0.50) {
+        pose = OwlPose.grooming;
+        duration = 3500;
+      } else if (rand < 0.75) {
+        pose = OwlPose.writing;
+        duration = 4500;
+      } else {
+        pose = OwlPose.blink;
+        duration = 750;
+      }
+
+      setState(() => _currentPose = pose);
+      Future.delayed(Duration(milliseconds: duration), () {
+        if (mounted && _currentPose == pose) {
           setState(() => _currentPose = OwlPose.idle);
         }
-        _scheduleNextBlink();
+        _scheduleNextIdleAction();
       });
     } else {
-      _scheduleNextBlink();
+      _scheduleNextIdleAction();
     }
   }
 
@@ -105,7 +128,10 @@ class _OwlHomeCardState extends State<OwlHomeCard>
   Future<void> _petOwl() async {
     if (_petting || widget.uid.isEmpty) return;
 
-    setState(() => _petting = true);
+    setState(() {
+      _petting = true;
+      _isSleeping = false;
+    });
 
     try {
       final result = await _service.petOwl(widget.uid);
@@ -121,7 +147,7 @@ class _OwlHomeCardState extends State<OwlHomeCard>
         // Show happy animation briefly
         setState(() => _currentPose = OwlPose.alerted);
         Future.delayed(const Duration(milliseconds: 800), () {
-          if (mounted) setState(() => _currentPose = OwlPose.idle);
+          if (mounted && !_isSleeping) setState(() => _currentPose = OwlPose.idle);
         });
 
         // Trigger owl flight across screen!
@@ -416,6 +442,59 @@ class _OwlHomeCardState extends State<OwlHomeCard>
                   color: const Color(0xFFC7A867).withValues(alpha: 0.7),
                 ),
               ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _isSleeping = false;
+              _currentPose = OwlPose.eating;
+            });
+            Future.delayed(const Duration(milliseconds: 1500), () {
+              if (mounted && _currentPose == OwlPose.eating) {
+                setState(() => _currentPose = OwlPose.idle);
+              }
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF2E1065).withValues(alpha: 0.5),
+              border: Border.all(
+                color: const Color(0xFFB58E34).withValues(alpha: 0.3),
+              ),
+            ),
+            child: Icon(
+              Icons.restaurant_outlined,
+              size: 16,
+              color: const Color(0xFFC7A867).withValues(alpha: 0.8),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _isSleeping = !_isSleeping;
+              _currentPose = _isSleeping ? OwlPose.nesting : OwlPose.idle;
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF2E1065).withValues(alpha: 0.5),
+              border: Border.all(
+                color: const Color(0xFFB58E34).withValues(alpha: 0.3),
+              ),
+            ),
+            child: Icon(
+              _isSleeping ? Icons.wb_sunny_outlined : Icons.nights_stay_outlined,
+              size: 16,
+              color: const Color(0xFFC7A867).withValues(alpha: 0.8),
             ),
           ),
         ),

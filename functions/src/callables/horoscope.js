@@ -147,7 +147,7 @@ exports.generateDailyHoroscope = onCall(
     secrets: [GEMINI_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 180,
-    memory: "512MiB",
+    memory: "1GiB",
   }),
   async (request) => {
     const auth = requireCallableAuth(request);
@@ -222,13 +222,49 @@ exports.generateDailyHoroscope = onCall(
     try {
       dailyTransits = await getDailyTransits(dateKey);
       transitAspects = calculateTransitAspects(dailyTransits, userData);
-      prompt = `${prompt}
+    } catch (transitError) {
+      console.error("Daily transit cache error:", transitError);
+      throw new HttpsError(
+        "internal",
+        "NASA API is busy and couldn't load transit data to build the horoscope. Please try again later."
+      );
+    }
+
+    let ragQuery = "";
+    if (transitAspects && transitAspects.length > 0) {
+      const primary = transitAspects[0];
+      ragQuery = `${primary.planet} transit ${primary.aspectName} ${primary.natalPlanet}`;
+    } else if (dailyTransits && Array.isArray(dailyTransits.planets)) {
+      const moon = dailyTransits.planets.find((p) => p.name === "Moon");
+      if (moon) ragQuery = `Moon in ${moon.sign}`;
+    }
+
+    let retrievedKnowledge = "";
+    if (ragQuery) {
+      try {
+        retrievedKnowledge = await retrieveBhriguChatKnowledge({
+          message: ragQuery,
+          category: "daily transit",
+          limit: 2,
+        });
+      } catch (ragError) {
+        console.error("Horoscope RAG error:", ragError.message);
+      }
+    }
+
+    const ragContextText = retrievedKnowledge
+      ? `Supporting astrological reference wisdom:\n${retrievedKnowledge}\n\nWeave this wisdom organically into [BHRIGU TODAY] or the action advice.`
+      : "";
+
+    prompt = `${prompt}
 
 NASA/JPL daily transit cache for ${dateKey}:
 ${JSON.stringify(dailyTransits)}
 
 Transit-to-natal aspects for ${dateKey}:
 ${JSON.stringify(transitAspects)}
+
+${ragContextText}
 
 Use these transits as today's astronomical context. Do not claim NASA/JPL creates astrological interpretations; use the cached placements only as transit data.
 
@@ -257,9 +293,6 @@ You must actively fight repetition. Never use the same generic advice (like 'do 
 [INNER WEATHER] (1 sentence describing the internal emotional climate.)
 [MANTRA] (1 short, powerful, imperative sentence. Radically different every day. Add spice, attitude, and edge. Complete your sentence with a firm stop.)
 `;
-    } catch (transitError) {
-      console.error("Daily transit cache error:", transitError);
-    }
     prompt = `${prompt}${languageInstruction(aiResponseLanguage)}`;
 
     try {
