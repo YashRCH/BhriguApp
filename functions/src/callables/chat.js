@@ -660,6 +660,7 @@ ${safeJson(userSnapshot)}
     const isDeepFollowUp = Boolean(activeFollowUpContext);
     let providerUsed = "gemini";
     let modelUsed = BHRIGU_TUNED_MODEL;
+    let text = "";
 
     try {
       text = await generateGeminiReadingText({

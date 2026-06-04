@@ -23,6 +23,7 @@ class UserProfileCacheService {
       return _cachedData;
     }
 
+    // If a fetch is already in flight (for any reason including refresh), reuse it.
     final inFlight = _userDataInFlight;
     if (inFlight != null) {
       return inFlight;

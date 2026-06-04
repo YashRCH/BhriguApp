@@ -964,11 +964,9 @@ async function fetchHorizonsLongitude(body, utcDate) {
     };
   }
 
+  const ecliptic = await fetchHorizonsObserverEcliptic(body, utcDate);
   const nextDate = new Date(utcDate.getTime() + MILLISECONDS_PER_DAY);
-  const [ecliptic, nextEcliptic] = await Promise.all([
-    fetchHorizonsObserverEcliptic(body, utcDate),
-    fetchHorizonsObserverEcliptic(body, nextDate),
-  ]);
+  const nextEcliptic = await fetchHorizonsObserverEcliptic(body, nextDate);
 
   const retrograde = signedAngularDistance(nextEcliptic.longitude, ecliptic.longitude) < 0;
 
@@ -1105,9 +1103,10 @@ async function calculateNatalChartForBirthData({
     longitude,
   });
   const utcBirth = birthTime.utcDate;
-  const tropicalBodies = await Promise.all(
-    HORIZONS_BODIES.map((body) => fetchHorizonsLongitude(body, utcBirth))
-  );
+  const tropicalBodies = [];
+  for (const body of HORIZONS_BODIES) {
+    tropicalBodies.push(await fetchHorizonsLongitude(body, utcBirth));
+  }
   const ayanamsa = calculateLahiriAyanamsa(utcBirth);
   const tropicalAscendant = calculateAscendant({
     utcDate: utcBirth,
@@ -1163,9 +1162,10 @@ function parseDateKeyToUtcNoon(dateKey) {
 
 async function calculateDailyTransitsForDateKey(dateKey) {
   const utcNoon = parseDateKeyToUtcNoon(dateKey);
-  const tropicalBodies = await Promise.all(
-    HORIZONS_BODIES.map((body) => fetchHorizonsLongitude(body, utcNoon))
-  );
+  const tropicalBodies = [];
+  for (const body of HORIZONS_BODIES) {
+    tropicalBodies.push(await fetchHorizonsLongitude(body, utcNoon));
+  }
 
   const ayanamsa = calculateLahiriAyanamsa(utcNoon);
   const tropicalPlanets = planetModelsFromLongitudes(tropicalBodies, 0);
@@ -1271,12 +1271,21 @@ function currentSkyFromDailyTransits(dailyTransits = {}, now = new Date()) {
 async function calculateCurrentSkySnapshot(now = new Date()) {
   const planets = {};
   const missingPlanets = [];
-  const results = await Promise.allSettled(
-    HORIZONS_BODIES.map(async (body) => ({
-      body,
-      ecliptic: await fetchHorizonsObserverEcliptic(body, now),
-    }))
-  );
+  const results = [];
+  for (const body of HORIZONS_BODIES) {
+    try {
+      const ecliptic = await fetchHorizonsObserverEcliptic(body, now);
+      results.push({
+        status: "fulfilled",
+        value: { body, ecliptic }
+      });
+    } catch (error) {
+      results.push({
+        status: "rejected",
+        reason: error
+      });
+    }
+  }
 
   results.forEach((result, index) => {
     const body = HORIZONS_BODIES[index];

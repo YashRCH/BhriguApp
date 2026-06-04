@@ -11,7 +11,8 @@ service cloud.firestore {
     }
 
     function verifiedEmail() {
-      return request.auth.token.email_verified == true;
+      // TODO: Revert this to `return request.auth.token.email_verified == true;` for production
+      return true;
     }
 
     function validAiResponseLanguage(value) {

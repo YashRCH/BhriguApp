@@ -1,7 +1,17 @@
 const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
+const dotenv = require('dotenv');
 
-const GEMINI_API_KEY = "***REMOVED-ROTATED-KEY***";
+// Load environment variables from functions directory
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+if (!GEMINI_API_KEY) {
+  console.error("ERROR: GEMINI_API_KEY is not set in functions/.env");
+  process.exit(1);
+}
 const QUESTIONS_PATH = './questions.json';
 const questions = JSON.parse(fs.readFileSync(QUESTIONS_PATH, 'utf-8'));
 

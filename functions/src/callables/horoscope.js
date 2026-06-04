@@ -286,8 +286,8 @@ You must actively fight repetition. Never use the same generic advice (like 'do 
 
 [BHRIGU TODAY] (2-3 sentences max. Establish the core psychological insight for the day using the randomized hook/validation tone.)
 [YOUR TRANSIT] (1 sentence detailing planetary mechanics, 1 sentence on how it feels. Keep this purely astrological and literal.)
-[DO] (One complete paragraph, 1-2 sentences. Actionable, highly specific, and wildly variable based on the transit. Add spice: one day it might be about reckless creativity, another about ruthless boundary setting. Never give generic productivity advice. No bullet points.)
-[AVOID] (One complete paragraph, 1-2 sentences. Psychologically sharp warning that changes drastically every day. Ban generic clichés. No bullet points.)
+[DO] (One complete paragraph, 1-2 sentences. MUST strictly be love, career, and general lifestyle advice based purely on the transits. Do not provide any generic productivity advice or other topics. Actionable, highly specific, and wildly variable. No bullet points.)
+[AVOID] (One complete paragraph, 1-2 sentences. What one should avoid in these spheres (love, career, lifestyle) strictly based on the transits. Psychologically sharp warning that changes drastically every day. Ban generic clichés. No bullet points.)
 [RELATIONSHIPS] (2 sentences on romantic or platonic dynamics using the hook/validation cycle. Keep it unpredictable.)
 [WORK / MONEY] (1-2 sentences on material wealth or discipline. Force high variation daily.)
 [INNER WEATHER] (1 sentence describing the internal emotional climate.)

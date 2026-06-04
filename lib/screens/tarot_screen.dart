@@ -598,7 +598,6 @@ class _TarotScreenState extends State<TarotScreen>
   Widget _cardBack({
     double width = 95,
     double height = 155,
-    bool isCenter = false,
   }) {
     return Container(
       width: width,

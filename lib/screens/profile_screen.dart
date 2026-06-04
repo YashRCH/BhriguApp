@@ -210,6 +210,10 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     if (confirmed != true) return;
 
+    // Wait for the confirmation dialog to fully animate out
+    // before proceeding, to prevent OverlayEntry widget tree crashes.
+    await Future.delayed(const Duration(milliseconds: 300));
+
     await _deleteAccount();
   }
 
@@ -271,10 +275,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       } catch (e) {
         debugPrint('Firebase sign-out after deletion skipped: $e');
       }
-
-      if (!mounted) return;
-
-      context.go('/login');
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
 
@@ -383,6 +383,10 @@ class _ProfileScreenState extends State<ProfileScreen>
       );
     }
 
+    // Wait for the password dialog and its TextField overlays to fully animate out
+    // before proceeding with network calls that could trigger route changes.
+    await Future.delayed(const Duration(milliseconds: 300));
+
     final credential = EmailAuthProvider.credential(
       email: email,
       password: password,
@@ -413,7 +417,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     final controller = TextEditingController();
 
     try {
-      return showDialog<String>(
+      final result = await showDialog<String>(
         context: context,
         barrierDismissible: false,
         builder: (ctx) {
@@ -440,7 +444,10 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
               onSubmitted: (_) {
                 final password = controller.text.trim();
-                if (password.isNotEmpty) Navigator.pop(ctx, password);
+                if (password.isNotEmpty) {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  Navigator.pop(ctx, password);
+                }
               },
             ),
             actions: [
@@ -457,7 +464,10 @@ class _ProfileScreenState extends State<ProfileScreen>
               TextButton(
                 onPressed: () {
                   final password = controller.text.trim();
-                  if (password.isNotEmpty) Navigator.pop(ctx, password);
+                  if (password.isNotEmpty) {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    Navigator.pop(ctx, password);
+                  }
                 },
                 child: const Text(
                   'Confirm',
@@ -471,6 +481,10 @@ class _ProfileScreenState extends State<ProfileScreen>
           );
         },
       );
+
+      // Wait for dialog to fully animate out before disposing controller
+      await Future.delayed(const Duration(milliseconds: 300));
+      return result;
     } finally {
       controller.dispose();
     }
@@ -569,10 +583,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 ? null
                                 : () async {
                                     await AuthService().signOut();
-
-                                    if (context.mounted) {
-                                      context.go('/login');
-                                    }
                                   },
                             icon: const Icon(
                               Icons.logout,

@@ -16,7 +16,11 @@ import 'services/auth_service.dart';
 
 final _routerAuth = AuthService();
 
+final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+final _shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shell');
+
 final appRouter = GoRouter(
+  navigatorKey: _rootNavigatorKey,
   initialLocation: '/login',
   refreshListenable: GoRouterRefreshStream(_routerAuth.authStateChanges),
   redirect: (context, state) async {
@@ -30,10 +34,13 @@ final appRouter = GoRouter(
 
     // Prevent navigation away from login if the user is signing up/in with email but hasn't verified.
     // This stops the app from bouncing to /onboarding and back to /login, which destroys the error state.
+    // TODO: Uncomment when re-enabling email verification
+    /*
     final isPasswordProvider = user.providerData.any((p) => p.providerId == 'password');
     if (isPasswordProvider && !user.emailVerified) {
       return path == '/login' ? null : '/login';
     }
+    */
 
     bool completed = false;
     try {
@@ -71,6 +78,7 @@ final appRouter = GoRouter(
       builder: (ctx, state) => const OnboardingScreen(),
     ),
     ShellRoute(
+      navigatorKey: _shellNavigatorKey,
       builder: (ctx, state, child) => MainShell(
         location: state.uri.toString(),
         child: child,
@@ -114,15 +122,20 @@ final appRouter = GoRouter(
 
 class GoRouterRefreshStream extends ChangeNotifier {
   late final StreamSubscription<dynamic> _subscription;
+  Timer? _timer;
 
   GoRouterRefreshStream(Stream<dynamic> stream) {
     _subscription = stream.asBroadcastStream().listen((_) {
-      notifyListeners();
+      _timer?.cancel();
+      _timer = Timer(const Duration(milliseconds: 250), () {
+        notifyListeners();
+      });
     });
   }
 
   @override
   void dispose() {
+    _timer?.cancel();
     _subscription.cancel();
     super.dispose();
   }

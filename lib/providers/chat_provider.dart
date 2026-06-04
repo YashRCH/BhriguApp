@@ -59,11 +59,18 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     final content = data['content'];
     final timestampValue = data['timestamp'];
 
-    if (role is! String || content is! String || timestampValue is! String) {
+    if (role is! String || content is! String) {
       return null;
     }
 
-    final timestamp = DateTime.tryParse(timestampValue);
+    // Handle both ISO string timestamps (saved by client) and Firestore
+    // Timestamp objects (returned by the SDK for server-written fields).
+    DateTime? timestamp;
+    if (timestampValue is String) {
+      timestamp = DateTime.tryParse(timestampValue);
+    } else if (timestampValue is Timestamp) {
+      timestamp = timestampValue.toDate();
+    }
 
     if (timestamp == null) return null;
 

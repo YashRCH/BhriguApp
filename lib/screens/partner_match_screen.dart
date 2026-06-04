@@ -1540,13 +1540,19 @@ class _MatchEmblemPainter extends CustomPainter {
     for (int i = 0; i < 3; i++) {
       final angle1 = i * (2 * math.pi / 3) - math.pi / 2;
       final p1 = Offset(hexRadius * math.cos(angle1), hexRadius * math.sin(angle1));
-      if (i == 0) triangle1.moveTo(p1.dx, p1.dy);
-      else triangle1.lineTo(p1.dx, p1.dy);
+      if (i == 0) {
+        triangle1.moveTo(p1.dx, p1.dy);
+      } else {
+        triangle1.lineTo(p1.dx, p1.dy);
+      }
 
       final angle2 = i * (2 * math.pi / 3) + math.pi / 2;
       final p2 = Offset(hexRadius * math.cos(angle2), hexRadius * math.sin(angle2));
-      if (i == 0) triangle2.moveTo(p2.dx, p2.dy);
-      else triangle2.lineTo(p2.dx, p2.dy);
+      if (i == 0) {
+        triangle2.moveTo(p2.dx, p2.dy);
+      } else {
+        triangle2.lineTo(p2.dx, p2.dy);
+      }
     }
     triangle1.close();
     triangle2.close();
