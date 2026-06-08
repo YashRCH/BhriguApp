@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -35,7 +34,8 @@ class PartnerMatchScreen extends StatefulWidget {
   State<PartnerMatchScreen> createState() => _PartnerMatchScreenState();
 }
 
-class _PartnerMatchScreenState extends State<PartnerMatchScreen> with TickerProviderStateMixin {
+class _PartnerMatchScreenState extends State<PartnerMatchScreen>
+    with TickerProviderStateMixin {
   final PartnerMatchService _service = PartnerMatchService();
   final FollowUpContextService _followUpService = FollowUpContextService();
 
@@ -250,7 +250,8 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> with TickerProv
                     center: const Alignment(0, -0.6),
                     radius: 1.5,
                     colors: [
-                      const Color(0xFFC7A867).withValues(alpha: _breathAnimation.value * 0.5),
+                      const Color(0xFFC7A867)
+                          .withValues(alpha: _breathAnimation.value * 0.5),
                       Colors.transparent,
                     ],
                   ),
@@ -259,57 +260,58 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> with TickerProv
             },
           ),
           SafeArea(
-          child: ListView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-            children: [
-              if (!_flow.isRevealed) ...[
-                _heroCard(),
-                const SizedBox(height: 24),
-                Center(
-                  child: SizedBox(
-                    width: 210,
-                    height: 210,
-                    child: AnimatedBuilder(
-                      animation: Listenable.merge([_emblemController, _breathAnimation]),
-                      builder: (context, _) => CustomPaint(
-                        painter: _MatchEmblemPainter(
-                          rotationProgress: _emblemController.value,
-                          pulse: _breathAnimation.value,
+            child: ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+              children: [
+                if (!_flow.isRevealed) ...[
+                  _heroCard(),
+                  const SizedBox(height: 24),
+                  Center(
+                    child: SizedBox(
+                      width: 210,
+                      height: 210,
+                      child: AnimatedBuilder(
+                        animation: Listenable.merge(
+                            [_emblemController, _breathAnimation]),
+                        builder: (context, _) => CustomPaint(
+                          painter: _MatchEmblemPainter(
+                            rotationProgress: _emblemController.value,
+                            pulse: _breathAnimation.value,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                PartnerBirthForm(
-                  loading: _loading,
-                  onSubmit: _createReading,
-                ),
-                if (_loading) ...[
-                  const SizedBox(height: 16),
-                  _loadingCard(),
+                  const SizedBox(height: 24),
+                  PartnerBirthForm(
+                    loading: _loading,
+                    onSubmit: _createReading,
+                  ),
+                  if (_loading) ...[
+                    const SizedBox(height: 16),
+                    _loadingCard(),
+                  ],
                 ],
-              ],
-              AnimatedSize(
-                duration: const Duration(milliseconds: 900),
-                curve: Curves.easeOutQuart,
-                alignment: Alignment.topCenter,
-                child: _flow.isRevealed
-                    ? Column(
-                        children: [
-                          _resultCard(_reading!),
-                          if (_flow.canFollowUp) ...[
-                            const SizedBox(height: 16),
-                            _followUpCard(_reading!),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 900),
+                  curve: Curves.easeOutQuart,
+                  alignment: Alignment.topCenter,
+                  child: _flow.isRevealed
+                      ? Column(
+                          children: [
+                            _resultCard(_reading!),
+                            if (_flow.canFollowUp) ...[
+                              const SizedBox(height: 16),
+                              _followUpCard(_reading!),
+                            ],
                           ],
-                        ],
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ],
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
           ),
-        ),
         ],
       ),
     );
@@ -1438,7 +1440,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen> with TickerProv
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
-          if (effectiveGlow.alpha > 0)
+          if (effectiveGlow.a > 0)
             BoxShadow(
               color: effectiveGlow,
               blurRadius: 36,
@@ -1495,17 +1497,20 @@ class _MatchEmblemPainter extends CustomPainter {
     if (tCycle < 150) {
       beatScale = 1.0 + 0.06 * math.sin((tCycle / 150) * math.pi); // Lub
     } else if (tCycle > 250 && tCycle < 450) {
-      beatScale = 1.0 + 0.04 * math.sin(((tCycle - 250) / 200) * math.pi); // Dub
+      beatScale =
+          1.0 + 0.04 * math.sin(((tCycle - 250) / 200) * math.pi); // Dub
     }
 
     // Outer rotating dotted orbit (with heartbeat pulse)
     canvas.save();
     canvas.rotate(-rotationProgress * 2 * math.pi * 0.5);
     final orbitPaint = Paint()
-      ..color = const Color(0xFFC7A867).withValues(alpha: 0.2 + 0.1 * pulse + (beatScale - 1.0))
+      ..color = const Color(0xFFC7A867)
+          .withValues(alpha: 0.2 + 0.1 * pulse + (beatScale - 1.0))
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0 + ((beatScale - 1.0) * 20); // Thickens slightly on beat
-      
+      ..strokeWidth =
+          1.0 + ((beatScale - 1.0) * 20); // Thickens slightly on beat
+
     final currentRadius = maxRadius * beatScale;
     _drawDashedCircle(canvas, Offset.zero, currentRadius, orbitPaint);
     canvas.restore();
@@ -1536,10 +1541,11 @@ class _MatchEmblemPainter extends CustomPainter {
     final hexRadius = maxRadius * 0.75;
     final triangle1 = Path();
     final triangle2 = Path();
-    
+
     for (int i = 0; i < 3; i++) {
       final angle1 = i * (2 * math.pi / 3) - math.pi / 2;
-      final p1 = Offset(hexRadius * math.cos(angle1), hexRadius * math.sin(angle1));
+      final p1 =
+          Offset(hexRadius * math.cos(angle1), hexRadius * math.sin(angle1));
       if (i == 0) {
         triangle1.moveTo(p1.dx, p1.dy);
       } else {
@@ -1547,7 +1553,8 @@ class _MatchEmblemPainter extends CustomPainter {
       }
 
       final angle2 = i * (2 * math.pi / 3) + math.pi / 2;
-      final p2 = Offset(hexRadius * math.cos(angle2), hexRadius * math.sin(angle2));
+      final p2 =
+          Offset(hexRadius * math.cos(angle2), hexRadius * math.sin(angle2));
       if (i == 0) {
         triangle2.moveTo(p2.dx, p2.dy);
       } else {
@@ -1556,14 +1563,15 @@ class _MatchEmblemPainter extends CustomPainter {
     }
     triangle1.close();
     triangle2.close();
-    
+
     canvas.drawPath(triangle1, linePaint);
     canvas.drawPath(triangle2, linePaint);
 
     // 3. Connect the vertices to the center to form 3D geometry rays
     for (int i = 0; i < 6; i++) {
       final angle = i * (math.pi / 3) + math.pi / 6;
-      final p = Offset(hexRadius * math.cos(angle), hexRadius * math.sin(angle));
+      final p =
+          Offset(hexRadius * math.cos(angle), hexRadius * math.sin(angle));
       canvas.drawLine(Offset.zero, p, highlightPaint);
     }
 
@@ -1575,11 +1583,11 @@ class _MatchEmblemPainter extends CustomPainter {
       ..lineTo(0, diamondRadius)
       ..lineTo(-diamondRadius, 0)
       ..close();
-    
+
     final fillPaint = Paint()
       ..color = const Color(0xFFC7A867).withValues(alpha: 0.15 + 0.15 * pulse)
       ..style = PaintingStyle.fill;
-    
+
     canvas.drawPath(diamond, fillPaint);
     canvas.drawPath(diamond, highlightPaint);
 
@@ -1589,7 +1597,8 @@ class _MatchEmblemPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _drawDashedCircle(Canvas canvas, Offset center, double radius, Paint paint) {
+  void _drawDashedCircle(
+      Canvas canvas, Offset center, double radius, Paint paint) {
     const int dashCount = 36;
     final double dashLength = (2 * math.pi * radius) / (dashCount * 2);
     final double dashAngle = dashLength / radius;
@@ -1609,7 +1618,8 @@ class _MatchEmblemPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _MatchEmblemPainter oldDelegate) {
-    return oldDelegate.rotationProgress != rotationProgress || oldDelegate.pulse != pulse;
+    return oldDelegate.rotationProgress != rotationProgress ||
+        oldDelegate.pulse != pulse;
   }
 }
 

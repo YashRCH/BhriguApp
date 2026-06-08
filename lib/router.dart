@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +10,9 @@ import 'screens/chat_screen.dart';
 import 'screens/tarot_screen.dart';
 import 'screens/geomancy_screen.dart';
 import 'screens/partner_match_screen.dart';
+import 'screens/circle_screen.dart';
+import 'screens/add_connection_screen.dart';
+import 'screens/connection_detail_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/login_screen.dart';
@@ -19,6 +23,21 @@ final _routerAuth = AuthService();
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 final _shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shell');
 
+String? _safeRedirectLocation(String? value) {
+  final location = value?.trim();
+  if (location == null || location.isEmpty) return null;
+  if (!location.startsWith('/') || location.startsWith('//')) return null;
+  if (location.startsWith('/login') || location.startsWith('/onboarding')) {
+    return null;
+  }
+
+  return location;
+}
+
+String _withFrom(String path, String from) {
+  return '$path?from=${Uri.encodeComponent(from)}';
+}
+
 final appRouter = GoRouter(
   navigatorKey: _rootNavigatorKey,
   initialLocation: '/login',
@@ -26,10 +45,13 @@ final appRouter = GoRouter(
   redirect: (context, state) async {
     final user = _routerAuth.currentUser;
     final path = state.uri.path;
+    final from = _safeRedirectLocation(state.uri.queryParameters['from']);
 
     // If not logged in, force them to login
     if (user == null) {
-      return path == '/login' ? null : '/login';
+      if (path == '/login') return null;
+
+      return _withFrom('/login', state.uri.toString());
     }
 
     // Prevent navigation away from login if the user is signing up/in with email but hasn't verified.
@@ -53,17 +75,19 @@ final appRouter = GoRouter(
 
     // If logged in but trying to access login, redirect based on onboarding
     if (path == '/login') {
-      return completed ? '/home' : '/onboarding';
+      if (completed) return from ?? '/home';
+
+      return from == null ? '/onboarding' : _withFrom('/onboarding', from);
     }
 
     // If trying to access onboarding but already completed it, go home
     if (path == '/onboarding') {
-      return completed ? '/home' : null;
+      return completed ? from ?? '/home' : null;
     }
 
     // A signed-in user must finish onboarding before entering the main shell.
     if (!completed) {
-      return '/onboarding';
+      return _withFrom('/onboarding', state.uri.toString());
     }
 
     return null;
@@ -109,7 +133,32 @@ final appRouter = GoRouter(
         ),
         GoRoute(
           path: '/bhrigu-match',
-          builder: (ctx, state) => const PartnerMatchScreen(),
+          builder: (ctx, state) => const CircleScreen(),
+          routes: [
+            GoRoute(
+              path: 'add',
+              builder: (ctx, state) => const AddConnectionScreen(),
+            ),
+            GoRoute(
+              path: 'manual',
+              builder: (ctx, state) => const PartnerMatchScreen(),
+            ),
+            GoRoute(
+              path: 'connection/:connectionId',
+              builder: (ctx, state) {
+                return ConnectionDetailScreen(
+                  connectionId: state.pathParameters['connectionId'] ?? '',
+                );
+              },
+            ),
+          ],
+        ),
+        GoRoute(
+          path: '/invite/:code',
+          builder: (ctx, state) => AddConnectionScreen(
+            initialInviteCode: state.pathParameters['code'],
+            autoAcceptInvite: true,
+          ),
         ),
         GoRoute(
           path: '/profile',
@@ -179,7 +228,10 @@ class _MainShellState extends State<MainShell>
     if (widget.location.startsWith('/chat')) return 1;
     if (widget.location.startsWith('/tarot')) return 2;
     if (widget.location.startsWith('/geomancy')) return 3;
-    if (widget.location.startsWith('/bhrigu-match')) return 4;
+    if (widget.location.startsWith('/bhrigu-match') ||
+        widget.location.startsWith('/invite')) {
+      return 4;
+    }
     return 0; // Default to Home
   }
 
@@ -283,12 +335,8 @@ class _MainShellState extends State<MainShell>
                   ),
                   _buildNavItem(
                     4,
-                    'MATCH',
-                    (c) => Icon(
-                      Icons.favorite_rounded,
-                      color: c,
-                      size: 24,
-                    ),
+                    'CIRCLE',
+                    (c) => _SpinningRing(color: c),
                     currentIndex,
                   ),
                 ],
@@ -401,4 +449,69 @@ class _MainShellState extends State<MainShell>
       ),
     );
   }
+}
+
+class _SpinningRing extends StatefulWidget {
+  final Color color;
+  const _SpinningRing({required this.color});
+
+  @override
+  State<_SpinningRing> createState() => _SpinningRingState();
+}
+
+class _SpinningRingState extends State<_SpinningRing> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 8),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) => Transform.rotate(
+        angle: _controller.value * 2 * math.pi,
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CustomPaint(
+            painter: _RingPainter(color: widget.color),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  final Color color;
+  _RingPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round;
+
+    final diameter = math.min(size.width, size.height) - 4.0;
+    final rect = Rect.fromCenter(
+      center: Offset(size.width / 2, size.height / 2),
+      width: diameter,
+      height: diameter,
+    );
+    
+    canvas.drawArc(rect, 0, math.pi * 0.7, false, paint);
+    canvas.drawArc(rect, math.pi, math.pi * 0.7, false, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RingPainter oldDelegate) => oldDelegate.color != color;
 }

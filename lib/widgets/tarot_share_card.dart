@@ -1,15 +1,15 @@
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../models/tarot_card.dart';
+import '../services/share_file_service.dart';
 
 class TarotShareButton extends StatefulWidget {
   final String question;
@@ -70,27 +70,23 @@ class _TarotShareButtonState extends State<TarotShareButton> {
             'Share card is still preparing. Please tap share again.');
       }
 
-      final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-
-      if (byteData == null) {
-        throw Exception('Could not create share image.');
-      }
-
-      final pngBytes = byteData.buffer.asUint8List();
+      final pngBytes = await _capturePng(boundary);
       final file = await _writeTempImage(pngBytes);
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
+      await ShareFileService.shareImageFile(
+        file,
         text: 'My Tarot reading from BHR1GU',
       );
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('Tarot share failed: $e');
+      debugPrintStack(stackTrace: stack);
+
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not share tarot card: $e'),
-          backgroundColor: const Color(0xFF1A1630),
+        const SnackBar(
+          content: Text('Could not share tarot card. Please try again.'),
+          backgroundColor: Color(0xFF1A1630),
         ),
       );
     } finally {
@@ -100,6 +96,17 @@ class _TarotShareButtonState extends State<TarotShareButton> {
         });
       }
     }
+  }
+
+  Future<Uint8List> _capturePng(RenderRepaintBoundary boundary) async {
+    final image = await boundary.toImage(pixelRatio: 3.0);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+
+    if (byteData == null) {
+      throw Exception('Could not create share image.');
+    }
+
+    return byteData.buffer.asUint8List();
   }
 
   Future<File> _writeTempImage(Uint8List bytes) async {
@@ -115,18 +122,28 @@ class _TarotShareButtonState extends State<TarotShareButton> {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        Positioned(
-          left: -1200,
-          top: 0,
+        Opacity(
+          opacity: 0.01,
           child: IgnorePointer(
-            child: RepaintBoundary(
-              key: _shareKey,
-              child: TarotShareCardPreview(
-                question: widget.question,
-                past: widget.past,
-                present: widget.present,
-                future: widget.future,
-                reading: widget.reading,
+            child: SizedBox(
+              width: 1,
+              height: 1,
+              child: OverflowBox(
+                minWidth: 1080,
+                maxWidth: 1080,
+                minHeight: 1500,
+                maxHeight: 1500,
+                alignment: Alignment.topLeft,
+                child: RepaintBoundary(
+                  key: _shareKey,
+                  child: TarotShareCardPreview(
+                    question: widget.question,
+                    past: widget.past,
+                    present: widget.present,
+                    future: widget.future,
+                    reading: widget.reading,
+                  ),
+                ),
               ),
             ),
           ),

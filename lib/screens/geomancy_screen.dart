@@ -37,7 +37,6 @@ class _GeomancyScreenState extends State<GeomancyScreen>
     'What is hidden beneath this situation?',
     'What does my heart need to know?',
     'Is this connection meant to grow?',
-
     'What energy surrounds this decision?',
     'Where should I place my trust now?',
   ];
@@ -638,7 +637,8 @@ class _GeomancyScreenState extends State<GeomancyScreen>
                         width: 140,
                         height: 140,
                         child: AnimatedBuilder(
-                          animation: Listenable.merge([_emblemController, _breathAnimation]),
+                          animation: Listenable.merge(
+                              [_emblemController, _breathAnimation]),
                           builder: (context, _) => CustomPaint(
                             painter: _ShieldEmblemPainter(
                               rotationProgress: _emblemController.value,
@@ -688,7 +688,8 @@ class _GeomancyScreenState extends State<GeomancyScreen>
                               const SizedBox(height: 18),
                               GeomancyShareButton(
                                 reading: _reading!,
-                                lineValues: _flow.lineValuesForShare(_lineValues),
+                                lineValues:
+                                    _flow.lineValuesForShare(_lineValues),
                                 drawnLines: List<GeomancyCastLine>.unmodifiable(
                                   _lines,
                                 ),
@@ -787,15 +788,20 @@ class _GeomancyScreenState extends State<GeomancyScreen>
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 18),
                   decoration: BoxDecoration(
-                    color: hasText ? const Color(0xFF1E1430) : const Color(0xFF151126),
+                    color: hasText
+                        ? const Color(0xFF1E1430)
+                        : const Color(0xFF151126),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: hasText ? const Color(0xFF8A6B22) : const Color(0xFF3A2D50),
+                      color: hasText
+                          ? const Color(0xFF8A6B22)
+                          : const Color(0xFF3A2D50),
                     ),
                     boxShadow: hasText
                         ? [
                             BoxShadow(
-                              color: const Color(0xFF8A6B22).withValues(alpha: 0.2),
+                              color: const Color(0xFF8A6B22)
+                                  .withValues(alpha: 0.2),
                               blurRadius: 12,
                               spreadRadius: 1,
                             ),
@@ -925,9 +931,7 @@ class _GeomancyScreenState extends State<GeomancyScreen>
                   : const Color(0xFF1E1430),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: disabled
-                ? const Color(0xFF3A2D50)
-                : const Color(0xFF8A6B22),
+            color: disabled ? const Color(0xFF3A2D50) : const Color(0xFF8A6B22),
           ),
           boxShadow: disabled
               ? null
@@ -1336,7 +1340,7 @@ class _GeomancyScreenState extends State<GeomancyScreen>
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
-          if (effectiveGlow.alpha > 0)
+          if (effectiveGlow.a > 0)
             BoxShadow(
               color: effectiveGlow,
               blurRadius: 36,
@@ -1882,12 +1886,12 @@ class _SacredGeometryPainter extends CustomPainter {
       ..strokeWidth = 1;
 
     final center = Offset(size.width / 2, size.height / 2);
-    
+
     // Draw some concentric circles and diamonds
     for (int i = 1; i <= 5; i++) {
       final radius = size.width * 0.15 * i;
       canvas.drawCircle(center, radius, paint);
-      
+
       final path = Path()
         ..moveTo(center.dx, center.dy - radius)
         ..lineTo(center.dx + radius, center.dy)
@@ -1944,7 +1948,8 @@ class _ShieldEmblemPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _drawPolygon(Canvas canvas, int sides, double radius, double offsetAngle, Paint paint) {
+  void _drawPolygon(Canvas canvas, int sides, double radius, double offsetAngle,
+      Paint paint) {
     final path = Path();
     for (int i = 0; i < sides; i++) {
       final angle = offsetAngle + i * (2 * math.pi / sides);
@@ -1961,6 +1966,7 @@ class _ShieldEmblemPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ShieldEmblemPainter oldDelegate) {
-    return oldDelegate.rotationProgress != rotationProgress || oldDelegate.pulse != pulse;
+    return oldDelegate.rotationProgress != rotationProgress ||
+        oldDelegate.pulse != pulse;
   }
 }

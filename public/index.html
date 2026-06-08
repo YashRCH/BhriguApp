@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BHR1GU Invite</title>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code') || params.get('invite') || '';
+    const target = code
+      ? `/invite.html?code=${encodeURIComponent(code)}`
+      : '/invite.html';
+    window.location.replace(target);
+  </script>
+</head>
+<body>
+  <p>Opening BHR1GU invite...</p>
+</body>
+</html>

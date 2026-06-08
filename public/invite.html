@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BHR1GU Invite</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #050408;
+      --panel: #15110a;
+      --gold: #c7a867;
+      --text: #f2e8ff;
+      --muted: #b8aee0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: radial-gradient(circle at top, #21103d 0, var(--bg) 56%);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main {
+      width: min(440px, 100%);
+      padding: 28px;
+      border: 1px solid rgba(199, 168, 103, 0.32);
+      border-radius: 18px;
+      background: rgba(21, 17, 10, 0.88);
+      box-shadow: 0 22px 80px rgba(0, 0, 0, 0.36);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      color: var(--gold);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 28px;
+      letter-spacing: 5px;
+      text-align: center;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+      text-align: center;
+    }
+
+    .code {
+      margin: 22px 0;
+      padding: 16px;
+      border: 1px solid rgba(199, 168, 103, 0.3);
+      border-radius: 12px;
+      background: rgba(5, 4, 8, 0.72);
+      color: #fff4cf;
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      text-align: center;
+      user-select: all;
+    }
+
+    a, button {
+      width: 100%;
+      display: block;
+      margin-top: 12px;
+      padding: 15px 16px;
+      border: 1px solid rgba(199, 168, 103, 0.56);
+      border-radius: 12px;
+      background: #21103d;
+      color: var(--gold);
+      font: inherit;
+      font-weight: 800;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    button {
+      background: transparent;
+    }
+
+    small {
+      display: block;
+      margin-top: 16px;
+      color: rgba(184, 174, 224, 0.76);
+      line-height: 1.45;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>BHR1GU</h1>
+    <p>You have been invited to join someone's Circle.</p>
+    <div class="code" id="code">INVITE</div>
+    <a id="openApp" href="#">Open BHR1GU</a>
+    <button id="copyCode" type="button">Copy Code</button>
+    <small>If the app does not open, copy the code and enter it in Circle > Add.</small>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    const pathCode = pathParts[pathParts.length - 1] === 'invite.html'
+      ? ''
+      : pathParts[pathParts.length - 1];
+    const code = (params.get('code') || pathCode || '').toUpperCase();
+    const codeEl = document.getElementById('code');
+    const openApp = document.getElementById('openApp');
+    const copyCode = document.getElementById('copyCode');
+
+    codeEl.textContent = code || 'NO CODE';
+    openApp.href = code ? `bhrigu:///invite/${encodeURIComponent(code)}` : 'bhrigu:///invite';
+
+    copyCode.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(code);
+        copyCode.textContent = 'Copied';
+      } catch (_) {
+        codeEl.focus();
+      }
+    });
+  </script>
+</body>
+</html>

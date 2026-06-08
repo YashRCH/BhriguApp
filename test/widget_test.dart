@@ -49,6 +49,7 @@ void main() {
   test('user model serializes onboarding data for Firestore', () {
     final user = UserModel(
       name: 'Bhrigu',
+      username: 'bhrigu_1',
       dob: DateTime(2000, 1, 2),
       timeOfBirth: '08:30',
       placeOfBirth: 'Delhi',
@@ -59,12 +60,15 @@ void main() {
     final map = user.toMap();
 
     expect(map['name'], 'Bhrigu');
+    expect(map['username'], 'bhrigu_1');
+    expect(map['usernameLower'], 'bhrigu_1');
     expect(map['dob'], '2000-01-02T00:00:00.000');
     expect(map['timeOfBirth'], '08:30');
     expect(map['placeOfBirth'], 'Delhi');
     expect(map['latitude'], 28.6139);
     expect(map['longitude'], 77.2090);
     expect(map['aiResponseLanguage'], englishAiResponseLanguage);
+    expect(map['onboardingComplete'], isFalse);
     expect(map['createdAt'], isA<String>());
   });
 
@@ -667,9 +671,9 @@ void main() {
         'rewardClaimedCount': '5', // string number
         'createdAt': '2023-10-01T12:00:00.000Z',
       };
-      
+
       final state = OwlCompanionState.fromMap(map);
-      
+
       expect(state.owlName, 'Hedwig');
       expect(state.petProgress, 3);
       expect(state.lastPetDate, '2023-10-31');
@@ -677,6 +681,5 @@ void main() {
       expect(state.rewardClaimedCount, 5); // parsed to int
       expect(state.createdAt?.year, 2023);
     });
-
   });
 }

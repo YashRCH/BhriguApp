@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/user_model.dart';
 import 'astrology_service.dart';
+import 'social_profile_service.dart';
 import 'user_profile_cache_service.dart';
 
 class AuthService {
@@ -20,6 +21,7 @@ class AuthService {
   final _googleSignIn = GoogleSignIn();
 
   final _astrologyService = AstrologyService();
+  final _socialProfileService = SocialProfileService();
   static final Map<String, bool> _onboardingCache = {};
   static final Map<String, Future<bool>> _onboardingInFlight = {};
 
@@ -64,8 +66,9 @@ class AuthService {
     await cred.user?.reload();
     final user = _auth.currentUser ?? cred.user;
 
-    // TODO: Set this back to true before full public release
-    const requireEmailVerification = false;
+    // Set with --dart-define=REQUIRE_EMAIL_VERIFICATION=true for public release.
+    const requireEmailVerification =
+        bool.fromEnvironment('REQUIRE_EMAIL_VERIFICATION');
 
     if (user != null && !user.emailVerified && requireEmailVerification) {
       try {
@@ -122,11 +125,6 @@ class AuthService {
         );
 
     UserProfileCacheService.instance.primeCurrentUser(user.toMap());
-    _onboardingCache[uid] = true;
-    unawaited(_storage.write(
-      key: _onboardingStorageKey(uid),
-      value: 'true',
-    ));
 
     await _astrologyService.generateAndSaveCharts(
       uid: uid,
@@ -137,12 +135,32 @@ class AuthService {
       longitude: user.longitude,
     );
 
+    if (user.username.trim().isNotEmpty) {
+      await _socialProfileService.createOrUpdatePublicProfile(
+        username: user.username,
+      );
+    }
+
+    await _db.collection('users').doc(uid).set(
+      {
+        'onboardingComplete': true,
+        'updatedAt': DateTime.now().toIso8601String(),
+      },
+      SetOptions(merge: true),
+    );
+
     final refreshedDoc = await _db.collection('users').doc(uid).get();
     final refreshedData = refreshedDoc.data();
 
     if (refreshedData != null) {
       UserProfileCacheService.instance.primeCurrentUser(refreshedData);
     }
+
+    _onboardingCache[uid] = true;
+    unawaited(_storage.write(
+      key: _onboardingStorageKey(uid),
+      value: 'true',
+    ));
   }
 
   Future<void> _generateChartsIfMissing(String uid) async {
@@ -238,11 +256,12 @@ class AuthService {
 
   Future<bool> _refreshOnboardingCompletion(String uid) async {
     final doc = await _db.collection('users').doc(uid).get().timeout(
-      const Duration(seconds: 5),
-      onTimeout: () => throw TimeoutException('Firestore request timed out'),
-    );
+          const Duration(seconds: 5),
+          onTimeout: () =>
+              throw TimeoutException('Firestore request timed out'),
+        );
     final data = doc.data();
-    final completed = doc.exists;
+    final completed = _isOnboardingComplete(doc.exists, data);
 
     _onboardingCache[uid] = completed;
 
@@ -262,6 +281,17 @@ class AuthService {
     }
 
     return completed;
+  }
+
+  bool _isOnboardingComplete(bool exists, Map<String, dynamic>? data) {
+    if (!exists || data == null) return false;
+
+    final explicitCompletion = data['onboardingComplete'];
+    if (explicitCompletion is bool) return explicitCompletion;
+
+    return data['dob'] != null &&
+        data['timeOfBirth'] != null &&
+        data['placeOfBirth'] != null;
   }
 
   String _onboardingStorageKey(String uid) {

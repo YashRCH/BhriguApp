@@ -6,9 +6,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../models/geomancy_figure_model.dart';
+import '../services/share_file_service.dart';
 import 'geomancy_line_cast_widget.dart';
 
 class GeomancyShareButton extends StatefulWidget {
@@ -72,17 +72,20 @@ class _GeomancyShareButtonState extends State<GeomancyShareButton> {
       final pngBytes = byteData.buffer.asUint8List();
       final file = await _writeTempImage(pngBytes);
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
+      await ShareFileService.shareImageFile(
+        file,
         text: 'My Geomancy reading from BHRIGU',
       );
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('Geomancy share failed: $e');
+      debugPrintStack(stackTrace: stack);
+
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not share geomancy card: $e'),
-          backgroundColor: const Color(0xFF151126),
+        const SnackBar(
+          content: Text('Could not share geomancy card. Please try again.'),
+          backgroundColor: Color(0xFF151126),
         ),
       );
     } finally {

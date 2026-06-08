@@ -143,6 +143,50 @@ class FollowUpContextService {
     return docRef.id;
   }
 
+  Future<String> createConnectionFollowUpContext({
+    required String sourceType,
+    required String originalQuestion,
+    required String selectedFollowUpQuestion,
+    required String readingTitle,
+    required String readingSummary,
+    required Map<String, dynamic> sourceData,
+    String? aiResponseLanguage,
+  }) async {
+    final uid = _requireUid();
+    final userSnapshot = await _loadUserSnapshot(uid);
+    final contextLanguage = _contextLanguage(
+      userSnapshot,
+      aiResponseLanguage,
+    );
+
+    final docRef = _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('follow_up_contexts')
+        .doc();
+
+    final context = FollowUpContext(
+      id: docRef.id,
+      uid: uid,
+      sourceType: sourceType,
+      originalQuestion: originalQuestion,
+      selectedFollowUpQuestion: selectedFollowUpQuestion,
+      readingTitle: readingTitle,
+      readingSummary: readingSummary,
+      sourceData: sourceData,
+      userSnapshot: userSnapshot,
+      createdAt: DateTime.now(),
+      aiResponseLanguage: contextLanguage,
+    );
+
+    await docRef.set({
+      ...context.toFirestore(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    return docRef.id;
+  }
+
   Future<String> createHoroscopeFollowUpContext({
     required String originalQuestion,
     required String selectedFollowUpQuestion,

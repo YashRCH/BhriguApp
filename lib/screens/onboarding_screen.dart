@@ -24,6 +24,7 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen>
     with TickerProviderStateMixin {
   final _nameController = TextEditingController();
+  final _usernameController = TextEditingController();
 
   DateTime? _dob;
   TimeOfDay? _tob;
@@ -119,6 +120,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   @override
   void dispose() {
     _nameController.dispose();
+    _usernameController.dispose();
     _plasmaController.dispose();
     _entranceController.dispose();
     super.dispose();
@@ -214,7 +216,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Future<void> _next() async {
     if (_saving) return;
 
-    if (_step < 5) {
+    if (_step < 6) {
       setState(() {
         _step++;
         _submitError = null;
@@ -224,6 +226,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
     final user = UserModel(
       name: _nameController.text.trim(),
+      username: _cleanUsername(_usernameController.text),
       dob: _dob!,
       timeOfBirth: _tob!.format(context),
       placeOfBirth: _place.trim(),
@@ -245,7 +248,26 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       if (!mounted) return;
 
       saved = true;
-      context.go('/home');
+      context.go(_postOnboardingLocation());
+    } on FirebaseFunctionsException catch (e, stack) {
+      debugPrint('Onboarding save failed: ${e.code} ${e.message}');
+      debugPrintStack(stackTrace: stack);
+
+      if (!mounted) return;
+
+      setState(() {
+        if (e.code == 'already-exists') {
+          _step = 2;
+          _submitError = 'That username is taken. Choose another one.';
+        } else if (e.code == 'invalid-argument') {
+          _step = 2;
+          _submitError =
+              'Choose a username with 3-24 letters, numbers, or underscores.';
+        } else {
+          _submitError =
+              'Could not create your Circle profile. Please check your connection and try again.';
+        }
+      });
     } catch (e, stack) {
       debugPrint('Onboarding save failed: $e');
       debugPrintStack(stackTrace: stack);
@@ -268,16 +290,49 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   bool get _canProceed {
     if (_step == 0) return true;
     if (_step == 1) return _nameController.text.trim().isNotEmpty;
-    if (_step == 2) return _dob != null;
-    if (_step == 3) return _tob != null;
-    if (_step == 4) return _place.trim().isNotEmpty;
-    if (_step == 5) return true;
+    if (_step == 2) return _usernameError == null;
+    if (_step == 3) return _dob != null;
+    if (_step == 4) return _tob != null;
+    if (_step == 5) return _place.trim().isNotEmpty;
+    if (_step == 6) return true;
     return false;
+  }
+
+  String? get _usernameError {
+    final username = _cleanUsername(_usernameController.text);
+    if (username.isEmpty) return 'Choose a username.';
+    if (!RegExp(r'^[a-z0-9_]{3,24}$').hasMatch(username)) {
+      return 'Use 3-24 letters, numbers, or underscores.';
+    }
+
+    return null;
+  }
+
+  String _cleanUsername(String value) {
+    return value.trim().toLowerCase().replaceFirst(RegExp(r'^@+'), '');
+  }
+
+  String _postOnboardingLocation() {
+    return _safeRedirectLocation(
+          GoRouterState.of(context).uri.queryParameters['from'],
+        ) ??
+        '/home';
+  }
+
+  String? _safeRedirectLocation(String? value) {
+    final location = value?.trim();
+    if (location == null || location.isEmpty) return null;
+    if (!location.startsWith('/') || location.startsWith('//')) return null;
+    if (location.startsWith('/login') || location.startsWith('/onboarding')) {
+      return null;
+    }
+
+    return location;
   }
 
   String get _buttonText {
     if (_step == 0) return 'BEGIN THE JOURNEY';
-    if (_step == 5) return 'ENTER THE COSMOS';
+    if (_step == 6) return 'ENTER THE COSMOS';
     return 'CONTINUE';
   }
 
@@ -337,7 +392,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       Expanded(
                         child: Row(
                           children: List.generate(
-                            5,
+                            6,
                             (i) => Expanded(
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 300),
@@ -489,6 +544,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     const titles = [
       'THE ANCIENT SAGE REBORN',
       'WHAT SHALL I CALL YOU?',
+      'CHOOSE YOUR CIRCLE NAME',
       'WHEN WERE YOU BORN?',
       'AT WHAT HOUR?',
       'WHERE WERE YOU BORN?',
@@ -520,6 +576,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         );
 
       case 2:
+        return _buildUsernameStep(key: key);
+
+      case 3:
         return Column(
           key: key,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -560,7 +619,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ],
         );
 
-      case 3:
+      case 4:
         return Column(
           key: key,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -622,7 +681,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ],
         );
 
-      case 4:
+      case 5:
         return SingleChildScrollView(
           key: key,
           physics: const BouncingScrollPhysics(),
@@ -726,12 +785,104 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
         );
 
-      case 5:
+      case 6:
         return _buildLanguageStep(key: key);
 
       default:
         return SizedBox(key: key);
     }
+  }
+
+  Widget _buildUsernameStep({required Key key}) {
+    final usernameError =
+        _usernameController.text.trim().isEmpty ? null : _usernameError;
+
+    return SingleChildScrollView(
+      key: key,
+      physics: const BouncingScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _glassInput(
+            child: TextField(
+              controller: _usernameController,
+              autofocus: true,
+              textInputAction: TextInputAction.next,
+              autocorrect: false,
+              enableSuggestions: false,
+              onChanged: (_) => setState(() {
+                _submitError = null;
+              }),
+              style: GoogleFonts.cormorantGaramond(
+                fontSize: 22,
+                color: const Color(0xFFE5D5F5),
+              ),
+              cursorColor: const Color(0xFFB58E34),
+              decoration: _inputDecoration('username').copyWith(
+                prefixText: '@',
+                prefixStyle: GoogleFonts.cormorantGaramond(
+                  fontSize: 22,
+                  color: const Color(0xFFB58E34),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+          if (usernameError != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              usernameError,
+              style: GoogleFonts.inter(
+                color: const Color(0xFFE53E3E).withValues(alpha: 0.9),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  color: const Color(0xFFB58E34).withValues(alpha: 0.3),
+                  width: 2,
+                ),
+              ),
+            ),
+            child: Text(
+              'Your username lets friends and partners find you in Circle. Your exact birth details stay private.',
+              style: GoogleFonts.cormorantGaramond(
+                fontSize: 18,
+                color: const Color(0xFFC7A867).withValues(alpha: 0.8),
+                fontStyle: FontStyle.italic,
+                height: 1.5,
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F0A18).withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0xFF3A2D50),
+              ),
+            ),
+            child: Text(
+              'Use 3-24 letters, numbers, or underscores.',
+              style: GoogleFonts.cormorantGaramond(
+                fontSize: 17,
+                color: const Color(0xFFC7A867).withValues(alpha: 0.9),
+                height: 1.45,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildLanguageStep({required Key key}) {

@@ -4,9 +4,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../models/partner_match_model.dart';
+import '../services/share_file_service.dart';
 
 class PartnerMatchShareButton extends StatefulWidget {
   final PartnerMatchReading reading;
@@ -65,17 +65,20 @@ class _PartnerMatchShareButtonState extends State<PartnerMatchShareButton> {
       final shareText =
           'My BHR1GU compatibility reading with ${widget.reading.partner.name}.';
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
+      await ShareFileService.shareImageFile(
+        file,
         text: shareText,
       );
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('Partner match share failed: $e');
+      debugPrintStack(stackTrace: stack);
+
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not share card: $e'),
-          backgroundColor: const Color(0xFF0D0B08),
+        const SnackBar(
+          content: Text('Could not share card. Please try again.'),
+          backgroundColor: Color(0xFF0D0B08),
         ),
       );
     } finally {

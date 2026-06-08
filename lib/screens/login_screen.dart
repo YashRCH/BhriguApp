@@ -79,7 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       if (mounted) {
         final completed = await _auth.hasCompletedOnboarding();
-        if (mounted) context.go(completed ? '/home' : '/onboarding');
+        if (mounted) context.go(_postAuthLocation(completed));
       }
     } on FirebaseAuthException catch (e) {
       if (mounted) setState(() => _error = _friendlyAuthError(e));
@@ -107,7 +107,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       if (mounted) {
         final completed = await _auth.hasCompletedOnboarding();
-        if (mounted) context.go(completed ? '/home' : '/onboarding');
+        if (mounted) context.go(_postAuthLocation(completed));
       }
     } on FirebaseAuthException catch (e) {
       if (mounted) setState(() => _error = _friendlyAuthError(e));
@@ -120,6 +120,28 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String _friendlyAuthError(FirebaseAuthException e) {
     return _friendlyError(e.code);
+  }
+
+  String _postAuthLocation(bool completed) {
+    final from = _safeRedirectLocation(
+      GoRouterState.of(context).uri.queryParameters['from'],
+    );
+
+    if (completed) return from ?? '/home';
+    if (from == null) return '/onboarding';
+
+    return '/onboarding?from=${Uri.encodeComponent(from)}';
+  }
+
+  String? _safeRedirectLocation(String? value) {
+    final location = value?.trim();
+    if (location == null || location.isEmpty) return null;
+    if (!location.startsWith('/') || location.startsWith('//')) return null;
+    if (location.startsWith('/login') || location.startsWith('/onboarding')) {
+      return null;
+    }
+
+    return location;
   }
 
   String _friendlyError(String e) {

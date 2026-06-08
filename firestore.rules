@@ -19,6 +19,11 @@ service cloud.firestore {
       return value in ['english', 'hinglish'];
     }
 
+    function validUsername(value) {
+      return value is string
+        && value.matches('^[a-z0-9_]{3,24}$');
+    }
+
     function validOptionalCoordinate(value, min, max) {
       return value == null || (value is number && value >= min && value <= max);
     }
@@ -32,6 +37,9 @@ service cloud.firestore {
           'latitude',
           'longitude',
           'aiResponseLanguage',
+          'username',
+          'usernameLower',
+          'onboardingComplete',
           'createdAt',
         ])
         && request.resource.data.keys().hasAll([
@@ -40,6 +48,9 @@ service cloud.firestore {
           'timeOfBirth',
           'placeOfBirth',
           'aiResponseLanguage',
+          'username',
+          'usernameLower',
+          'onboardingComplete',
           'createdAt',
         ])
         && request.resource.data.name is string
@@ -62,15 +73,29 @@ service cloud.firestore {
           || validOptionalCoordinate(request.resource.data.longitude, -180, 180)
         )
         && validAiResponseLanguage(request.resource.data.aiResponseLanguage)
+        && validUsername(request.resource.data.username)
+        && request.resource.data.usernameLower == request.resource.data.username
+        && request.resource.data.onboardingComplete == false
         && request.resource.data.createdAt is string
         && request.resource.data.createdAt.size() <= 40;
     }
 
     function validUserProfileUpdate() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+      return (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'aiResponseLanguage',
         ])
-        && validAiResponseLanguage(request.resource.data.aiResponseLanguage);
+        && validAiResponseLanguage(request.resource.data.aiResponseLanguage)
+      ) || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'onboardingComplete',
+          'updatedAt',
+        ])
+        && resource.data.onboardingComplete == false
+        && request.resource.data.onboardingComplete == true
+        && request.resource.data.updatedAt is string
+        && request.resource.data.updatedAt.size() <= 40
+      );
     }
 
     function validAiReport() {
@@ -151,6 +176,40 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /public_profiles/{userId} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
+    match /usernames/{username} {
+      allow read, write: if false;
+    }
+
+    match /invites/{inviteId} {
+      allow read, write: if false;
+    }
+
+    match /connections/{connectionId} {
+      allow read: if signedIn()
+        && resource.data.memberIds is list
+        && request.auth.uid in resource.data.memberIds;
+      allow create, update, delete: if false;
+
+      match /compatibility/{readingId} {
+        allow read: if signedIn()
+          && get(/databases/$(database)/documents/connections/$(connectionId)).data.memberIds is list
+          && request.auth.uid in get(/databases/$(database)/documents/connections/$(connectionId)).data.memberIds;
+        allow create, update, delete: if false;
+      }
+
+      match /daily_energy/{dateId} {
+        allow read: if signedIn()
+          && get(/databases/$(database)/documents/connections/$(connectionId)).data.memberIds is list
+          && request.auth.uid in get(/databases/$(database)/documents/connections/$(connectionId)).data.memberIds;
+        allow create, update, delete: if false;
+      }
+    }
+
     match /users/{userId}/chat/{messageId} {
       allow read: if isOwner(userId);
       allow create, update, delete: if isOwner(userId) && verifiedEmail();
@@ -169,6 +228,11 @@ service cloud.firestore {
     match /users/{userId}/follow_up_contexts/{contextId} {
       allow read: if isOwner(userId);
       allow create, update, delete: if isOwner(userId) && verifiedEmail();
+    }
+
+    match /users/{userId}/connections/{otherUserId} {
+      allow read: if isOwner(userId);
+      allow create, update, delete: if false;
     }
 
     match /users/{userId}/tarot_readings/{readingId} {
