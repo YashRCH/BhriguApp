@@ -44,7 +44,7 @@ const MILLISECONDS_PER_DAY = 86400000;
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
 const CHART_CALCULATION_VERSION = "nasa_jpl_horizons_v5_observer_ecliptic_nodes";
-const HOME_HOROSCOPE_CONTENT_VERSION = "home_signal_v6_complete_sentences";
+const HOME_HOROSCOPE_CONTENT_VERSION = "home_signal_v7_base_gemini";
 const ENGLISH_AI_RESPONSE_LANGUAGE = "english";
 const HINGLISH_AI_RESPONSE_LANGUAGE = "hinglish";
 
@@ -455,7 +455,7 @@ async function generateGeminiReadingText({
   systemInstruction,
   maxTokens,
   temperature,
-  model = GEMINI_FLASH_LITE_MODEL,
+  model = BHRIGU_TUNED_MODEL,
 }) {
   const { token, projectId } = await getVertexAuth();
   const region = FUNCTION_REGION || "us-central1";

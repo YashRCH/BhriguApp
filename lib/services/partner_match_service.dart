@@ -504,7 +504,7 @@ Retrieve astrology compatibility knowledge about:
         aiResponseLanguage: responseLanguage,
       );
     } catch (e) {
-      debugPrint('Partner match Groq error: $e');
+      debugPrint('Partner match AI error: $e');
 
       return _PartnerMatchReadingResult(
         text: _fallbackReading(

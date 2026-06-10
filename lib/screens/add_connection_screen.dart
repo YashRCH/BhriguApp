@@ -4,8 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/social_connection_model.dart';
+import '../services/circle_safety_service.dart';
 import '../services/connection_service.dart';
 import '../services/social_profile_service.dart';
+import '../widgets/circle_safety_gate.dart';
 import '../widgets/cosmic_screen_background.dart';
 
 class AddConnectionScreen extends StatefulWidget {
@@ -25,6 +27,7 @@ class AddConnectionScreen extends StatefulWidget {
 class _AddConnectionScreenState extends State<AddConnectionScreen> {
   final _profileService = SocialProfileService();
   final _connectionService = ConnectionService();
+  final _circleSafetyService = CircleSafetyService();
   final _usernameController = TextEditingController();
   final _inviteCodeController = TextEditingController();
 
@@ -59,6 +62,8 @@ class _AddConnectionScreenState extends State<AddConnectionScreen> {
   }
 
   Future<void> _search() async {
+    if (!await _ensureCircleSafetyAccepted()) return;
+
     // FIXED: Clear stale results immediately so old entries are not visible
     // while the new search is in flight.
     setState(() {
@@ -85,6 +90,8 @@ class _AddConnectionScreenState extends State<AddConnectionScreen> {
   }
 
   Future<void> _sendRequest(PublicAstrologyProfile profile) async {
+    if (!await _ensureCircleSafetyAccepted()) return;
+
     setState(() => _loading = true);
 
     try {
@@ -110,6 +117,8 @@ class _AddConnectionScreenState extends State<AddConnectionScreen> {
   }
 
   Future<void> _createInvite() async {
+    if (!await _ensureCircleSafetyAccepted()) return;
+
     setState(() => _loading = true);
 
     try {
@@ -132,6 +141,8 @@ class _AddConnectionScreenState extends State<AddConnectionScreen> {
   }
 
   Future<void> _acceptInvite() async {
+    if (!await _ensureCircleSafetyAccepted()) return;
+
     setState(() => _loading = true);
 
     try {
@@ -158,6 +169,20 @@ class _AddConnectionScreenState extends State<AddConnectionScreen> {
         setState(() => _loading = false);
       }
     }
+  }
+
+  Future<bool> _ensureCircleSafetyAccepted() async {
+    try {
+      final accepted = await _circleSafetyService.hasAcceptedCurrentPolicy();
+      if (accepted) return true;
+
+      _showError('Review and accept Circle Guidelines first.');
+    } catch (e, stack) {
+      _logError('Circle safety check failed', e, stack);
+      _showError('Could not verify Circle Guidelines right now.');
+    }
+
+    return false;
   }
 
   void _showError(String message) {
@@ -194,105 +219,110 @@ class _AddConnectionScreenState extends State<AddConnectionScreen> {
       body: CosmicScreenBackground(
         child: Padding(
           padding: EdgeInsets.only(top: topPadding),
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(18, 12, 18, 110),
-            children: [
-              _relationshipSelector(),
-              const SizedBox(height: 18),
-              _card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Search username',
-                      style: TextStyle(
-                        color: Color(0xFFFFD88A),
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
+          child: CircleSafetyGate(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 110),
+              children: [
+                _relationshipSelector(),
+                const SizedBox(height: 18),
+                _card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Search username',
+                        style: TextStyle(
+                          color: Color(0xFFFFD88A),
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _usernameController,
-                      style: const TextStyle(color: Colors.white),
-                      textInputAction: TextInputAction.search,
-                      onSubmitted: (_) => _search(),
-                      decoration: const InputDecoration(
-                        hintText: 'friend_username',
-                        hintStyle: TextStyle(color: Color(0xFF8B7A56)),
-                        prefixIcon: Icon(Icons.search),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _usernameController,
+                        style: const TextStyle(color: Colors.white),
+                        textInputAction: TextInputAction.search,
+                        onSubmitted: (_) => _search(),
+                        decoration: const InputDecoration(
+                          hintText: 'friend_username',
+                          hintStyle: TextStyle(color: Color(0xFF8B7A56)),
+                          prefixIcon: Icon(Icons.search),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    ElevatedButton.icon(
-                      onPressed: _loading ? null : _search,
-                      icon: const Icon(Icons.search),
-                      label: const Text('Search'),
-                    ),
-                    const SizedBox(height: 12),
-                    ..._results.map(_profileResult),
-                  ],
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: _loading ? null : _search,
+                        icon: const Icon(Icons.search),
+                        label: const Text('Search'),
+                      ),
+                      const SizedBox(height: 12),
+                      ..._results.map(_profileResult),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 18),
-              _card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Invite someone new',
-                      style: TextStyle(
-                        color: Color(0xFFFFD88A),
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
+                const SizedBox(height: 18),
+                _card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Invite someone new',
+                        style: TextStyle(
+                          color: Color(0xFFFFD88A),
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'They will create an account, complete onboarding, and accept your invite.',
-                      style: TextStyle(color: Color(0xFFB8AEE0), height: 1.45),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: _loading ? null : _createInvite,
-                      icon: const Icon(Icons.ios_share_rounded),
-                      label: const Text('Share invite'),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      const Text(
+                        'They will create an account, complete onboarding, and accept your invite.',
+                        style: TextStyle(
+                          color: Color(0xFFB8AEE0),
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: _loading ? null : _createInvite,
+                        icon: const Icon(Icons.ios_share_rounded),
+                        label: const Text('Share invite'),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 18),
-              _card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Enter invite code',
-                      style: TextStyle(
-                        color: Color(0xFFFFD88A),
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
+                const SizedBox(height: 18),
+                _card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Enter invite code',
+                        style: TextStyle(
+                          color: Color(0xFFFFD88A),
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _inviteCodeController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        hintText: 'ABCD1234',
-                        hintStyle: TextStyle(color: Color(0xFF8B7A56)),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _inviteCodeController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          hintText: 'ABCD1234',
+                          hintStyle: TextStyle(color: Color(0xFF8B7A56)),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    ElevatedButton.icon(
-                      onPressed: _loading ? null : _acceptInvite,
-                      icon: const Icon(Icons.check_circle_rounded),
-                      label: const Text('Accept invite'),
-                    ),
-                  ],
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: _loading ? null : _acceptInvite,
+                        icon: const Icon(Icons.check_circle_rounded),
+                        label: const Text('Accept invite'),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -37,6 +38,8 @@ class _TarotScreenState extends State<TarotScreen>
   late final Animation<double> _breathAnimation;
 
   late final AnimationController _plasmaController;
+
+  ui.Image? _tarotBackImage;
 
   List<TarotCard>? get _cards => _flow.cards;
   List<bool> get _revealed => _flow.revealed;
@@ -86,6 +89,26 @@ class _TarotScreenState extends State<TarotScreen>
         _hintIndex = (_hintIndex + 1) % tarotHints.length;
       });
     });
+
+    _loadTarotBackImage();
+  }
+
+  Future<void> _loadTarotBackImage() async {
+    try {
+      final data = await DefaultAssetBundle.of(context)
+          .load('assets/tarot/Tarotback.png');
+      final codec = await ui.instantiateImageCodec(
+        data.buffer.asUint8List(),
+      );
+      final frame = await codec.getNextFrame();
+      if (mounted) {
+        setState(() {
+          _tarotBackImage = frame.image;
+        });
+      }
+    } catch (_) {
+      // Falls back to canvas design if image can't load
+    }
   }
 
   @override
@@ -434,6 +457,7 @@ class _TarotScreenState extends State<TarotScreen>
                       painter: _PentacleAltarPainter(
                         progress: _plasmaController.value,
                         glow: _breathAnimation.value,
+                        cardImage: _tarotBackImage,
                       ),
                     ),
                   ),
@@ -571,14 +595,14 @@ class _TarotScreenState extends State<TarotScreen>
                         transform: Matrix4.identity()..rotateY(math.pi),
                         child: _cardFront(index),
                       )
-                    : _cardBack(width: 100, height: 165),
+                    : _cardBack(width: 104, height: 170),
               );
             },
           ),
           const SizedBox(height: 16),
           if (_revealed[index] && _cards != null)
             SizedBox(
-              width: 100,
+              width: 104,
               child: Text(
                 _cards![index].name.toUpperCase(),
                 textAlign: TextAlign.center,
@@ -589,6 +613,15 @@ class _TarotScreenState extends State<TarotScreen>
                   height: 1.3,
                 ),
               ),
+            )
+          else
+            Text(
+              'Tap',
+              style: GoogleFonts.cinzel(
+                fontSize: 11,
+                color: const Color(0xFF6B6080),
+                letterSpacing: 1.5,
+              ),
             ),
         ],
       ),
@@ -596,8 +629,8 @@ class _TarotScreenState extends State<TarotScreen>
   }
 
   Widget _cardBack({
-    double width = 95,
-    double height = 155,
+    double width = 104,
+    double height = 170,
   }) {
     return Container(
       width: width,
@@ -620,7 +653,7 @@ class _TarotScreenState extends State<TarotScreen>
       child: ClipRRect(
         borderRadius: BorderRadius.circular(7),
         child: Image.asset(
-          'assets/tarot/card_back.webp',
+          'assets/tarot/Tarotback.png',
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => Stack(
             alignment: Alignment.center,
@@ -1393,10 +1426,12 @@ class _TeslaGlobeLoaderState extends State<_TeslaGlobeLoader>
 class _PentacleAltarPainter extends CustomPainter {
   final double progress;
   final double glow;
+  final ui.Image? cardImage;
 
   _PentacleAltarPainter({
     required this.progress,
     required this.glow,
+    this.cardImage,
   });
 
   @override
@@ -1448,7 +1483,7 @@ class _PentacleAltarPainter extends CustomPainter {
     }
 
     // Bigger cards
-    final cardWidth = size.width * 0.35;
+    final cardWidth = size.width * 0.40;
     final cardHeight = cardWidth * 1.6;
     final cardRect = Rect.fromCenter(center: Offset.zero, width: cardWidth, height: cardHeight);
     final cardRRect = RRect.fromRectAndRadius(cardRect, const Radius.circular(8));
@@ -1474,147 +1509,33 @@ class _PentacleAltarPainter extends CustomPainter {
       canvas.rotate(currentAngle);
       canvas.translate(-pivot.dx, -pivot.dy);
 
-      // Card Background (dark to hide lines behind it)
-      final cardBgPaint = Paint()
-        ..color = const Color(0xFF0F0A18).withValues(alpha: 0.95)
-        ..style = PaintingStyle.fill;
-      canvas.drawRRect(cardRRect, cardBgPaint);
-
-      // Card Geometric Outline
-      canvas.drawRRect(cardRRect, linePaint);
-      canvas.drawRRect(cardRRect, highlightPaint);
-
-      // Draw an elegant double inner geometric border
-      final innerRRect = RRect.fromRectAndRadius(
-        cardRect.deflate(6), 
-        const Radius.circular(4),
-      );
-      canvas.drawRRect(innerRRect, linePaint);
-
-      final innerRRect2 = RRect.fromRectAndRadius(
-        cardRect.deflate(10), 
-        const Radius.circular(3),
-      );
-      canvas.drawRRect(innerRRect2, highlightPaint);
-
-      // -------------------------------------------------------------
-      // Mystical Esoteric Card Back Design (Highly Ornate)
-      // -------------------------------------------------------------
-
-      // 1. Ornate Double Border
-      final border1 = RRect.fromRectAndRadius(cardRect.deflate(4), const Radius.circular(6));
-      final border2 = RRect.fromRectAndRadius(cardRect.deflate(8), const Radius.circular(4));
-      canvas.drawRRect(border1, linePaint);
-      canvas.drawRRect(border2, highlightPaint);
-
-      // 2. Corner Mystical 4-Pointed Stars
-      void drawCornerStar(double dx, double dy) {
-        canvas.save();
-        canvas.translate(dx, dy);
-        final star = Path()
-          ..moveTo(0, -8)
-          ..lineTo(2, -2)
-          ..lineTo(8, 0)
-          ..lineTo(2, 2)
-          ..lineTo(0, 8)
-          ..lineTo(-2, 2)
-          ..lineTo(-8, 0)
-          ..lineTo(-2, -2)
-          ..close();
-        canvas.drawPath(star, glowPaint);
-        canvas.drawPath(star, highlightPaint);
-        canvas.restore();
-      }
-      final cx = cardWidth / 2 - 16;
-      final cy = cardHeight / 2 - 16;
-      drawCornerStar(cx, cy);
-      drawCornerStar(-cx, cy);
-      drawCornerStar(cx, -cy);
-      drawCornerStar(-cx, -cy);
-
-      // 3. Central Radiant Sunburst Core
-      final coreRadius = cardWidth * 0.16;
-      
-      // Radiant Sunburst spanning out
-      for (int k = 0; k < 36; k++) {
-        final angle = k * (2 * math.pi / 36);
-        final innerR = coreRadius * 1.1;
-        // Alternating ray lengths for mystical effect
-        final outerR = k % 2 == 0 ? cardWidth * 0.42 : cardWidth * 0.32;
-        canvas.drawLine(
-          Offset(innerR * math.cos(angle), innerR * math.sin(angle)),
-          Offset(outerR * math.cos(angle), outerR * math.sin(angle)),
-          linePaint,
+      if (cardImage != null) {
+        // Draw Tarotback.png as the card face
+        final imgPaint = Paint();
+        final srcRect = Rect.fromLTWH(
+          0, 0,
+          cardImage!.width.toDouble(),
+          cardImage!.height.toDouble(),
         );
-      }
-
-      // Inner Core Rings
-      canvas.drawCircle(Offset.zero, coreRadius, linePaint);
-      canvas.drawCircle(Offset.zero, coreRadius * 0.8, glowPaint);
-
-      // 4. The World Symbol (Large Geometric Mandorla/Wreath)
-      // Representing the laurel wreath of The World card
-      final wreathHeight = cardHeight * 0.42;
-      final wreathWidth = cardWidth * 0.35;
-      
-      final worldWreath = Path()
-        ..moveTo(0, -wreathHeight) // Top point
-        ..quadraticBezierTo(wreathWidth, 0, 0, wreathHeight) // Right curve
-        ..quadraticBezierTo(-wreathWidth, 0, 0, -wreathHeight) // Left curve
-        ..close();
-      
-      canvas.drawPath(worldWreath, linePaint);
-      
-      final innerWreath = Path()
-        ..moveTo(0, -wreathHeight * 0.9)
-        ..quadraticBezierTo(wreathWidth * 0.8, 0, 0, wreathHeight * 0.9)
-        ..quadraticBezierTo(-wreathWidth * 0.8, 0, 0, -wreathHeight * 0.9)
-        ..close();
-      
-      canvas.drawPath(innerWreath, highlightPaint);
-      
-      // Infinity bindings (lemniscates) traditionally tied at the top and bottom of The World wreath
-      void drawInfinityTie(double yPos) {
-        final tie = Path()
-          ..moveTo(0, yPos)
-          ..quadraticBezierTo(12, yPos - 8, 16, yPos)
-          ..quadraticBezierTo(12, yPos + 8, 0, yPos)
-          ..quadraticBezierTo(-12, yPos - 8, -16, yPos)
-          ..quadraticBezierTo(-12, yPos + 8, 0, yPos)
-          ..close();
-        canvas.drawPath(tie, glowPaint);
-        canvas.drawPath(tie, highlightPaint);
-      }
-      
-      drawInfinityTie(-wreathHeight);
-      drawInfinityTie(wreathHeight);
-
-      // 5. Crescent Moons Flanking the Core (Left and Right)
-      void drawCrescent(double xOffset, bool flip) {
-        canvas.save();
-        canvas.translate(xOffset, 0);
-        if (flip) canvas.rotate(math.pi);
-        // Draw an elegant crescent
-        final cPath = Path()
-          ..addArc(Rect.fromCircle(center: Offset.zero, radius: coreRadius * 0.6), math.pi / 2, math.pi)
-          ..addArc(Rect.fromCircle(center: Offset(-coreRadius * 0.25, 0), radius: coreRadius * 0.5), -math.pi / 2, -math.pi)
-          ..close();
-        canvas.drawPath(cPath, linePaint);
-        canvas.drawPath(cPath, glowPaint);
+        final clipPath = Path()..addRRect(cardRRect);
+        canvas.clipPath(clipPath);
+        canvas.drawImageRect(cardImage!, srcRect, cardRect, imgPaint);
+        // Restore clip then re-apply transform to draw border on top
         canvas.restore();
+        canvas.save();
+        canvas.translate(pivot.dx, pivot.dy);
+        canvas.rotate(currentAngle);
+        canvas.translate(-pivot.dx, -pivot.dy);
+        canvas.drawRRect(cardRRect, linePaint);
+      } else {
+        // Fallback: original canvas design
+        final cardBgPaint = Paint()
+          ..color = const Color(0xFF0F0A18).withValues(alpha: 0.95)
+          ..style = PaintingStyle.fill;
+        canvas.drawRRect(cardRRect, cardBgPaint);
+        canvas.drawRRect(cardRRect, linePaint);
+        canvas.drawRRect(cardRRect, highlightPaint);
       }
-      
-      drawCrescent(-cardWidth * 0.26, false); // Left facing left
-      drawCrescent(cardWidth * 0.26, true);   // Right facing right
-
-      // 6. Central Mystical Seed / Eye geometry
-      final seed = Path()
-        ..moveTo(0, -coreRadius * 0.5)
-        ..quadraticBezierTo(coreRadius * 0.5, 0, 0, coreRadius * 0.5)
-        ..quadraticBezierTo(-coreRadius * 0.5, 0, 0, -coreRadius * 0.5)
-        ..close();
-      canvas.drawPath(seed, highlightPaint);
-      canvas.drawCircle(Offset.zero, 3, glowPaint);
 
       canvas.restore();
     }
@@ -1624,7 +1545,9 @@ class _PentacleAltarPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PentacleAltarPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.glow != glow;
+    return oldDelegate.progress != progress ||
+        oldDelegate.glow != glow ||
+        oldDelegate.cardImage != cardImage;
   }
 }
 

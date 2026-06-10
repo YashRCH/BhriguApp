@@ -9,6 +9,7 @@ class UserModel {
   final double? latitude;
   final double? longitude;
   final String aiResponseLanguage;
+  final List<String> fcmTokens;
 
   UserModel({
     required this.name,
@@ -19,6 +20,7 @@ class UserModel {
     this.latitude,
     this.longitude,
     this.aiResponseLanguage = englishAiResponseLanguage,
+    this.fcmTokens = const [],
   });
 
   Map<String, dynamic> toMap() => {

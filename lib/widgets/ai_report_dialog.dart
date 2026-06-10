@@ -52,6 +52,11 @@ class _AiReportDialogState extends State<AiReportDialog> {
   String? _error;
   bool _submitting = false;
 
+  bool get _isCircleReport {
+    final feature = widget.feature.trim().toLowerCase();
+    return feature == 'circle' || feature == 'connection';
+  }
+
   @override
   void dispose() {
     _commentController.dispose();
@@ -97,7 +102,7 @@ class _AiReportDialogState extends State<AiReportDialog> {
         ),
       ),
       title: Text(
-        'Report AI Content',
+        _isCircleReport ? 'Report Circle' : 'Report AI Content',
         style: GoogleFonts.cinzel(
           color: const Color(0xFFC7A867),
           fontSize: 18,
@@ -110,7 +115,7 @@ class _AiReportDialogState extends State<AiReportDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Choose a reason.',
+              _isCircleReport ? 'Tell us what happened.' : 'Choose a reason.',
               style: GoogleFonts.inter(
                 color: const Color(0xFFB8AEE0),
                 fontSize: 13,

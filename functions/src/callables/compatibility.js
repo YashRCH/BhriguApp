@@ -13,7 +13,7 @@ const {
   PLACES_REQUEST_TIMEOUT_MS,
   GROQ_API_KEY,
   GEMINI_API_KEY,
-  GEMINI_FLASH_LITE_MODEL,
+  BHRIGU_TUNED_MODEL,
   GROQ_PARTNER_MATCH_MODEL,
   GROQ_BHRIGU_CHAT_MODEL,
   TAROT_READING_CONTENT_VERSION,
@@ -438,7 +438,7 @@ ${languageInstruction(aiResponseLanguage)}
     const systemInstruction =
       `Follow the compatibility reading format exactly with every requested section label once and in order. Do not use markdown. Do not use bullet points. Do not ask a question at the end. Do not write percentage numbers.\n${languageInstruction(aiResponseLanguage)}`;
     let providerUsed = "gemini";
-    let modelUsed = GEMINI_FLASH_LITE_MODEL;
+    let modelUsed = BHRIGU_TUNED_MODEL;
 
     try {
       let text = await generateGeminiReadingText({
@@ -544,7 +544,7 @@ ${languageInstruction(aiResponseLanguage)}
       await recordUsageEvent(decodedToken.uid, {
         feature: "compatibility_insight",
         provider: "gemini",
-        model: GEMINI_FLASH_LITE_MODEL,
+        model: BHRIGU_TUNED_MODEL,
         cached: false,
       });
 
@@ -554,7 +554,7 @@ ${languageInstruction(aiResponseLanguage)}
       };
     } catch (error) {
       console.error(
-        "Chart AI Groq error:",
+        "Compatibility insight Gemini error:",
         error.response?.data || error.message
       );
 

@@ -20,6 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLogin = true;
   bool _loading = false;
+  bool _obscurePassword = true;
   String? _error;
   String? _info;
 
@@ -321,11 +322,26 @@ class _LoginScreenState extends State<LoginScreen> {
                   _glassInput(
                     child: TextField(
                       controller: _passwordController,
-                      obscureText: true,
+                      obscureText: _obscurePassword,
                       style: GoogleFonts.cormorantGaramond(
                           fontSize: 22, color: const Color(0xFFE5D5F5)),
                       cursorColor: const Color(0xFFB58E34),
-                      decoration: _inputDecoration('Password'),
+                      decoration: _inputDecoration('Password').copyWith(
+                        suffixIcon: IconButton(
+                          tooltip: _obscurePassword
+                              ? 'Show password'
+                              : 'Hide password',
+                          onPressed: () => setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          }),
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                            color: const Color(0xFFB58E34),
+                          ),
+                        ),
+                      ),
                       onSubmitted: (_) => _submitEmail(),
                     ),
                   ),

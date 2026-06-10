@@ -24,6 +24,39 @@ service cloud.firestore {
         && value.matches('^[a-z0-9_]{3,24}$');
     }
 
+    function validFcmTokens(value) {
+      return value is list
+        && value.size() <= 20
+        && validOptionalFcmTokenAt(value, 0)
+        && validOptionalFcmTokenAt(value, 1)
+        && validOptionalFcmTokenAt(value, 2)
+        && validOptionalFcmTokenAt(value, 3)
+        && validOptionalFcmTokenAt(value, 4)
+        && validOptionalFcmTokenAt(value, 5)
+        && validOptionalFcmTokenAt(value, 6)
+        && validOptionalFcmTokenAt(value, 7)
+        && validOptionalFcmTokenAt(value, 8)
+        && validOptionalFcmTokenAt(value, 9)
+        && validOptionalFcmTokenAt(value, 10)
+        && validOptionalFcmTokenAt(value, 11)
+        && validOptionalFcmTokenAt(value, 12)
+        && validOptionalFcmTokenAt(value, 13)
+        && validOptionalFcmTokenAt(value, 14)
+        && validOptionalFcmTokenAt(value, 15)
+        && validOptionalFcmTokenAt(value, 16)
+        && validOptionalFcmTokenAt(value, 17)
+        && validOptionalFcmTokenAt(value, 18)
+        && validOptionalFcmTokenAt(value, 19);
+    }
+
+    function validOptionalFcmTokenAt(value, index) {
+      return value.size() <= index || (
+        value[index] is string
+        && value[index].size() > 0
+        && value[index].size() <= 4096
+      );
+    }
+
     function validOptionalCoordinate(value, min, max) {
       return value == null || (value is number && value >= min && value <= max);
     }
@@ -95,6 +128,11 @@ service cloud.firestore {
         && request.resource.data.onboardingComplete == true
         && request.resource.data.updatedAt is string
         && request.resource.data.updatedAt.size() <= 40
+      ) || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'fcmTokens',
+        ])
+        && validFcmTokens(request.resource.data.fcmTokens)
       );
     }
 
@@ -128,6 +166,8 @@ service cloud.firestore {
           'geomancy',
           'match',
           'horoscope',
+          'circle',
+          'connection',
         ]
         && request.resource.data.contentId is string
         && request.resource.data.contentId.size() > 0

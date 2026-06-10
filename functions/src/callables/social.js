@@ -15,9 +15,10 @@ const {
 } = require("../core");
 
 const SOCIAL_COMPATIBILITY_CONTENT_VERSION = "connection_compatibility_v4";
-const CONNECTION_DAILY_ENERGY_CONTENT_VERSION = "connection_daily_energy_v2";
+const CONNECTION_DAILY_ENERGY_CONTENT_VERSION = "connection_daily_energy_v9_base_gemini";
 const FRIEND_SCORE_ALGORITHM_VERSION = "friend_blueprint_math_v1";
 const PARTNER_SCORE_ALGORITHM_VERSION = "partner_blueprint_math_v1";
+const CIRCLE_SAFETY_POLICY_VERSION = "circle_safety_v1";
 const VALID_RELATIONSHIP_TYPES = new Set(["friend", "partner"]);
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -1047,6 +1048,7 @@ ${languageInstruction(aiResponseLanguage)}
       prompt,
       maxTokens: 1050,
       temperature: 0.35,
+      model: GEMINI_FLASH_LITE_MODEL,
     });
   } catch (error) {
     console.error("Partner connection reading generation failed:", error.response?.data || error.message);
@@ -1284,6 +1286,34 @@ async function deleteSubcollection(parentRef, subcollectionName) {
 }
 
 // ─── Exported Cloud Functions ────────────────────────────────────────────────
+
+exports.acceptCircleSafetyPolicy = onCall(
+  callableRuntimeOptions({ region: FUNCTION_REGION }),
+  async (request) => {
+    const auth = requireCallableAuth(request);
+    const version = String(request.data?.version || "").trim();
+
+    if (version !== CIRCLE_SAFETY_POLICY_VERSION) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Circle policy version is invalid."
+      );
+    }
+
+    await admin.firestore().collection("users").doc(auth.uid).set(
+      {
+        circleSafetyPolicyVersion: CIRCLE_SAFETY_POLICY_VERSION,
+        circleSafetyAcceptedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return {
+      ok: true,
+      version: CIRCLE_SAFETY_POLICY_VERSION,
+    };
+  }
+);
 
 exports.createOrUpdatePublicProfile = onCall(
   callableRuntimeOptions({
@@ -2032,6 +2062,7 @@ ${languageInstruction(aiResponseLanguage)}
         prompt,
         maxTokens: 620,
         temperature: 0.58,
+        model: GEMINI_FLASH_LITE_MODEL,
       });
       const aiParsed = parseSections(text, labels);
       parsed = {
@@ -2116,11 +2147,13 @@ exports.generateConnectionDailyEnergy = onCall(
     const userB = userBDoc.data() || {};
     const aiResponseLanguage = await resolveAiResponseLanguage(auth.uid, request.data.aiResponseLanguage);
     const labels = [
-      "A_ENERGY",
+      "A_HEADING",
+      "A_FEELING",
       "A_DO",
       "A_AVOID",
       "A_BEST_APPROACH",
-      "B_ENERGY",
+      "B_HEADING",
+      "B_FEELING",
       "B_DO",
       "B_AVOID",
       "B_BEST_APPROACH",
@@ -2159,33 +2192,41 @@ Write advice for how the other person should approach them today.
 Do not reveal birth date, birth time, birthplace, coordinates, backend details, or private chart JSON.
 Friend mode must avoid romantic and partner language.
 Voice rules:
-- Write short lines, not paragraphs.
-- Each answer should sound like a direct note, not a mystical essay.
+- Write 2-3 short, punchy sentences per section. No long paragraphs.
+- Use the voice of a dramatic, no-nonsense TikTok/Reels tarot reader. It should sound like an intense, hyper-specific personal call-out ("listen to me carefully," "this is exactly what's happening," "I need you to hear this").
+- Drop the heavy mystical/cosmic astrology jargon; keep it snappy, modern, and highly dramatic.
+- Each answer should sound like a direct, intense warning or revelation spoken directly to the camera.
 - Be specific about tone, timing, pressure, silence, attention, or repair.
-- Say the uncomfortable thing when the chart suggests friction.
-- Avoid cushioning every warning with positivity.
-- Avoid generic advice like "be supportive", "communicate clearly", or "listen more".
-- Avoid therapy jargon and over-explaining.
-- Keep the language modern, minimal, emotionally sharp, and plainspoken.
+- Say the uncomfortable thing when the chart suggests friction, using bold, striking, "tea-spilling" words.
+- Avoid cushioning every warning with positivity; give it to them straight.
+- Avoid generic advice like "be supportive" or "listen more". Tell them exactly how to move.
+- Keep the language emotionally sharp, punchy, and fiercely honest.
+- CRITICAL PRONOUN RULE: You are writing notes that each person will read about the OTHER person.
+- When writing the A_... sections (A_FEELING), write it as if Person B is reading it. Describe Person A in the THIRD PERSON ("They are feeling...", "${profileA.displayName} is..."). In A_DO, A_AVOID, A_BEST_APPROACH, speak directly to Person B ("You should do this...", "Avoid doing...").
+- When writing the B_... sections (B_FEELING), write it as if Person A is reading it. Describe Person B in the THIRD PERSON ("They are feeling...", "${profileB.displayName} is..."). In B_DO, B_AVOID, B_BEST_APPROACH, speak directly to Person A ("You should do this...", "Avoid doing...").
+- NEVER describe the energy using "You" or "Your" (e.g. "Your Moon is..."). Always describe their energy using "They", "Their", or their name (e.g. "Their Moon is...").
 
 Respond exactly:
-A_ENERGY: [1 blunt short sentence about Person A's likely daily energy]
-A_DO: [1 direct concrete action Person B should take with Person A today]
-A_AVOID: [1 specific behavior Person B should avoid with Person A today]
-A_BEST_APPROACH: [1 plain sentence on tone, timing, or communication]
-B_ENERGY: [1 blunt short sentence about Person B's likely daily energy]
-B_DO: [1 direct concrete action Person A should take with Person B today]
-B_AVOID: [1 specific behavior Person A should avoid with Person B today]
-B_BEST_APPROACH: [1 plain sentence on tone, timing, or communication]
+A_HEADING: [1 catchy, highly dramatic heading summarizing Person A's vibe today (max 6 words)]
+A_FEELING: [2 dramatic, tea-spilling paragraphs about what Person A is currently feeling or experiencing. Accurately reference at least one specific detail from their cosmic blueprint (e.g., their Moon, Sun, or Rising sign) and transits. Use THIRD PERSON ("They/Their").]
+A_DO: [2-3 direct, detailed sentences on what the reader (Person B) should actively DO with Person A today. Use "You" for the reader.]
+A_AVOID: [2-3 specific, detailed sentences on what behaviors the reader (Person B) should strictly AVOID with Person A today. Use "You".]
+A_BEST_APPROACH: [2-3 plain sentences on the best tone or timing the reader (Person B) should use.]
+B_HEADING: [1 catchy, highly dramatic heading summarizing Person B's vibe today (max 6 words)]
+B_FEELING: [2 dramatic, tea-spilling paragraphs about what Person B is currently feeling or experiencing. Accurately reference at least one specific detail from their cosmic blueprint (e.g., their Moon, Sun, or Rising sign) and transits. Use THIRD PERSON ("They/Their").]
+B_DO: [2-3 direct, detailed sentences on what the reader (Person A) should actively DO with Person B today. Use "You" for the reader.]
+B_AVOID: [2-3 specific, detailed sentences on what behaviors the reader (Person A) should strictly AVOID with Person B today. Use "You".]
+B_BEST_APPROACH: [2-3 plain sentences on the best tone or timing the reader (Person A) should use.]
 BOND_SIGNAL: [1 honest sentence about today's connection weather, max 14 words]
 ${languageInstruction(aiResponseLanguage)}
 `;
 
     const text = await generateGeminiReadingText({
-      systemInstruction: `Return only the requested labels. Use a terse, original BHR1GU social-astrology voice. Do not imitate any existing brand. ${languageInstruction(aiResponseLanguage)}`,
+      systemInstruction: `Return only the requested labels. Use the highly dramatic, direct, call-out voice of a viral TikTok/Reels tarot reader. Do not imitate any existing brand. ${languageInstruction(aiResponseLanguage)}`,
       prompt,
-      maxTokens: 560,
-      temperature: 0.6,
+      maxTokens: 800,
+      temperature: 0.7,
+      model: GEMINI_FLASH_LITE_MODEL,
     });
     const parsed = parseSections(text, labels);
 
@@ -2193,13 +2234,15 @@ ${languageInstruction(aiResponseLanguage)}
       dateKey,
       members: {
         [uidA]: {
-          energy: parsed.A_ENERGY || "",
+          energy: parsed.A_FEELING || "",
+          heading: parsed.A_HEADING || "",
           doText: parsed.A_DO || "",
           avoidText: parsed.A_AVOID || "",
           bestApproach: parsed.A_BEST_APPROACH || "",
         },
         [uidB]: {
-          energy: parsed.B_ENERGY || "",
+          energy: parsed.B_FEELING || "",
+          heading: parsed.B_HEADING || "",
           doText: parsed.B_DO || "",
           avoidText: parsed.B_AVOID || "",
           bestApproach: parsed.B_BEST_APPROACH || "",

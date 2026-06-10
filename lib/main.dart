@@ -10,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'firebase_options.dart';
 import 'router.dart';
+import 'services/push_notification_service.dart';
 
 const _enableAppCheck = bool.fromEnvironment('ENABLE_APP_CHECK');
 
@@ -32,6 +33,15 @@ void main() async {
         options: DefaultFirebaseOptions.currentPlatform,
       );
       await _activateAppCheck();
+
+      try {
+        final pushService = PushNotificationService();
+        await pushService.initialize();
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Push Notification init failed: $e');
+        }
+      }
 
       runApp(
         const ProviderScope(

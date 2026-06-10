@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -155,65 +156,154 @@ class _ProfileScreenState extends State<ProfileScreen>
     return '${d.day} / ${d.month} / ${d.year}';
   }
 
+  String _profileUsername() {
+    final username = _userData?['username']?.toString().trim();
+    if (username != null && username.isNotEmpty) {
+      return username.replaceFirst(RegExp(r'^@+'), '');
+    }
+
+    final usernameLower = _userData?['usernameLower']?.toString().trim();
+    if (usernameLower != null && usernameLower.isNotEmpty) {
+      return usernameLower.replaceFirst(RegExp(r'^@+'), '');
+    }
+
+    return '';
+  }
+
+  Future<void> _copyUsername() async {
+    final username = _profileUsername();
+    if (username.isEmpty) return;
+
+    await Clipboard.setData(ClipboardData(text: '@$username'));
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Username copied.'),
+        backgroundColor: Color(0xFF1A1630),
+      ),
+    );
+  }
+
   Future<void> _confirmDeleteAccount() async {
     if (_deletingAccount) return;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: !_deletingAccount,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF151126),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          title: const Text(
-            'Delete account?',
-            style: TextStyle(
-              color: Color(0xFFFFD88A),
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          content: const Text(
-            'This will permanently delete your profile, chat history, readings, rewards, and Firebase account. This action cannot be undone.',
-            style: TextStyle(
-              color: Color(0xFFB8AEE0),
-              height: 1.45,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(
-                  color: Color(0xFF8E83B5),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text(
-                'Delete',
-                style: TextStyle(
-                  color: Color(0xFFFF6B6B),
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true) return;
-
-    // Wait for the confirmation dialog to fully animate out
-    // before proceeding, to prevent OverlayEntry widget tree crashes.
-    await Future.delayed(const Duration(milliseconds: 300));
+    final confirmed = await _promptForDeleteConfirmation();
+    if (!confirmed) return;
 
     await _deleteAccount();
+  }
+
+  Future<bool> _promptForDeleteConfirmation() async {
+    final controller = TextEditingController();
+
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          return StatefulBuilder(
+            builder: (ctx, setDialogState) {
+              final canDelete =
+                  controller.text.trim().toLowerCase() == 'confirm';
+
+              return AlertDialog(
+                backgroundColor: const Color(0xFF151126),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                title: const Text(
+                  'Delete account?',
+                  style: TextStyle(
+                    color: Color(0xFFFFD88A),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'This will permanently delete your profile, chat history, readings, rewards, and Firebase account. This action cannot be undone.',
+                      style: TextStyle(
+                        color: Color(0xFFB8AEE0),
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Type confirm to continue.',
+                      style: TextStyle(
+                        color: Color(0xFFE5D5F5),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: controller,
+                      autofocus: true,
+                      textInputAction: TextInputAction.done,
+                      style: const TextStyle(color: Color(0xFFE5D5F5)),
+                      decoration: const InputDecoration(
+                        hintText: 'confirm',
+                        hintStyle: TextStyle(color: Color(0xFF6B6080)),
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                      onSubmitted: (_) {
+                        if (!canDelete) return;
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        Navigator.pop(ctx, true);
+                      },
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      Navigator.pop(ctx, false);
+                    },
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: Color(0xFF8E83B5),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: canDelete
+                        ? () {
+                            FocusManager.instance.primaryFocus?.unfocus();
+                            Navigator.pop(ctx, true);
+                          }
+                        : null,
+                    child: Text(
+                      'Delete',
+                      style: TextStyle(
+                        color: canDelete
+                            ? const Color(0xFFFF6B6B)
+                            : const Color(0xFF6B6080),
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      // Wait for the confirmation dialog to fully animate out
+      // before proceeding, to prevent OverlayEntry widget tree crashes.
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      return confirmed == true;
+    } finally {
+      controller.dispose();
+    }
   }
 
   Future<void> _deleteAccount() async {
@@ -239,8 +329,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     });
 
     try {
-      await _reauthenticateForDeletion(user);
-
       await auth.currentUser?.reload();
       final refreshedUser = auth.currentUser;
       if (refreshedUser == null || refreshedUser.uid != uid) {
@@ -260,7 +348,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         ),
       );
 
-      await callable.call();
+      await callable.call({'confirmation': 'confirm'});
       await AuthService().clearLocalSession(uid: uid);
 
       try {
@@ -304,7 +392,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           ? 'For security, please sign out and sign in again before deleting your account.'
           : e.code == 'operation-cancelled'
               ? 'Account deletion cancelled.'
-              : 'Could not confirm your identity. Please try again.';
+              : 'Your session could not be verified. Please sign in again and try deleting your account.';
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -332,7 +420,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   String _deleteAccountFunctionMessage(FirebaseFunctionsException e) {
     if (e.code == 'failed-precondition') {
-      return 'For security, please sign in again before deleting your account.';
+      return 'For security, please sign out and sign in again before deleting your account.';
     }
     if (e.code == 'unauthenticated') {
       return 'Your session expired. Please sign in again before deleting your account.';
@@ -344,149 +432,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       return 'Could not reach delete account service. Check your connection and try again.';
     }
     return 'Could not delete account. Please try again.';
-  }
-
-  Future<void> _reauthenticateForDeletion(User user) async {
-    final providers = user.providerData.map((info) => info.providerId).toSet();
-
-    if (providers.contains(EmailAuthProvider.PROVIDER_ID)) {
-      await _reauthenticateWithPassword(user);
-      return;
-    }
-
-    if (providers.contains(GoogleAuthProvider.PROVIDER_ID)) {
-      await _reauthenticateWithGoogle(user);
-      return;
-    }
-
-    throw FirebaseAuthException(
-      code: 'requires-recent-login',
-      message: 'No supported sign-in provider found for reauthentication.',
-    );
-  }
-
-  Future<void> _reauthenticateWithPassword(User user) async {
-    final email = user.email;
-    if (email == null || email.isEmpty) {
-      throw FirebaseAuthException(
-        code: 'requires-recent-login',
-        message: 'Email is required to confirm this account.',
-      );
-    }
-
-    final password = await _promptForPassword();
-    if (password == null) {
-      throw FirebaseAuthException(
-        code: 'operation-cancelled',
-        message: 'Account deletion cancelled.',
-      );
-    }
-
-    // Wait for the password dialog and its TextField overlays to fully animate out
-    // before proceeding with network calls that could trigger route changes.
-    await Future.delayed(const Duration(milliseconds: 300));
-
-    final credential = EmailAuthProvider.credential(
-      email: email,
-      password: password,
-    );
-
-    await user.reauthenticateWithCredential(credential);
-  }
-
-  Future<void> _reauthenticateWithGoogle(User user) async {
-    final googleUser = await GoogleSignIn().signIn();
-    if (googleUser == null) {
-      throw FirebaseAuthException(
-        code: 'operation-cancelled',
-        message: 'Account deletion cancelled.',
-      );
-    }
-
-    final googleAuth = await googleUser.authentication;
-    final credential = GoogleAuthProvider.credential(
-      accessToken: googleAuth.accessToken,
-      idToken: googleAuth.idToken,
-    );
-
-    await user.reauthenticateWithCredential(credential);
-  }
-
-  Future<String?> _promptForPassword() async {
-    final controller = TextEditingController();
-
-    try {
-      final result = await showDialog<String>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF151126),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            title: const Text(
-              'Confirm password',
-              style: TextStyle(
-                color: Color(0xFFFFD88A),
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              obscureText: true,
-              style: const TextStyle(color: Color(0xFFE5D5F5)),
-              decoration: const InputDecoration(
-                hintText: 'Password',
-                hintStyle: TextStyle(color: Color(0xFF6B6080)),
-              ),
-              onSubmitted: (_) {
-                final password = controller.text.trim();
-                if (password.isNotEmpty) {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                  Navigator.pop(ctx, password);
-                }
-              },
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(
-                    color: Color(0xFF8E83B5),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              TextButton(
-                onPressed: () {
-                  final password = controller.text.trim();
-                  if (password.isNotEmpty) {
-                    FocusManager.instance.primaryFocus?.unfocus();
-                    Navigator.pop(ctx, password);
-                  }
-                },
-                child: const Text(
-                  'Confirm',
-                  style: TextStyle(
-                    color: Color(0xFFFF6B6B),
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-      );
-
-      // Wait for dialog to fully animate out before disposing controller
-      await Future.delayed(const Duration(milliseconds: 300));
-      return result;
-    } finally {
-      controller.dispose();
-    }
   }
 
   @override
@@ -616,6 +561,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Widget _profileHeader() {
     final sunSign = zodiacSignNameFromIso(_userData!['dob']?.toString());
+    final username = _profileUsername();
 
     return Container(
       width: double.infinity,
@@ -677,6 +623,8 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           ),
           const SizedBox(height: 6),
+          _usernamePill(username),
+          const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(
@@ -707,6 +655,65 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _usernamePill(String username) {
+    final hasUsername = username.isNotEmpty;
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 260),
+      padding: const EdgeInsets.only(left: 14, right: 6, top: 5, bottom: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFF151126).withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(
+          color: const Color(0xFF6B6080).withValues(alpha: 0.55),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.alternate_email,
+            size: 16,
+            color:
+                hasUsername ? const Color(0xFFC7A867) : const Color(0xFF6B6080),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              hasUsername ? '@$username' : 'No username set',
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                color: hasUsername
+                    ? const Color(0xFFE5D5F5)
+                    : const Color(0xFF8E83B5),
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+          const SizedBox(width: 2),
+          IconButton(
+            tooltip: 'Copy username',
+            onPressed: hasUsername ? _copyUsername : null,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(
+              minWidth: 34,
+              minHeight: 34,
+            ),
+            icon: Icon(
+              Icons.copy_rounded,
+              size: 16,
+              color: hasUsername
+                  ? const Color(0xFFB58E34)
+                  : const Color(0xFF6B6080),
             ),
           ),
         ],

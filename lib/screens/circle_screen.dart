@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/social_connection_model.dart';
 import '../services/connection_service.dart';
+import '../widgets/circle_safety_gate.dart';
 import '../widgets/cosmic_screen_background.dart';
 
 class CircleScreen extends StatefulWidget {
@@ -15,7 +16,8 @@ class CircleScreen extends StatefulWidget {
   State<CircleScreen> createState() => _CircleScreenState();
 }
 
-class _CircleScreenState extends State<CircleScreen> with TickerProviderStateMixin {
+class _CircleScreenState extends State<CircleScreen>
+    with TickerProviderStateMixin {
   final _connectionService = ConnectionService();
 
   late final AnimationController _emblemController;
@@ -192,7 +194,8 @@ class _CircleScreenState extends State<CircleScreen> with TickerProviderStateMix
                   width: 210,
                   height: 210,
                   child: AnimatedBuilder(
-                    animation: Listenable.merge([_emblemController, _breathAnimation]),
+                    animation:
+                        Listenable.merge([_emblemController, _breathAnimation]),
                     builder: (context, _) => CustomPaint(
                       painter: _CircleEmblemPainter(
                         rotationProgress: _emblemController.value,
@@ -205,63 +208,80 @@ class _CircleScreenState extends State<CircleScreen> with TickerProviderStateMix
             ),
             Padding(
               padding: EdgeInsets.only(top: topPadding),
-              child: StreamBuilder<List<SocialConnection>>(
-            stream: _connectionService.watchConnections(),
-            builder: (context, snapshot) {
-              // FIXED: Check loading state BEFORE processing data so the spinner
-              // is shown immediately rather than after an empty list flash.
-              if (snapshot.connectionState == ConnectionState.waiting &&
-                  snapshot.data == null) {
-                return const Center(
-                  child: CircularProgressIndicator(color: Color(0xFFFFD88A)),
-                );
-              }
+              child: CircleSafetyGate(
+                child: StreamBuilder<List<SocialConnection>>(
+                  stream: _connectionService.watchConnections(),
+                  builder: (context, snapshot) {
+                    // FIXED: Check loading state BEFORE processing data so the spinner
+                    // is shown immediately rather than after an empty list flash.
+                    if (snapshot.connectionState == ConnectionState.waiting &&
+                        snapshot.data == null) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFFFFD88A),
+                        ),
+                      );
+                    }
 
-              final connections = snapshot.data ?? const <SocialConnection>[];
-              final active = connections
-                  .where((item) => item.status == SocialConnectionStatus.active)
-                  .toList(growable: false);
-              final incoming = connections
-                  .where(
-                      (item) => item.status == SocialConnectionStatus.incoming)
-                  .toList(growable: false);
-              final outgoing = connections
-                  .where(
-                      (item) => item.status == SocialConnectionStatus.outgoing)
-                  .toList(growable: false);
+                    final connections =
+                        snapshot.data ?? const <SocialConnection>[];
+                    final active = connections
+                        .where(
+                          (item) =>
+                              item.status == SocialConnectionStatus.active,
+                        )
+                        .toList(growable: false);
+                    final incoming = connections
+                        .where(
+                          (item) =>
+                              item.status == SocialConnectionStatus.incoming,
+                        )
+                        .toList(growable: false);
+                    final outgoing = connections
+                        .where(
+                          (item) =>
+                              item.status == SocialConnectionStatus.outgoing,
+                        )
+                        .toList(growable: false);
 
-              return ListView(
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 110),
-                children: [
-                  _sectionHeader('Your Circle', active.length),
-                  if (active.isEmpty)
-                    _emptyCard()
-                  else
-                    ...active.map(_connectionTile),
-                  const SizedBox(height: 22),
-                  _sectionHeader('Requests', incoming.length + outgoing.length),
-                  if (incoming.isEmpty && outgoing.isEmpty)
-                    _softCard(
-                      child: const Text(
-                        'No pending requests yet.',
-                        style: TextStyle(color: Color(0xFFB8AEE0)),
-                      ),
-                    )
-                  else ...[
-                    ...incoming.map(
-                      (connection) => _requestTile(connection, incoming: true),
-                    ),
-                    ...outgoing.map(
-                      (connection) => _requestTile(connection, incoming: false),
-                    ),
-                  ],
-                  const SizedBox(height: 22),
-                  _manualMatchCard(),
-                ],
-              );
-            },
-          ),
-        ),
+                    return ListView(
+                      padding: const EdgeInsets.fromLTRB(18, 16, 18, 110),
+                      children: [
+                        _sectionHeader('Your Circle', active.length),
+                        if (active.isEmpty)
+                          _emptyCard()
+                        else
+                          ...active.map(_connectionTile),
+                        const SizedBox(height: 22),
+                        _sectionHeader(
+                          'Requests',
+                          incoming.length + outgoing.length,
+                        ),
+                        if (incoming.isEmpty && outgoing.isEmpty)
+                          _softCard(
+                            child: const Text(
+                              'No pending requests yet.',
+                              style: TextStyle(color: Color(0xFFB8AEE0)),
+                            ),
+                          )
+                        else ...[
+                          ...incoming.map(
+                            (connection) =>
+                                _requestTile(connection, incoming: true),
+                          ),
+                          ...outgoing.map(
+                            (connection) =>
+                                _requestTile(connection, incoming: false),
+                          ),
+                        ],
+                        const SizedBox(height: 22),
+                        _manualMatchCard(),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -526,7 +546,8 @@ class _CircleEmblemPainter extends CustomPainter {
 
     for (int i = 0; i < 3; i++) {
       final angle1 = i * (2 * math.pi / 3) - math.pi / 2;
-      final p1 = Offset(hexRadius * math.cos(angle1), hexRadius * math.sin(angle1));
+      final p1 =
+          Offset(hexRadius * math.cos(angle1), hexRadius * math.sin(angle1));
       if (i == 0) {
         triangle1.moveTo(p1.dx, p1.dy);
       } else {
@@ -534,7 +555,8 @@ class _CircleEmblemPainter extends CustomPainter {
       }
 
       final angle2 = i * (2 * math.pi / 3) + math.pi / 2;
-      final p2 = Offset(hexRadius * math.cos(angle2), hexRadius * math.sin(angle2));
+      final p2 =
+          Offset(hexRadius * math.cos(angle2), hexRadius * math.sin(angle2));
       if (i == 0) {
         triangle2.moveTo(p2.dx, p2.dy);
       } else {
@@ -549,7 +571,8 @@ class _CircleEmblemPainter extends CustomPainter {
 
     for (int i = 0; i < 6; i++) {
       final angle = i * (math.pi / 3) + math.pi / 6;
-      final p = Offset(hexRadius * math.cos(angle), hexRadius * math.sin(angle));
+      final p =
+          Offset(hexRadius * math.cos(angle), hexRadius * math.sin(angle));
       canvas.drawLine(Offset.zero, p, highlightPaint);
     }
 
@@ -573,7 +596,8 @@ class _CircleEmblemPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _drawDashedCircle(Canvas canvas, Offset center, double radius, Paint paint) {
+  void _drawDashedCircle(
+      Canvas canvas, Offset center, double radius, Paint paint) {
     const int dashCount = 36;
     final double dashLength = (2 * math.pi * radius) / (dashCount * 2);
     final double dashAngle = dashLength / radius;
@@ -593,6 +617,7 @@ class _CircleEmblemPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CircleEmblemPainter oldDelegate) {
-    return oldDelegate.rotationProgress != rotationProgress || oldDelegate.pulse != pulse;
+    return oldDelegate.rotationProgress != rotationProgress ||
+        oldDelegate.pulse != pulse;
   }
 }

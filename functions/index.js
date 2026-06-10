@@ -9,5 +9,6 @@ Object.assign(
   require("./src/callables/social"),
   require("./src/callables/places"),
   require("./src/callables/account"),
-  require("./src/callables/rewards")
+  require("./src/callables/rewards"),
+  require("./src/scheduled/notifications")
 );

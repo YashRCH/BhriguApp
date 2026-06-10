@@ -226,12 +226,14 @@ class ConnectionCompatibilityReading {
 
 class PersonDailyEnergy {
   final String energy;
+  final String heading;
   final String doText;
   final String avoidText;
   final String bestApproach;
 
   const PersonDailyEnergy({
     required this.energy,
+    required this.heading,
     required this.doText,
     required this.avoidText,
     required this.bestApproach,
@@ -240,6 +242,7 @@ class PersonDailyEnergy {
   factory PersonDailyEnergy.fromMap(Map<String, dynamic> data) {
     return PersonDailyEnergy(
       energy: data['energy'] as String? ?? '',
+      heading: data['heading'] as String? ?? '',
       doText: data['doText'] as String? ?? '',
       avoidText: data['avoidText'] as String? ?? '',
       bestApproach: data['bestApproach'] as String? ?? '',

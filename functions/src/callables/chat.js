@@ -13,7 +13,6 @@ const {
   PLACES_REQUEST_TIMEOUT_MS,
   GROQ_API_KEY,
   GEMINI_API_KEY,
-  GEMINI_FLASH_LITE_MODEL,
   BHRIGU_TUNED_MODEL,
   GROQ_PARTNER_MATCH_MODEL,
   GROQ_BHRIGU_CHAT_MODEL,
@@ -685,7 +684,7 @@ ${safeJson(userSnapshot)}
         message: aiError.error?.message || aiError.message || error.message,
         usage: {
           totalTokens: 0,
-          model: GEMINI_FLASH_LITE_MODEL,
+          model: BHRIGU_TUNED_MODEL,
           provider: "gemini",
         },
       };

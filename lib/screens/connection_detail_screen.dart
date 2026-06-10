@@ -9,6 +9,8 @@ import '../services/connection_compatibility_service.dart';
 import '../services/connection_daily_energy_service.dart';
 import '../services/connection_service.dart';
 import '../services/follow_up_context_service.dart';
+import '../services/ai_report_service.dart';
+import '../widgets/ai_report_dialog.dart';
 import '../widgets/compatibility_metric_card.dart';
 import '../widgets/compatibility_score_ring.dart';
 import '../widgets/cosmic_screen_background.dart';
@@ -136,7 +138,7 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
           ? '${connection.otherProfile.displayName} Compatibility'
           : '${connection.otherProfile.displayName} Daily Energy';
       final summary = reading?.summary ??
-          energy?.bondSignal ??
+          energy?.members[connection.otherUid]?.heading ??
           'Daily connection energy for ${connection.otherProfile.displayName}.';
 
       final contextId = await _followUpService.createConnectionFollowUpContext(
@@ -174,6 +176,7 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
                   key,
                   {
                     'energy': value.energy,
+                    'heading': value.heading,
                     'doText': value.doText,
                     'avoidText': value.avoidText,
                     'bestApproach': value.bestApproach,
@@ -317,6 +320,34 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
     }
   }
 
+  Future<void> _reportConnection(SocialConnection connection) async {
+    final reportText = [
+      'Circle connection report',
+      'Display name: ${connection.otherProfile.displayName}',
+      'Username: @${connection.otherProfile.username}',
+      'Chart summary: ${connection.otherProfile.chartSummary}',
+      'Relationship: ${connection.relationshipType.label}',
+      'Connection ID: ${connection.connectionId}',
+      'Other UID: ${connection.otherUid}',
+    ].join('\n');
+
+    final submitted = await showAiReportDialog(
+      context: context,
+      feature: 'circle',
+      contentId: AiReportService.stableContentId(
+        feature: 'circle',
+        contentText: reportText,
+      ),
+      contentText: reportText,
+    );
+
+    if (!mounted || submitted != true) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Report sent. Thank you.')),
+    );
+  }
+
   void _showError(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -378,6 +409,8 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
                     switch (action) {
                       case _ConnectionAction.switchType:
                         _switchRelationshipType(connection);
+                      case _ConnectionAction.report:
+                        _reportConnection(connection);
                       case _ConnectionAction.remove:
                         _removeConnection();
                       case _ConnectionAction.block:
@@ -409,6 +442,20 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
                           Text(
                             'Remove from Circle',
                             style: TextStyle(color: Color(0xFF9E7070)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: _ConnectionAction.report,
+                      child: Row(
+                        children: [
+                          Icon(Icons.flag_outlined,
+                              color: Color(0xFFFFD88A), size: 20),
+                          SizedBox(width: 10),
+                          Text(
+                            'Report',
+                            style: TextStyle(color: Colors.white),
                           ),
                         ],
                       ),
@@ -546,32 +593,79 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
               _emptyGeneratedCard(
                 title: 'Generate today\'s energy',
                 body:
-                    'See what their chart suggests today and how to approach them.',
+                    'Listen to me carefully: see exactly what\'s going on with their energy today and how you need to move.',
                 icon: Icons.bolt_rounded,
                 loading: _generatingEnergy,
                 onPressed: _generateEnergy,
               )
-            else ...[
-              _signalCard(
-                title: '${connection.otherProfile.displayName} Today',
-                body: personEnergy.energy,
-                footer: energy.bondSignal,
-              ),
-              const SizedBox(height: 14),
-              _twoColumnActionCards(
-                doText: personEnergy.doText,
-                avoidText: personEnergy.avoidText,
-              ),
-              const SizedBox(height: 14),
-              _textCard(
-                label: 'BEST APPROACH',
-                text: personEnergy.bestApproach,
-              ),
-            ],
+            else
+              ..._generatedEnergyCards(connection, energy, personEnergy),
           ],
         );
       },
     );
+  }
+
+  List<Widget> _generatedEnergyCards(
+    SocialConnection connection,
+    ConnectionDailyEnergy energy,
+    PersonDailyEnergy personEnergy,
+  ) {
+    return [
+      _card(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              personEnergy.heading.isNotEmpty
+                  ? personEnergy.heading
+                  : '${connection.otherProfile.displayName}\'s Energy',
+              style: GoogleFonts.cormorantGaramond(
+                color: const Color(0xFFFFD88A),
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              personEnergy.energy,
+              style: const TextStyle(
+                color: Color(0xFFE5D5F5),
+                fontSize: 15,
+                height: 1.5,
+              ),
+            ),
+            if (energy.bondSignal.trim().isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                energy.bondSignal,
+                style: const TextStyle(
+                  color: Color(0xFFB8AEE0),
+                  fontSize: 13,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      if (personEnergy.doText.isNotEmpty ||
+          personEnergy.avoidText.isNotEmpty) ...[
+        const SizedBox(height: 14),
+        _twoColumnActionCards(
+          doText: personEnergy.doText,
+          avoidText: personEnergy.avoidText,
+        ),
+      ],
+      if (personEnergy.bestApproach.isNotEmpty) ...[
+        const SizedBox(height: 14),
+        _textCard(
+          label: 'BEST APPROACH',
+          text: personEnergy.bestApproach,
+        ),
+      ],
+    ];
   }
 
   Widget _compatibilityTab(SocialConnection connection) {
@@ -1469,7 +1563,7 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
 
 // ─── Switch-type dialog ───────────────────────────────────────────────────────
 
-enum _ConnectionAction { switchType, remove, block }
+enum _ConnectionAction { switchType, report, remove, block }
 
 class _HeartSignalDialog extends StatefulWidget {
   final String displayName;

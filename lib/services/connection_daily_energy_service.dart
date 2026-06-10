@@ -6,6 +6,8 @@ import '../models/social_connection_model.dart';
 import '../utils/date_keys.dart';
 
 class ConnectionDailyEnergyService {
+  static const _contentVersion = 'connection_daily_energy_v9_base_gemini';
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
     region: firebaseFunctionsRegion,
@@ -24,7 +26,14 @@ class ConnectionDailyEnergyService {
         .doc(dateKey)
         .snapshots()
         .map(
-          (doc) => doc.exists ? ConnectionDailyEnergy.fromFirestore(doc) : null,
+          (doc) {
+            if (!doc.exists) return null;
+
+            final data = doc.data();
+            if (data?['contentVersion'] != _contentVersion) return null;
+
+            return ConnectionDailyEnergy.fromFirestore(doc);
+          },
         );
   }
 
