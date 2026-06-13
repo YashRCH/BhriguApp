@@ -452,6 +452,7 @@ ${languageInstruction(aiResponseLanguage)}
         aiResponseLanguage,
         preserveFormatInstruction:
           "Preserve Verdict, Compatibility Snapshot, Heart Signal, Emotional Bond, Attraction & Chemistry, Communication Pattern, Long-Term Stability, 36 Guna Marriage Reading, Karmic Lesson, Growth Edge, Bhrigu Warning, and Bhrigu's Guidance labels exactly.",
+        enquiryContext: partner.emotionalPrompt ? `The user's exact typed feeling about the partner was: "${partner.emotionalPrompt}". CRITICAL: You must preserve the specific interpretation of these feelings from the original text.` : "",
         maxTokens: 1050,
       });
 

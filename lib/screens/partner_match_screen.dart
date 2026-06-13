@@ -262,7 +262,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen>
           SafeArea(
             child: ListView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
               children: [
                 if (!_flow.isRevealed) ...[
                   _heroCard(),
@@ -986,6 +986,16 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen>
             ],
           ),
           const SizedBox(height: 16),
+          const Text(
+            'You can change the selected prompt on the chat screen before sending.',
+            style: TextStyle(
+              color: _matchMuted,
+              fontSize: 11.5,
+              height: 1.4,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
           ...questions.map(
             (question) => Padding(
               padding: const EdgeInsets.only(bottom: 10),

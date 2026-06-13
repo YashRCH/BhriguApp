@@ -57,10 +57,7 @@ class _GeomancyShareButtonState extends State<GeomancyShareButton> {
         throw Exception('Share card could not be prepared.');
       }
 
-      if (boundary.debugNeedsPaint) {
-        await Future.delayed(const Duration(milliseconds: 250));
-        await WidgetsBinding.instance.endOfFrame;
-      }
+      await WidgetsBinding.instance.endOfFrame;
 
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);

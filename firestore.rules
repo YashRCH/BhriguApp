@@ -222,7 +222,8 @@ service cloud.firestore {
     }
 
     match /usernames/{username} {
-      allow read, write: if false;
+      allow get: if signedIn();
+      allow list, write: if false;
     }
 
     match /invites/{inviteId} {

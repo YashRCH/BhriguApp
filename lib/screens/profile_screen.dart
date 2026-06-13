@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
@@ -27,6 +28,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool _loading = true;
   bool _deletingAccount = false;
   bool _updatingLanguage = false;
+  bool _languageExpanded = false;
   String _version = '';
 
   late final AnimationController _blueprintController;
@@ -483,7 +485,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     )
                   : SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 120),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
@@ -518,8 +520,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                           const SizedBox(height: 12),
                           _planCard(),
                           const SizedBox(height: 28),
-                          _sectionLabel('AI RESPONSE'),
+                          _sectionLabel('LEGAL'),
                           const SizedBox(height: 12),
+                          _legalCard(),
+                          const SizedBox(height: 18),
                           _languageCard(),
                           const SizedBox(height: 14),
                           TextButton.icon(
@@ -954,6 +958,123 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _languageCard() {
+    final currentLanguageLabel =
+        aiResponseLanguageLabel(_currentAiResponseLanguage);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _languageExpanded = !_languageExpanded;
+          });
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+          decoration: BoxDecoration(
+            color: const Color(0xFF120F22).withValues(alpha: 0.58),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: const Color(0xFF3A2D50).withValues(
+                alpha: _languageExpanded ? 0.9 : 0.48,
+              ),
+            ),
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F0A18).withValues(alpha: 0.48),
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                        color: const Color(0xFF3A2D50).withValues(alpha: 0.55),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.translate_rounded,
+                      color: Color(0xFFB58E34),
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Language',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFD8C9EA),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    currentLanguageLabel,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF8E83A8),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    turns: _languageExpanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: Color(0xFF6B6080),
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ),
+              AnimatedCrossFade(
+                firstChild: const SizedBox.shrink(),
+                secondChild: Padding(
+                  padding: const EdgeInsets.only(top: 11),
+                  child: Column(
+                    children: [
+                      _languageRow(
+                        language: englishAiResponseLanguage,
+                        title: 'English',
+                        subtitle:
+                            'AI readings and chat replies stay in English.',
+                      ),
+                      const SizedBox(height: 8),
+                      _languageRow(
+                        language: hinglishAiResponseLanguage,
+                        title: 'Experimental Hinglish',
+                        subtitle:
+                            'AI replies use natural Roman-script Hinglish.',
+                      ),
+                    ],
+                  ),
+                ),
+                crossFadeState: _languageExpanded
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                duration: const Duration(milliseconds: 180),
+                firstCurve: Curves.easeOutCubic,
+                secondCurve: Curves.easeOutCubic,
+                sizeCurve: Curves.easeOutCubic,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _legalCard() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -973,16 +1094,63 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
       child: Column(
         children: [
-          _languageRow(
-            language: englishAiResponseLanguage,
-            title: 'English',
-            subtitle: 'AI readings and chat replies stay in English.',
+          _legalRow(
+            icon: Icons.privacy_tip_outlined,
+            title: 'Privacy Policy',
+            onTap: () async {
+              final url =
+                  Uri.parse('https://astrology-guru-app.web.app/privacy.html');
+              if (await canLaunchUrl(url)) {
+                await launchUrl(url);
+              }
+            },
           ),
-          const SizedBox(height: 10),
-          _languageRow(
-            language: hinglishAiResponseLanguage,
-            title: 'Hinglish',
-            subtitle: 'AI replies use natural Roman-script Hinglish.',
+          const SizedBox(height: 16),
+          _legalRow(
+            icon: Icons.gavel_rounded,
+            title: 'Terms of Service & Disclaimer',
+            onTap: () async {
+              final url =
+                  Uri.parse('https://astrology-guru-app.web.app/privacy.html');
+              if (await canLaunchUrl(url)) {
+                await launchUrl(url);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _legalRow({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: const Color(0xFFB58E34),
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFE5D5F5),
+              ),
+            ),
+          ),
+          const Icon(
+            Icons.arrow_forward_ios_rounded,
+            color: Color(0xFF6B6080),
+            size: 14,
           ),
         ],
       ),
@@ -1000,7 +1168,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       onTap: _updatingLanguage ? null : () => _setAiResponseLanguage(language),
       borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding: const EdgeInsets.all(13),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
         decoration: BoxDecoration(
           color: selected
               ? const Color(0xFF0F0A18).withValues(alpha: 0.72)
@@ -1018,9 +1186,9 @@ class _ProfileScreenState extends State<ProfileScreen>
               selected ? Icons.radio_button_checked : Icons.radio_button_off,
               color:
                   selected ? const Color(0xFFB58E34) : const Color(0xFF6B6080),
-              size: 21,
+              size: 18,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1028,16 +1196,16 @@ class _ProfileScreenState extends State<ProfileScreen>
                   Text(
                     title,
                     style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
                       color: Color(0xFFE5D5F5),
                     ),
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Text(
                     subtitle,
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       color: Color(0xFF6B6080),
                       height: 1.3,
                     ),

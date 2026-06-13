@@ -703,6 +703,7 @@ ${safeJson(userSnapshot)}
       aiResponseLanguage,
       preserveFormatInstruction:
         "Preserve paragraph breaks and plain-text format. Do not add markdown.",
+      enquiryContext: `The user's original message was: "${message}". CRITICAL: You must preserve every specific reference, noun, and detail related to this message from the original text.`,
       maxTokens: 700,
     });
 

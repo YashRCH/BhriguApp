@@ -8,6 +8,7 @@ const {
   GEMINI_FLASH_LITE_MODEL,
   callableRuntimeOptions,
   requireCallableAuth,
+  normalizeAiResponseLanguage,
   resolveAiResponseLanguage,
   languageInstruction,
   generateGeminiReadingText,
@@ -37,6 +38,77 @@ function assertUsername(username) {
       "Username must be 3-24 characters using letters, numbers, or underscores."
     );
   }
+}
+
+function assertOnboardingString(value, fieldName, minLength, maxLength) {
+  if (typeof value !== "string") {
+    throw new HttpsError("invalid-argument", `${fieldName} is invalid.`);
+  }
+
+  const text = value.trim();
+  if (text.length < minLength || text.length > maxLength) {
+    throw new HttpsError("invalid-argument", `${fieldName} is invalid.`);
+  }
+
+  return text;
+}
+
+function normalizeOptionalCoordinate(value, fieldName, min, max) {
+  if (value === null || typeof value === "undefined") return null;
+
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < min ||
+    value > max
+  ) {
+    throw new HttpsError("invalid-argument", `${fieldName} is invalid.`);
+  }
+
+  return value;
+}
+
+function normalizeOnboardingUserData(value, username) {
+  if (value === null || typeof value === "undefined") return null;
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new HttpsError("invalid-argument", "Onboarding profile is invalid.");
+  }
+
+  return {
+    name: assertOnboardingString(value.name, "Name", 1, 120),
+    username,
+    usernameLower: username,
+    dob: assertOnboardingString(value.dob, "Birth date", 10, 40),
+    timeOfBirth: assertOnboardingString(value.timeOfBirth, "Birth time", 0, 20),
+    placeOfBirth: assertOnboardingString(value.placeOfBirth, "Birth place", 1, 200),
+    latitude: normalizeOptionalCoordinate(value.latitude, "Latitude", -90, 90),
+    longitude: normalizeOptionalCoordinate(value.longitude, "Longitude", -180, 180),
+    aiResponseLanguage: normalizeAiResponseLanguage(value.aiResponseLanguage),
+    onboardingComplete: false,
+    createdAt: assertOnboardingString(value.createdAt, "Created at", 0, 40),
+  };
+}
+
+async function clearUnreservedIncompleteUsername(firestore, uid) {
+  const userRef = firestore.collection("users").doc(uid);
+  const userDoc = await userRef.get();
+
+  if (!userDoc.exists) return;
+
+  const userData = userDoc.data() || {};
+  if (userData.onboardingComplete === true) return;
+
+  const currentUsername = cleanUsername(userData.usernameLower || userData.username);
+  if (!currentUsername) return;
+
+  const usernameDoc = await firestore.collection("usernames").doc(currentUsername).get();
+  if (usernameDoc.exists && usernameDoc.data()?.uid === uid) return;
+
+  await userRef.update({
+    username: admin.firestore.FieldValue.delete(),
+    usernameLower: admin.firestore.FieldValue.delete(),
+  });
 }
 
 function cleanRelationshipType(value) {
@@ -1323,49 +1395,77 @@ exports.createOrUpdatePublicProfile = onCall(
   async (request) => {
     const auth = requireCallableAuth(request);
     const uid = auth.uid;
-    const username = cleanUsername(request.data.username);
+    const data = request.data || {};
+    const username = cleanUsername(data.username);
     assertUsername(username);
+    const onboardingUserData = normalizeOnboardingUserData(
+      data.onboardingUserData,
+      username
+    );
 
-    const userRef = admin.firestore().collection("users").doc(uid);
-    const usernameRef = admin.firestore().collection("usernames").doc(username);
-    const profileRef = admin.firestore().collection("public_profiles").doc(uid);
+    const firestore = admin.firestore();
+    const userRef = firestore.collection("users").doc(uid);
+    const usernameRef = firestore.collection("usernames").doc(username);
+    const profileRef = firestore.collection("public_profiles").doc(uid);
 
-    const profile = await admin.firestore().runTransaction(async (transaction) => {
-      const [userDoc, usernameDoc, profileDoc] = await Promise.all([
-        transaction.get(userRef),
-        transaction.get(usernameRef),
-        transaction.get(profileRef),
-      ]);
+    try {
+      const profile = await firestore.runTransaction(async (transaction) => {
+        const [userDoc, usernameDoc, profileDoc] = await Promise.all([
+          transaction.get(userRef),
+          transaction.get(usernameRef),
+          transaction.get(profileRef),
+        ]);
 
-      if (!userDoc.exists) {
-        throw new HttpsError("failed-precondition", "Finish onboarding first.");
+        const currentUserData = userDoc.exists ? userDoc.data() || {} : null;
+
+        if (!currentUserData && !onboardingUserData) {
+          throw new HttpsError("failed-precondition", "Finish onboarding first.");
+        }
+
+        if (usernameDoc.exists && usernameDoc.data().uid !== uid) {
+          throw new HttpsError("already-exists", "That username is taken.");
+        }
+
+        let nextUserData = currentUserData || {};
+        if (onboardingUserData && nextUserData.onboardingComplete !== true) {
+          nextUserData = {
+            ...onboardingUserData,
+            createdAt: nextUserData.createdAt || onboardingUserData.createdAt,
+          };
+          transaction.set(userRef, nextUserData);
+        }
+
+        const oldUsername = cleanUsername(profileDoc.data()?.usernameLower);
+        if (oldUsername && oldUsername !== username) {
+          transaction.delete(firestore.collection("usernames").doc(oldUsername));
+        }
+
+        const nextProfile = publicProfileFromUser(uid, nextUserData, username);
+        const writeProfile = {
+          ...nextProfile,
+          createdAt: profileDoc.exists
+            ? profileDoc.data().createdAt || admin.firestore.FieldValue.serverTimestamp()
+            : admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+
+        transaction.set(usernameRef, {
+          uid,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        transaction.set(profileRef, writeProfile, { merge: true });
+
+        return nextProfile;
+      });
+
+      return { profile };
+    } catch (error) {
+      if (error.code === "already-exists" && onboardingUserData) {
+        await clearUnreservedIncompleteUsername(firestore, uid);
       }
 
-      if (usernameDoc.exists && usernameDoc.data().uid !== uid) {
-        throw new HttpsError("already-exists", "That username is taken.");
-      }
-
-      const oldUsername = cleanUsername(profileDoc.data()?.usernameLower);
-      if (oldUsername && oldUsername !== username) {
-        transaction.delete(admin.firestore().collection("usernames").doc(oldUsername));
-      }
-
-      const nextProfile = publicProfileFromUser(uid, userDoc.data() || {}, username);
-      const writeProfile = {
-        ...nextProfile,
-        createdAt: profileDoc.exists
-          ? profileDoc.data().createdAt || admin.firestore.FieldValue.serverTimestamp()
-          : admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      };
-
-      transaction.set(usernameRef, { uid, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
-      transaction.set(profileRef, writeProfile, { merge: true });
-
-      return nextProfile;
-    });
-
-    return { profile };
+      throw error;
+    }
   }
 );
 

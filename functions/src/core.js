@@ -25,7 +25,7 @@ const BHRIGU_TUNED_MODEL = "endpoints/6058371191452729344";
 const GROQ_PARTNER_MATCH_MODEL = "llama-3.3-70b-versatile";
 const GROQ_BHRIGU_CHAT_MODEL = "llama-3.3-70b-versatile";
 
-const TAROT_READING_CONTENT_VERSION = "tarot_gemini25_lite_v3";
+const TAROT_READING_CONTENT_VERSION = "tarot_gemini25_lite_v4";
 const GEOMANCY_READING_CONTENT_VERSION = "geomancy_gemini25_lite_v3";
 const TAROT_MAX_OUTPUT_TOKENS = 1400;
 const GEOMANCY_MAX_OUTPUT_TOKENS = 1200;
@@ -40,11 +40,14 @@ const BHRIGU_CHAT_KNOWLEDGE_LIMIT = 5;
 
 const HORIZONS_API_URL = "https://ssd.jpl.nasa.gov/api/horizons.api";
 const HORIZONS_TIMEOUT_MS = 18000;
+const HORIZONS_MAX_ATTEMPTS = 2;
+const HORIZONS_RETRY_DELAY_MS = 500;
+const HORIZONS_INTER_BODY_DELAY_MS = 120;
 const MILLISECONDS_PER_DAY = 86400000;
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
 const CHART_CALCULATION_VERSION = "nasa_jpl_horizons_v5_observer_ecliptic_nodes";
-const HOME_HOROSCOPE_CONTENT_VERSION = "home_signal_v7_base_gemini";
+const HOME_HOROSCOPE_CONTENT_VERSION = "home_signal_v12_nasa_transit_brief";
 const ENGLISH_AI_RESPONSE_LANGUAGE = "english";
 const HINGLISH_AI_RESPONSE_LANGUAGE = "hinglish";
 
@@ -213,6 +216,7 @@ async function ensureHinglishText({
   text,
   aiResponseLanguage,
   preserveFormatInstruction = "",
+  enquiryContext = "",
   maxTokens = 1200,
 }) {
   if (normalizeAiResponseLanguage(aiResponseLanguage) !== HINGLISH_AI_RESPONSE_LANGUAGE) {
@@ -223,6 +227,8 @@ async function ensureHinglishText({
     return text;
   }
 
+  const contextInstruction = enquiryContext ? `\n${enquiryContext}\n` : "";
+
   try {
     return await generateGeminiReadingText({
       systemInstruction: `${languageInstruction(aiResponseLanguage)}
@@ -230,7 +236,7 @@ Rewrite the supplied text into natural Indian Hinglish using Roman script.
 Preserve all headings, labels, section order, names, numbers, punctuation style, and line breaks.
 Do not add new sections. Do not remove information. Do not use Devanagari.
 Return only the rewritten text.
-${preserveFormatInstruction}`,
+${preserveFormatInstruction}${contextInstruction}`,
       prompt: String(text || ""),
       maxTokens,
       temperature: 0.25,
@@ -410,7 +416,32 @@ function isTimeoutError(error) {
   return (
     error?.code === "ECONNABORTED" ||
     error?.code === "ETIMEDOUT" ||
+    error?.name === "TimeoutError" ||
+    error?.name === "AbortError" ||
     String(error?.message || "").toLowerCase().includes("timeout")
+  );
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableHorizonsError(error) {
+  const status = Number(error?.status || error?.response?.status || 0);
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    error?.retryable === true ||
+    status === 429 ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    isTimeoutError(error) ||
+    message.includes("fetch failed") ||
+    message.includes("socket") ||
+    message.includes("network") ||
+    message.includes("temporarily")
   );
 }
 
@@ -456,9 +487,14 @@ async function generateGeminiReadingText({
   maxTokens,
   temperature,
   model = BHRIGU_TUNED_MODEL,
+  timeoutMs = AI_REQUEST_TIMEOUT_MS,
 }) {
   const { token, projectId } = await getVertexAuth();
   const region = FUNCTION_REGION || "us-central1";
+
+  const combinedPrompt = systemInstruction
+    ? `${systemInstruction}\n\n${prompt}`
+    : prompt;
 
   const body = {
     contents: [
@@ -466,7 +502,7 @@ async function generateGeminiReadingText({
         role: "user",
         parts: [
           {
-            text: prompt,
+            text: combinedPrompt,
           },
         ],
       },
@@ -476,16 +512,6 @@ async function generateGeminiReadingText({
       temperature,
     },
   };
-
-  if (systemInstruction) {
-    body.systemInstruction = {
-      parts: [
-        {
-          text: systemInstruction,
-        },
-      ],
-    };
-  }
 
   const isEndpoint = model.startsWith("endpoints/");
   const modelPath = isEndpoint 
@@ -500,6 +526,7 @@ async function generateGeminiReadingText({
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
+      timeout: timeoutMs,
     }
   );
 
@@ -901,33 +928,63 @@ function parseHorizonsObserverEcliptic(resultText, bodyName) {
 }
 
 async function fetchHorizonsJson(body, params) {
-  const response = await fetch(`${HORIZONS_API_URL}?${params.toString()}`, {
-    method: "GET",
-    signal: AbortSignal.timeout(HORIZONS_TIMEOUT_MS),
-  });
+  const url = `${HORIZONS_API_URL}?${params.toString()}`;
+  let lastError = null;
 
-  const responseText = await response.text();
+  for (let attempt = 1; attempt <= HORIZONS_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        signal: AbortSignal.timeout(HORIZONS_TIMEOUT_MS),
+      });
 
-  if (!response.ok) {
-    console.error("Horizons HTTP error:", body.name, response.status, responseText.slice(0, 500));
-    throw new Error(`Horizons request failed for ${body.name}.`);
+      const responseText = await response.text();
+
+      if (!response.ok) {
+        const error = new Error(`Horizons request failed for ${body.name}.`);
+        error.status = response.status;
+        console.error(
+          "Horizons HTTP error:",
+          body.name,
+          response.status,
+          responseText.slice(0, 500)
+        );
+        throw error;
+      }
+
+      let json;
+
+      try {
+        json = JSON.parse(responseText);
+      } catch (error) {
+        console.error("Horizons JSON parse error:", body.name, responseText.slice(0, 500));
+        const parseError = new Error(`Horizons returned a non-JSON response for ${body.name}.`);
+        parseError.retryable = true;
+        throw parseError;
+      }
+
+      if (json.error) {
+        console.error("Horizons API error:", body.name, json.error);
+        throw new Error(`Horizons returned an error for ${body.name}.`);
+      }
+
+      return json;
+    } catch (error) {
+      lastError = error;
+
+      if (
+        attempt < HORIZONS_MAX_ATTEMPTS &&
+        isRetryableHorizonsError(error)
+      ) {
+        await sleep(HORIZONS_RETRY_DELAY_MS * attempt);
+        continue;
+      }
+
+      throw error;
+    }
   }
 
-  let json;
-
-  try {
-    json = JSON.parse(responseText);
-  } catch (error) {
-    console.error("Horizons JSON parse error:", body.name, responseText.slice(0, 500));
-    throw new Error(`Horizons returned a non-JSON response for ${body.name}.`);
-  }
-
-  if (json.error) {
-    console.error("Horizons API error:", body.name, json.error);
-    throw new Error(`Horizons returned an error for ${body.name}.`);
-  }
-
-  return json;
+  throw lastError || new Error(`Horizons request failed for ${body.name}.`);
 }
 
 async function fetchHorizonsObserverEcliptic(body, utcDate) {
@@ -964,9 +1021,11 @@ async function fetchHorizonsLongitude(body, utcDate) {
     };
   }
 
-  const ecliptic = await fetchHorizonsObserverEcliptic(body, utcDate);
   const nextDate = new Date(utcDate.getTime() + MILLISECONDS_PER_DAY);
-  const nextEcliptic = await fetchHorizonsObserverEcliptic(body, nextDate);
+  const [ecliptic, nextEcliptic] = await Promise.all([
+    fetchHorizonsObserverEcliptic(body, utcDate),
+    fetchHorizonsObserverEcliptic(body, nextDate),
+  ]);
 
   const retrograde = signedAngularDistance(nextEcliptic.longitude, ecliptic.longitude) < 0;
 
@@ -1009,6 +1068,21 @@ async function fetchHorizonsVectorLongitude(body, utcDate) {
     longitude,
     retrograde: body.name === "Sun" || body.name === "Moon" ? false : angularRate < 0,
   };
+}
+
+async function fetchHorizonsLongitudesSequentially(utcDate) {
+  const positions = [];
+
+  for (let index = 0; index < HORIZONS_BODIES.length; index += 1) {
+    const body = HORIZONS_BODIES[index];
+    positions.push(await fetchHorizonsLongitude(body, utcDate));
+
+    if (index < HORIZONS_BODIES.length - 1) {
+      await sleep(HORIZONS_INTER_BODY_DELAY_MS);
+    }
+  }
+
+  return positions;
 }
 
 function calculateAscendant({
@@ -1103,10 +1177,7 @@ async function calculateNatalChartForBirthData({
     longitude,
   });
   const utcBirth = birthTime.utcDate;
-  const tropicalBodies = [];
-  for (const body of HORIZONS_BODIES) {
-    tropicalBodies.push(await fetchHorizonsLongitude(body, utcBirth));
-  }
+  const tropicalBodies = await fetchHorizonsLongitudesSequentially(utcBirth);
   const ayanamsa = calculateLahiriAyanamsa(utcBirth);
   const tropicalAscendant = calculateAscendant({
     utcDate: utcBirth,
@@ -1162,10 +1233,7 @@ function parseDateKeyToUtcNoon(dateKey) {
 
 async function calculateDailyTransitsForDateKey(dateKey) {
   const utcNoon = parseDateKeyToUtcNoon(dateKey);
-  const tropicalBodies = [];
-  for (const body of HORIZONS_BODIES) {
-    tropicalBodies.push(await fetchHorizonsLongitude(body, utcNoon));
-  }
+  const tropicalBodies = await fetchHorizonsLongitudesSequentially(utcNoon);
 
   const ayanamsa = calculateLahiriAyanamsa(utcNoon);
   const tropicalPlanets = planetModelsFromLongitudes(tropicalBodies, 0);
@@ -1271,21 +1339,12 @@ function currentSkyFromDailyTransits(dailyTransits = {}, now = new Date()) {
 async function calculateCurrentSkySnapshot(now = new Date()) {
   const planets = {};
   const missingPlanets = [];
-  const results = [];
-  for (const body of HORIZONS_BODIES) {
-    try {
-      const ecliptic = await fetchHorizonsObserverEcliptic(body, now);
-      results.push({
-        status: "fulfilled",
-        value: { body, ecliptic }
-      });
-    } catch (error) {
-      results.push({
-        status: "rejected",
-        reason: error
-      });
-    }
-  }
+  const results = await Promise.allSettled(
+    HORIZONS_BODIES.map(async (body) => ({
+      body,
+      ecliptic: await fetchHorizonsObserverEcliptic(body, now),
+    }))
+  );
 
   results.forEach((result, index) => {
     const body = HORIZONS_BODIES[index];
@@ -1962,8 +2021,8 @@ function parseDailyHoroscopeText(text, fallback = {}) {
   );
   const dailyEnergyRaw = matchSection(/DAILY_ENERGY_LINE:\s*(.+)/s);
 
-  const bhriguToday = limitWords(bhriguTodayRaw, 24);
-  const yourTransit = limitWords(transitRaw, 42);
+  const bhriguToday = limitWords(bhriguTodayRaw, 45);
+  const yourTransit = limitWords(transitRaw, 55);
   const relationships = limitWords(relationshipsRaw, 34);
   const workMoney = limitWords(workMoneyRaw, 28);
   const innerWeather = limitWords(innerWeatherRaw, 30);
@@ -2019,6 +2078,7 @@ function dailyHoroscopePayload(data = {}) {
     workMoney: data.workMoney || "",
     innerWeather: data.innerWeather || "",
     mantra: data.mantra || data.focusLine || "",
+    transitSummary: data.transitSummary || "",
     moonPhaseLine: data.moonPhaseLine || "",
     dailyEnergyLine: data.dailyEnergyLine || "",
     contentVersion: data.contentVersion || HOME_HOROSCOPE_CONTENT_VERSION,

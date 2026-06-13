@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -21,6 +22,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLogin = true;
   bool _loading = false;
   bool _obscurePassword = true;
+  bool _acceptedTerms = false;
   String? _error;
   String? _info;
 
@@ -41,6 +43,14 @@ class _LoginScreenState extends State<LoginScreen> {
     if (validationError != null) {
       setState(() {
         _error = validationError;
+        _info = null;
+      });
+      return;
+    }
+
+    if (!_isLogin && !_acceptedTerms) {
+      setState(() {
+        _error = 'You must accept the Terms of Service and Privacy Policy to create an account.';
         _info = null;
       });
       return;
@@ -93,6 +103,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _submitGoogle() async {
     if (_loading) return;
+
+    if (!_isLogin && !_acceptedTerms) {
+      setState(() {
+        _error = 'You must accept the Terms of Service and Privacy Policy to create an account.';
+        _info = null;
+      });
+      return;
+    }
 
     setState(() {
       _loading = true;
@@ -371,7 +389,73 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 16),
+                  
+                  if (!_isLogin) ...[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: Checkbox(
+                            value: _acceptedTerms,
+                            onChanged: (val) {
+                              setState(() {
+                                _acceptedTerms = val ?? false;
+                              });
+                            },
+                            activeColor: const Color(0xFFB58E34),
+                            checkColor: const Color(0xFF1E1430),
+                            side: const BorderSide(color: Color(0xFFB58E34)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () async {
+                              final url = Uri.parse('https://astrology-guru-app.web.app/privacy.html');
+                              if (await canLaunchUrl(url)) {
+                                await launchUrl(url);
+                              }
+                            },
+                            child: RichText(
+                              text: TextSpan(
+                                style: GoogleFonts.inter(
+                                  color: const Color(0xFFE5D5F5),
+                                  fontSize: 13,
+                                  height: 1.4,
+                                ),
+                                children: const [
+                                  TextSpan(text: 'I agree to the '),
+                                  TextSpan(
+                                    text: 'Terms of Service',
+                                    style: TextStyle(
+                                      color: Color(0xFFB58E34),
+                                      fontWeight: FontWeight.bold,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                  TextSpan(text: ' and '),
+                                  TextSpan(
+                                    text: 'Privacy Policy',
+                                    style: TextStyle(
+                                      color: Color(0xFFB58E34),
+                                      fontWeight: FontWeight.bold,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                  TextSpan(text: '.'),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                  ] else 
+                    const SizedBox(height: 16),
 
                   // Main Action Button (Email)
                   GestureDetector(

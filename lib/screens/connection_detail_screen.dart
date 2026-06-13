@@ -878,7 +878,7 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
                 _textCard(
                   label: 'PRIVATE GUIDANCE',
                   text:
-                      'Only you can see these follow-ups. They are not shared with ${connection.otherProfile.displayName}.',
+                      'Only you can see these follow-ups. They are not shared with ${connection.otherProfile.displayName}. You can change the selected prompt on the chat screen before sending.',
                 ),
                 const SizedBox(height: 12),
                 ...questions.map(
@@ -901,19 +901,13 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
   }
 
   Widget _ritualsTab(SocialConnection connection) {
-    final isPartner =
-        connection.relationshipType == SocialRelationshipType.partner;
-
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 110),
       children: [
         _emptyGeneratedCard(
-          title: isPartner
-              ? 'Partner owl care is coming'
-              : 'Circle rituals are coming',
-          body: isPartner
-              ? 'Partners will be able to pet each other\'s owl, send moon snacks, and build a shared streak.'
-              : 'Friends will be able to send blessings, connection tarot pulls, and daily check-ins.',
+          title: 'Shared geomancy and tarot readings are coming',
+          body:
+              'Friends and partners will be able to open shared tarot and geomancy readings for this connection.',
           icon: Icons.auto_awesome_rounded,
           loading: false,
           onPressed: null,

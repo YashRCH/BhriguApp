@@ -6,7 +6,6 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/social_connection_model.dart';
 import '../services/connection_service.dart';
-import '../widgets/circle_safety_gate.dart';
 import '../widgets/cosmic_screen_background.dart';
 
 class CircleScreen extends StatefulWidget {
@@ -208,78 +207,76 @@ class _CircleScreenState extends State<CircleScreen>
             ),
             Padding(
               padding: EdgeInsets.only(top: topPadding),
-              child: CircleSafetyGate(
-                child: StreamBuilder<List<SocialConnection>>(
-                  stream: _connectionService.watchConnections(),
-                  builder: (context, snapshot) {
-                    // FIXED: Check loading state BEFORE processing data so the spinner
-                    // is shown immediately rather than after an empty list flash.
-                    if (snapshot.connectionState == ConnectionState.waiting &&
-                        snapshot.data == null) {
-                      return const Center(
-                        child: CircularProgressIndicator(
-                          color: Color(0xFFFFD88A),
-                        ),
-                      );
-                    }
-
-                    final connections =
-                        snapshot.data ?? const <SocialConnection>[];
-                    final active = connections
-                        .where(
-                          (item) =>
-                              item.status == SocialConnectionStatus.active,
-                        )
-                        .toList(growable: false);
-                    final incoming = connections
-                        .where(
-                          (item) =>
-                              item.status == SocialConnectionStatus.incoming,
-                        )
-                        .toList(growable: false);
-                    final outgoing = connections
-                        .where(
-                          (item) =>
-                              item.status == SocialConnectionStatus.outgoing,
-                        )
-                        .toList(growable: false);
-
-                    return ListView(
-                      padding: const EdgeInsets.fromLTRB(18, 16, 18, 110),
-                      children: [
-                        _sectionHeader('Your Circle', active.length),
-                        if (active.isEmpty)
-                          _emptyCard()
-                        else
-                          ...active.map(_connectionTile),
-                        const SizedBox(height: 22),
-                        _sectionHeader(
-                          'Requests',
-                          incoming.length + outgoing.length,
-                        ),
-                        if (incoming.isEmpty && outgoing.isEmpty)
-                          _softCard(
-                            child: const Text(
-                              'No pending requests yet.',
-                              style: TextStyle(color: Color(0xFFB8AEE0)),
-                            ),
-                          )
-                        else ...[
-                          ...incoming.map(
-                            (connection) =>
-                                _requestTile(connection, incoming: true),
-                          ),
-                          ...outgoing.map(
-                            (connection) =>
-                                _requestTile(connection, incoming: false),
-                          ),
-                        ],
-                        const SizedBox(height: 22),
-                        _manualMatchCard(),
-                      ],
+              child: StreamBuilder<List<SocialConnection>>(
+                stream: _connectionService.watchConnections(),
+                builder: (context, snapshot) {
+                  // FIXED: Check loading state BEFORE processing data so the spinner
+                  // is shown immediately rather than after an empty list flash.
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      snapshot.data == null) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFFFFD88A),
+                      ),
                     );
-                  },
-                ),
+                  }
+
+                  final connections =
+                      snapshot.data ?? const <SocialConnection>[];
+                  final active = connections
+                      .where(
+                        (item) =>
+                            item.status == SocialConnectionStatus.active,
+                      )
+                      .toList(growable: false);
+                  final incoming = connections
+                      .where(
+                        (item) =>
+                            item.status == SocialConnectionStatus.incoming,
+                      )
+                      .toList(growable: false);
+                  final outgoing = connections
+                      .where(
+                        (item) =>
+                            item.status == SocialConnectionStatus.outgoing,
+                      )
+                      .toList(growable: false);
+
+                  return ListView(
+                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 110),
+                    children: [
+                      _sectionHeader('Your Circle', active.length),
+                      if (active.isEmpty)
+                        _emptyCard()
+                      else
+                        ...active.map(_connectionTile),
+                      const SizedBox(height: 22),
+                      _sectionHeader(
+                        'Requests',
+                        incoming.length + outgoing.length,
+                      ),
+                      if (incoming.isEmpty && outgoing.isEmpty)
+                        _softCard(
+                          child: const Text(
+                            'No pending requests yet.',
+                            style: TextStyle(color: Color(0xFFB8AEE0)),
+                          ),
+                        )
+                      else ...[
+                        ...incoming.map(
+                          (connection) =>
+                              _requestTile(connection, incoming: true),
+                        ),
+                        ...outgoing.map(
+                          (connection) =>
+                              _requestTile(connection, incoming: false),
+                        ),
+                      ],
+                      const SizedBox(height: 22),
+                      _manualMatchCard(),
+                    ],
+                  );
+                },
               ),
             ),
           ],

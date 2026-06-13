@@ -195,6 +195,7 @@ exports.generateGeomancyReading = onCall(
         aiResponseLanguage,
         preserveFormatInstruction:
           "Preserve THE JUDGEMENT, THE WITNESSES, THE RECONCILER, and EARTH'S COUNSEL headings exactly.",
+        enquiryContext: `The user's original enquiry was: "${question}". CRITICAL: You must preserve every specific reference, noun, and detail related to this enquiry from the original text.`,
         maxTokens: GEOMANCY_MAX_OUTPUT_TOKENS,
       });
 
@@ -335,6 +336,7 @@ Follow the geomancy reading structure exactly. Preserve the required all-caps he
         aiResponseLanguage,
         preserveFormatInstruction:
           "Preserve THE JUDGEMENT, THE WITNESSES, THE RECONCILER, and EARTH'S COUNSEL headings exactly.",
+        enquiryContext: `The user's original enquiry was: "${question}". CRITICAL: You must preserve every specific reference, noun, and detail related to this enquiry from the original text.`,
         maxTokens: GEOMANCY_MAX_OUTPUT_TOKENS,
       });
       await writeCachedReading(

@@ -60,15 +60,7 @@ class _TarotShareButtonState extends State<TarotShareButton> {
         throw Exception('Share card is not ready yet.');
       }
 
-      if (boundary.debugNeedsPaint) {
-        await WidgetsBinding.instance.endOfFrame;
-        await Future.delayed(const Duration(milliseconds: 180));
-      }
-
-      if (boundary.debugNeedsPaint) {
-        throw Exception(
-            'Share card is still preparing. Please tap share again.');
-      }
+      await WidgetsBinding.instance.endOfFrame;
 
       final pngBytes = await _capturePng(boundary);
       final file = await _writeTempImage(pngBytes);

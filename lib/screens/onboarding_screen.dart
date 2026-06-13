@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -31,7 +32,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   String _place = '';
   double? _latitude;
   double? _longitude;
-  String _aiResponseLanguage = englishAiResponseLanguage;
+  final String _aiResponseLanguage = englishAiResponseLanguage;
 
   int _step = 0;
   bool _saving = false;
@@ -216,7 +217,41 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Future<void> _next() async {
     if (_saving) return;
 
-    if (_step < 6) {
+    final formattedTob = _tob?.format(context) ?? '';
+
+    if (_step == 2) {
+      setState(() {
+        _saving = true;
+        _submitError = null;
+      });
+
+      try {
+        final username = _cleanUsername(_usernameController.text);
+        final doc = await FirebaseFirestore.instance.collection('usernames').doc(username).get();
+        if (doc.exists) {
+          final uid = FirebaseAuth.instance.currentUser?.uid;
+          if (doc.data()?['uid'] != uid) {
+            setState(() {
+              _saving = false;
+              _submitError = 'That username is taken. Choose another one.';
+            });
+            return;
+          }
+        }
+      } catch (e) {
+        setState(() {
+          _saving = false;
+          _submitError = 'Could not verify username. Please check your connection and try again.';
+        });
+        return;
+      }
+
+      setState(() {
+        _saving = false;
+      });
+    }
+
+    if (_step < 5) {
       setState(() {
         _step++;
         _submitError = null;
@@ -228,7 +263,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       name: _nameController.text.trim(),
       username: _cleanUsername(_usernameController.text),
       dob: _dob!,
-      timeOfBirth: _tob!.format(context),
+      timeOfBirth: formattedTob,
       placeOfBirth: _place.trim(),
       latitude: _latitude,
       longitude: _longitude,
@@ -294,7 +329,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     if (_step == 3) return _dob != null;
     if (_step == 4) return _tob != null;
     if (_step == 5) return _place.trim().isNotEmpty;
-    if (_step == 6) return true;
     return false;
   }
 
@@ -332,7 +366,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   String get _buttonText {
     if (_step == 0) return 'BEGIN THE JOURNEY';
-    if (_step == 6) return 'ENTER THE COSMOS';
+    if (_step == 5) return 'ENTER THE COSMOS';
     return 'CONTINUE';
   }
 
@@ -548,7 +582,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       'WHEN WERE YOU BORN?',
       'AT WHAT HOUR?',
       'WHERE WERE YOU BORN?',
-      'HOW SHOULD BHRIGU RESPOND?',
     ];
 
     return titles[_step];
@@ -785,9 +818,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
         );
 
-      case 6:
-        return _buildLanguageStep(key: key);
-
       default:
         return SizedBox(key: key);
     }
@@ -881,121 +911,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildLanguageStep({required Key key}) {
-    return SingleChildScrollView(
-      key: key,
-      physics: const BouncingScrollPhysics(),
-      child: Column(
-        children: [
-          _languageOption(
-            language: englishAiResponseLanguage,
-            title: 'English',
-            subtitle: 'Bhrigu replies in polished English.',
-          ),
-          const SizedBox(height: 14),
-          _languageOption(
-            language: hinglishAiResponseLanguage,
-            title: 'Hinglish',
-            subtitle: 'Bhrigu replies in natural Roman-script Hinglish.',
-          ),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(
-                  color: const Color(0xFFB58E34).withValues(alpha: 0.3),
-                  width: 2,
-                ),
-              ),
-            ),
-            child: Text(
-              'This only changes AI-generated readings and chat replies. The app interface stays in English.',
-              style: GoogleFonts.cormorantGaramond(
-                fontSize: 18,
-                color: const Color(0xFFC7A867).withValues(alpha: 0.8),
-                fontStyle: FontStyle.italic,
-                height: 1.5,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _languageOption({
-    required String language,
-    required String title,
-    required String subtitle,
-  }) {
-    final selected = _aiResponseLanguage == language;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _aiResponseLanguage = normalizeAiResponseLanguage(language);
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        width: double.infinity,
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: const Color(0xFF0A0812).withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected ? const Color(0xFFB58E34) : const Color(0xFF3A2D50),
-            width: selected ? 1.4 : 1,
-          ),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: const Color(0xFFB58E34).withValues(alpha: 0.16),
-                    blurRadius: 18,
-                  ),
-                ]
-              : [],
-        ),
-        child: Row(
-          children: [
-            Icon(
-              selected ? Icons.radio_button_checked : Icons.radio_button_off,
-              color:
-                  selected ? const Color(0xFFB58E34) : const Color(0xFF6B6080),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.cinzel(
-                      fontSize: 16,
-                      color: const Color(0xFFE5D5F5),
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.cormorantGaramond(
-                      fontSize: 17,
-                      color: const Color(0xFFC7A867).withValues(alpha: 0.85),
-                      height: 1.35,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

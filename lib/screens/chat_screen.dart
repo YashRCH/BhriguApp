@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../constants/chat_hints.dart';
+import '../constants/random_prompts.dart';
 import '../models/chat_message.dart';
 import '../models/follow_up_context_model.dart';
 import '../services/groq_service.dart';
@@ -43,6 +44,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   bool _isTyping = false;
   bool _stickToBottom = true;
+  bool _isArtGlowing = false;
   StreamSubscription<String>? _messageSubscription;
 
   Timer? _hintTimer;
@@ -56,10 +58,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   late final AnimationController _dotController;
   late final AnimationController _rotationController;
   late final AnimationController _plasmaController;
+  bool _showGuideText = true;
 
   @override
   void initState() {
     super.initState();
+
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _showGuideText = false);
+    });
 
     _scrollController.addListener(_handleScroll);
 
@@ -497,7 +504,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       backgroundColor: const Color(0xFF080512),
       bottomNavigationBar: SafeArea(
         top: false,
-        child: _inputBar(),
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 80.0), // Padding to lift above floating router
+          child: _inputBar(),
+        ),
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -531,7 +541,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                             _activeFollowUpContext != null)
                           _followUpContextChip(),
                         Expanded(
-                          child: ListView.builder(
+                          child: IgnorePointer(
+                            ignoring: messages.isEmpty,
+                            child: ListView.builder(
                             controller: _scrollController,
                             keyboardDismissBehavior:
                                 ScrollViewKeyboardDismissBehavior.onDrag,
@@ -570,14 +582,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                             },
                           ),
                         ),
-                      ],
-                    ),
-                  ],
-                ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+      ),
       ),
     );
   }
@@ -687,23 +700,76 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   Widget _emptyState() {
-    return IgnorePointer(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxHeight < 280;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxHeight < 280;
 
-          return Center(
-            child: SingleChildScrollView(
-              physics: const NeverScrollableScrollPhysics(),
-              padding: EdgeInsets.symmetric(
-                vertical: compact ? 8 : 0,
+        return Center(
+          child: SingleChildScrollView(
+            physics: const NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.symmetric(
+              vertical: compact ? 8 : 0,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: (_) => setState(() => _isArtGlowing = true),
+                  onPointerUp: (_) => setState(() => _isArtGlowing = false),
+                  onPointerCancel: (_) => setState(() => _isArtGlowing = false),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onLongPress: () {
+                      final prompt = randomPrompts[
+                          math.Random().nextInt(randomPrompts.length)];
+                      setState(() {
+                        _controller.value = TextEditingValue(
+                          text: prompt,
+                          selection: TextSelection.collapsed(offset: prompt.length),
+                        );
+                      });
+                    },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: _isArtGlowing
+                          ? [
+                              BoxShadow(
+                                color: const Color(0xFFC7A867)
+                                    .withValues(alpha: 0.6),
+                                blurRadius: 40,
+                                spreadRadius: 20,
+                              )
+                            ]
+                          : null,
+                    ),
+                    child: _animatedTeslaGlobe(size: compact ? 102 : 130),
+                  ),
+                ),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _animatedTeslaGlobe(size: compact ? 102 : 130),
-                  SizedBox(height: compact ? 22 : 38),
-                  Text(
+                AnimatedOpacity(
+                  opacity: _showGuideText ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 800),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(
+                      "Tap and hold for a guided question",
+                      style: GoogleFonts.cormorantGaramond(
+                        fontSize: 14,
+                        color: Colors.white54,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(height: compact ? 22 : 38),
+                IgnorePointer(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
                     'Ask Bhrigu anything',
                     style: GoogleFonts.cormorantGaramond(
                       color: Colors.white,
@@ -719,12 +785,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       fontSize: compact ? 12 : 13,
                     ),
                   ),
-                ],
-              ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 

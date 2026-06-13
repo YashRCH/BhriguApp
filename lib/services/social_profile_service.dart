@@ -10,9 +10,16 @@ class SocialProfileService {
 
   Future<PublicAstrologyProfile> createOrUpdatePublicProfile({
     required String username,
+    Map<String, dynamic>? onboardingUserData,
   }) async {
     final callable = _functions.httpsCallable('createOrUpdatePublicProfile');
-    final result = await callable.call({'username': username});
+    final payload = <String, dynamic>{'username': username};
+
+    if (onboardingUserData != null) {
+      payload['onboardingUserData'] = onboardingUserData;
+    }
+
+    final result = await callable.call(payload);
     final data = Map<String, dynamic>.from(result.data as Map);
 
     return PublicAstrologyProfile.fromMap(

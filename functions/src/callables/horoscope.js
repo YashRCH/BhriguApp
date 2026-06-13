@@ -142,6 +142,129 @@ const {
   readCompatibilityKnowledgeDocs,
   retrieveTarotKnowledge,
 } = require("../core");
+
+function placementPhrase(planet = {}) {
+  if (!planet?.name || !planet?.sign) return "";
+
+  const degree = Number(planet.degree);
+  const degreeText = Number.isFinite(degree)
+    ? ` at ${roundTo(degree, 1)} degrees`
+    : "";
+  const retrogradeText = planet.retrograde ? " retrograde" : "";
+
+  return `${planet.name}${retrogradeText} in ${planet.sign}${degreeText}`;
+}
+
+function buildDailyTransitSummary(dailyTransits, transitAspects) {
+  if (!dailyTransits) return "";
+
+  const aspects = Array.isArray(transitAspects) ? transitAspects : [];
+  const primaryAspect = aspects[0];
+
+  if (primaryAspect) {
+    const transitPlanet = primaryAspect.transitPlanet || primaryAspect.planet;
+    const aspectName = primaryAspect.aspect || primaryAspect.aspectName;
+    const natalPlanet = primaryAspect.natalPlanet;
+    const transitSign = primaryAspect.transitSign
+      ? ` in ${primaryAspect.transitSign}`
+      : "";
+    const natalSign = primaryAspect.natalSign
+      ? ` in ${primaryAspect.natalSign}`
+      : "";
+    const orb = Number(primaryAspect.orb);
+    const orbText = Number.isFinite(orb)
+      ? ` with a ${roundTo(orb, 2)} degree orb`
+      : "";
+
+    if (transitPlanet && aspectName && natalPlanet) {
+      return `Transit data: ${transitPlanet}${transitSign} is forming a ${aspectName.toLowerCase()} to your natal ${natalPlanet}${natalSign}${orbText}.`;
+    }
+  }
+
+  const tropicalPlanets = Array.isArray(dailyTransits.tropicalPlanets)
+    ? dailyTransits.tropicalPlanets
+    : [];
+  const moon = tropicalPlanets.find((planet) => planet.name === "Moon");
+  const moonText = moon ? placementPhrase(moon) : "";
+  const siderealMoonText = dailyTransits.siderealMoonSign
+    ? `The Vedic Moon is in ${dailyTransits.siderealMoonSign}${
+        dailyTransits.siderealMoonNakshatra
+          ? `, ${dailyTransits.siderealMoonNakshatra} nakshatra`
+          : ""
+      }`
+    : "";
+  const summaryParts = [
+    moonText ? `Transit Moon: ${moonText}` : "",
+    siderealMoonText,
+  ].filter(Boolean);
+
+  return summaryParts.length > 0
+    ? `Transit data: ${summaryParts.join(". ")}.`
+    : "";
+}
+
+function mergeTransitSummary(transitSummary, generatedTransit) {
+  const summary = firstSentence(cleanGeneratedLine(transitSummary));
+  const generated = firstSentence(cleanGeneratedLine(generatedTransit));
+
+  if (!summary) return limitWords(generated, 55);
+  if (!generated) return limitWords(summary, 55);
+
+  return limitWords(`${summary} ${generated}`, 65);
+}
+
+const DAILY_HOROSCOPE_AI_ATTEMPTS = 3;
+const DAILY_HOROSCOPE_AI_TIMEOUT_MS = Math.max(AI_REQUEST_TIMEOUT_MS, 45000);
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableDailyHoroscopeAiError(error) {
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    isRetryableAiError(error) ||
+    message.includes("empty reading") ||
+    message.includes("no candidates") ||
+    message.includes("candidate") ||
+    message.includes("finish reason")
+  );
+}
+
+async function generateDailyHoroscopeText(prompt) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= DAILY_HOROSCOPE_AI_ATTEMPTS; attempt += 1) {
+    try {
+      return await generateGeminiReadingText({
+        prompt,
+        maxTokens: 900,
+        temperature: 0.7,
+        timeoutMs: DAILY_HOROSCOPE_AI_TIMEOUT_MS,
+      });
+    } catch (error) {
+      lastError = error;
+
+      if (
+        attempt < DAILY_HOROSCOPE_AI_ATTEMPTS &&
+        isRetryableDailyHoroscopeAiError(error)
+      ) {
+        console.warn(
+          `Daily horoscope Gemini attempt ${attempt} failed; retrying.`,
+          error.response?.data || error.message
+        );
+        await delay(700 * attempt);
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw lastError || new Error("Daily horoscope Gemini generation failed.");
+}
+
 exports.generateDailyHoroscope = onCall(
   callableRuntimeOptions({
     secrets: [GEMINI_API_KEY],
@@ -170,9 +293,7 @@ exports.generateDailyHoroscope = onCall(
     const dateKey = String(request.data.dateKey || "").trim();
     const horoscopeDocId =
       aiResponseLanguage === "hinglish" ? `${dateKey}_hinglish` : dateKey;
-    const contentVersion = String(
-      request.data.contentVersion || HOME_HOROSCOPE_CONTENT_VERSION
-    );
+    const contentVersion = HOME_HOROSCOPE_CONTENT_VERSION;
 
     if (!dateKey) {
       throw new HttpsError("invalid-argument", "dateKey is required.");
@@ -226,16 +347,35 @@ exports.generateDailyHoroscope = onCall(
       console.error("Daily transit cache error:", transitError);
       throw new HttpsError(
         "internal",
-        "NASA API is busy and couldn't load transit data to build the horoscope. Please try again later."
+        "NASA/JPL transit data could not be loaded, so today's horoscope was not generated. Please try again shortly."
+      );
+    }
+
+    const transitSummaryText = buildDailyTransitSummary(
+      dailyTransits,
+      transitAspects
+    );
+
+    if (!transitSummaryText) {
+      console.error("Daily transit summary missing:", dailyTransits);
+      throw new HttpsError(
+        "internal",
+        "NASA/JPL transit data was incomplete, so today's horoscope was not generated. Please try again shortly."
       );
     }
 
     let ragQuery = "";
     if (transitAspects && transitAspects.length > 0) {
       const primary = transitAspects[0];
-      ragQuery = `${primary.planet} transit ${primary.aspectName} ${primary.natalPlanet}`;
-    } else if (dailyTransits && Array.isArray(dailyTransits.planets)) {
-      const moon = dailyTransits.planets.find((p) => p.name === "Moon");
+      const transitPlanet = primary.transitPlanet || primary.planet;
+      const aspectName = primary.aspect || primary.aspectName;
+      const natalPlanet = primary.natalPlanet;
+
+      if (transitPlanet && aspectName && natalPlanet) {
+        ragQuery = `${transitPlanet} transit ${aspectName} ${natalPlanet}`;
+      }
+    } else if (dailyTransits && Array.isArray(dailyTransits.tropicalPlanets)) {
+      const moon = dailyTransits.tropicalPlanets.find((p) => p.name === "Moon");
       if (moon) ragQuery = `Moon in ${moon.sign}`;
     }
 
@@ -255,21 +395,25 @@ exports.generateDailyHoroscope = onCall(
     const ragContextText = retrievedKnowledge
       ? `Supporting astrological reference wisdom:\n${retrievedKnowledge}\n\nWeave this wisdom organically into [BHRIGU TODAY] or the action advice.`
       : "";
-
-    prompt = `${prompt}
-
-NASA/JPL daily transit cache for ${dateKey}:
+    const transitContextText = `NASA/JPL daily transit cache for ${dateKey}:
 ${JSON.stringify(dailyTransits)}
 
 Transit-to-natal aspects for ${dateKey}:
 ${JSON.stringify(transitAspects)}
 
+Use these transits as today's astronomical context. Do not claim NASA/JPL creates astrological interpretations; use the cached placements only as transit data.`;
+    const actionBasis = "based purely on the NASA/JPL transit data above";
+
+    prompt = `${prompt}
+
+${transitContextText}
+Transit summary that MUST appear near the start of [YOUR TRANSIT]:
+${transitSummaryText}
+
 ${ragContextText}
 
-Use these transits as today's astronomical context. Do not claim NASA/JPL creates astrological interpretations; use the cached placements only as transit data.
-
 STRICT ASTROLOGY ACCURACY (ZERO HALLUCINATION RULE):
-You are strictly forbidden from inventing, guessing, or hallucinating chart placements, house numbers, or signs. Only use the provided transit and aspect data.
+You are strictly forbidden from inventing, guessing, or hallucinating chart placements, house numbers, signs, or aspects. NASA/JPL transit data is required for this reading. Only use the provided transit and aspect data.
 
 STRICT RESPONSE STRUCTURE:
 Generate the daily reading using the following strict structure. Do not use markdown bolding (**) for the body text, only for headers. Keep prose poetic, slightly detached, and fiercely direct (Bhrigu style).
@@ -277,40 +421,43 @@ Return each header on its own line, followed by its content on the next line.
 Every sentence must be complete and end with a period.
 Do not use ellipses.
 Do not repeat any sentence or key phrase across sections.
-MANTRA must not restate or summarize BHRIGU TODAY; it must be a separate command.
-If you cannot use a real transit or aspect, say the lunar context plainly instead of inventing a placement.
+MANTRA must be exactly one sentence. MANTRA must not restate or summarize BHRIGU TODAY; it must be a separate command.
+If no transit-to-natal aspect is listed, use the NASA/JPL Moon and wider sky placements from the transit summary instead of inventing an aspect.
 Never ask the user direct questions. If you must use a question, it MUST be strictly rhetorical.
 
 Every section below (EXCEPT [YOUR TRANSIT]) must follow the Bhrigu 'hook and validation' personality cycle. Ensure there is a strict 50/50 chance each day that the overall tone leans either toward a blunt, sharp 'hard truth' OR a deeply affirmative, validating relief. Do not default to negative. Bump up the psychological creativity—make the user feel profoundly seen and completely surprised by your insight without constant doom.
 You must actively fight repetition. Never use the same generic advice (like 'do one thing perfectly' or 'take a breath') across days. Force extreme thematic variation ('spice') based purely on the exact planetary geometry of the day.
 
-[BHRIGU TODAY] (2-3 sentences max. Establish the core psychological insight for the day using the randomized hook/validation tone.)
-[YOUR TRANSIT] (1 sentence detailing planetary mechanics, 1 sentence on how it feels. Keep this purely astrological and literal.)
-[DO] (One complete paragraph, 1-2 sentences. MUST strictly be love, career, and general lifestyle advice based purely on the transits. Do not provide any generic productivity advice or other topics. Actionable, highly specific, and wildly variable. No bullet points.)
-[AVOID] (One complete paragraph, 1-2 sentences. What one should avoid in these spheres (love, career, lifestyle) strictly based on the transits. Psychologically sharp warning that changes drastically every day. Ban generic clichés. No bullet points.)
-[RELATIONSHIPS] (2 sentences on romantic or platonic dynamics using the hook/validation cycle. Keep it unpredictable.)
-[WORK / MONEY] (1-2 sentences on material wealth or discipline. Force high variation daily.)
-[INNER WEATHER] (1 sentence describing the internal emotional climate.)
-[MANTRA] (1 short, powerful, imperative sentence. Radically different every day. Add spice, attitude, and edge. Complete your sentence with a firm stop.)
+[BHRIGU TODAY] (1-2 sentences, maximum 45 words. Establish the core psychological insight for the day using the randomized hook/validation tone.)
+[YOUR TRANSIT] (1-2 sentences. First sentence MUST name the exact transit/aspect or Moon/sign/nakshatra from the transit summary above. Include the orb when an aspect has one. If using a second sentence, explain how it feels. Keep this astrological, literal, and specific.)
+[DO] (One complete paragraph, 1-2 sentences. MUST strictly be love, career, and general lifestyle advice ${actionBasis}. No bullet points.)
+[AVOID] (One complete paragraph, 1-2 sentences. What one should avoid in love, career, and lifestyle ${actionBasis}. Ban generic cliches. No bullet points.)
+[RELATIONSHIPS] (1-2 direct sentences on romantic or platonic dynamics.)
+[WORK / MONEY] (1-2 direct sentences on material wealth or discipline.)
+[INNER WEATHER] (1-2 direct sentences describing the internal emotional climate.)
+[MANTRA] (Exactly 1 short, powerful, imperative sentence. Radically different every day. Add spice, attitude, and edge. Complete your sentence with a firm stop.)
 `;
     prompt = `${prompt}${languageInstruction(aiResponseLanguage)}`;
 
     try {
-      const text = await generateGeminiReadingText({
-        prompt,
-        maxTokens: 520,
-        temperature: 0.7,
-      });
+      const text = await generateDailyHoroscopeText(prompt);
       const horoscopeMeta = request.data.horoscopeMeta || {};
       const parsed = parseDailyHoroscopeText(text, {
         moonPhaseLine: request.data.moonPhaseLine,
         dailyEnergyLine: request.data.dailyEnergyLine,
       });
+      const expandedParsed = {
+        ...parsed,
+        yourTransit: mergeTransitSummary(
+          transitSummaryText,
+          parsed.yourTransit
+        ),
+      };
       const storedHoroscope = {
         dateKey,
         contentVersion,
         aiResponseLanguage,
-        ...parsed,
+        ...expandedParsed,
         moonPhase: horoscopeMeta.moonPhase || null,
         moonAge:
           typeof horoscopeMeta.moonAge === "number"
@@ -323,6 +470,7 @@ You must actively fight repetition. Never use the same generic advice (like 'do 
         dailyPlanet: horoscopeMeta.dailyPlanet || null,
         dailyTransits,
         transitAspects,
+        transitSummary: transitSummaryText,
         rawText: text,
         generatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };

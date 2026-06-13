@@ -251,6 +251,7 @@ exports.generateTarotReading = onCall(
         aiResponseLanguage,
         preserveFormatInstruction:
           "Preserve PAST, PRESENT, FUTURE headings and all card names exactly.",
+        enquiryContext: `The user's original enquiry was: "${enquiryText}". CRITICAL: You must preserve every specific reference, noun, and detail related to this enquiry from the original text.`,
         maxTokens: TAROT_MAX_OUTPUT_TOKENS,
       });
 
@@ -475,6 +476,7 @@ Hard constraints:
             aiResponseLanguage,
             preserveFormatInstruction:
               "Preserve PAST, PRESENT, FUTURE headings and all card names exactly.",
+            enquiryContext: `The user's original enquiry was: "${enquiryText}". CRITICAL: You must preserve every specific reference, noun, and detail related to this enquiry from the original text.`,
             maxTokens: TAROT_MAX_OUTPUT_TOKENS,
           }),
           aiResponseLanguage,
@@ -486,6 +488,7 @@ Hard constraints:
         aiResponseLanguage,
         preserveFormatInstruction:
           "Preserve PAST, PRESENT, FUTURE headings and all card names exactly.",
+        enquiryContext: `The user's original enquiry was: "${enquiryText}". CRITICAL: You must preserve every specific reference, noun, and detail related to this enquiry from the original text.`,
         maxTokens: TAROT_MAX_OUTPUT_TOKENS,
       });
       await writeCachedReading(
@@ -527,6 +530,7 @@ Hard constraints:
           aiResponseLanguage,
           preserveFormatInstruction:
             "Preserve PAST, PRESENT, FUTURE headings and all card names exactly.",
+          enquiryContext: `The user's original enquiry was: "${enquiryText}". CRITICAL: You must preserve every specific reference, noun, and detail related to this enquiry from the original text.`,
           maxTokens: TAROT_MAX_OUTPUT_TOKENS,
         }),
         fallback: true,

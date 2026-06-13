@@ -119,12 +119,19 @@ class AuthService {
     if (uid == null) return;
 
     unawaited(_storage.delete(key: 'user_id'));
+    final userData = user.toMap();
+    final username = user.username.trim();
 
-    await _db.collection('users').doc(uid).set(
-          user.toMap(),
-        );
+    if (username.isNotEmpty) {
+      await _socialProfileService.createOrUpdatePublicProfile(
+        username: username,
+        onboardingUserData: userData,
+      );
+    } else {
+      await _db.collection('users').doc(uid).set(userData);
+    }
 
-    UserProfileCacheService.instance.primeCurrentUser(user.toMap());
+    UserProfileCacheService.instance.primeCurrentUser(userData);
 
     await _astrologyService.generateAndSaveCharts(
       uid: uid,
@@ -135,10 +142,14 @@ class AuthService {
       longitude: user.longitude,
     );
 
-    if (user.username.trim().isNotEmpty) {
-      await _socialProfileService.createOrUpdatePublicProfile(
-        username: user.username,
-      );
+    if (username.isNotEmpty) {
+      try {
+        await _socialProfileService.createOrUpdatePublicProfile(
+          username: username,
+        );
+      } catch (e) {
+        debugPrint('Public profile chart refresh skipped: $e');
+      }
     }
 
     await _db.collection('users').doc(uid).set(

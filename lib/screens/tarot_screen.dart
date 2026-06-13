@@ -12,6 +12,7 @@ import '../services/follow_up_context_service.dart';
 import '../services/tarot_service.dart';
 import '../widgets/ai_report_button.dart';
 import '../widgets/tarot_share_card.dart';
+import '../constants/random_prompts.dart';
 
 class TarotScreen extends StatefulWidget {
   const TarotScreen({super.key});
@@ -48,10 +49,16 @@ class _TarotScreenState extends State<TarotScreen>
   bool get _allRevealed => _flow.allRevealed;
   bool get _followUpLoading => _flow.followUpLoading;
   bool get _readingStarted => _flow.readingStarted;
+  bool _isArtGlowing = false;
+  bool _showGuideText = true;
 
   @override
   void initState() {
     super.initState();
+
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _showGuideText = false);
+    });
 
     _breathController = AnimationController(
       vsync: this,
@@ -325,7 +332,8 @@ class _TarotScreenState extends State<TarotScreen>
           SafeArea(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              padding: const EdgeInsets.only(
+                  left: 24, right: 24, top: 10, bottom: 120),
               child: _cards == null ? _initialState() : _spreadState(),
             ),
           ),
@@ -361,7 +369,56 @@ class _TarotScreenState extends State<TarotScreen>
           ),
         ),
         const SizedBox(height: 22),
-        _tarotAltarDeck(),
+        Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: (_) => setState(() => _isArtGlowing = true),
+          onPointerUp: (_) => setState(() => _isArtGlowing = false),
+          onPointerCancel: (_) => setState(() => _isArtGlowing = false),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onLongPress: () {
+              final prompt =
+                  randomPrompts[math.Random().nextInt(randomPrompts.length)];
+              setState(() {
+                _questionController.value = TextEditingValue(
+                  text: prompt,
+                  selection: TextSelection.collapsed(offset: prompt.length),
+                );
+              });
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: _isArtGlowing
+                    ? [
+                        BoxShadow(
+                          color: const Color(0xFFC7A867).withValues(alpha: 0.3),
+                          blurRadius: 30,
+                          spreadRadius: 10,
+                        )
+                      ]
+                    : null,
+              ),
+              child: _tarotAltarDeck(),
+            ),
+          ),
+        ),
+        AnimatedOpacity(
+          opacity: _showGuideText ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 800),
+          child: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(
+              "Tap and hold for a guided question",
+              style: GoogleFonts.cormorantGaramond(
+                fontSize: 14,
+                color: Colors.white54,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+        ),
         const SizedBox(height: 18),
         Container(
           decoration: BoxDecoration(
@@ -407,9 +464,10 @@ class _TarotScreenState extends State<TarotScreen>
             padding: const EdgeInsets.symmetric(vertical: 18),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              color: canDraw ? const Color(0xFF1E1430) : const Color(0xFF0F0A18),
+              color:
+                  canDraw ? const Color(0xFF1E1430) : const Color(0xFF0F0A18),
               border: Border.all(
-                color: canDraw 
+                color: canDraw
                     ? const Color(0xFF8A6B22).withValues(alpha: 0.5)
                     : const Color(0xFF3A2D50),
               ),
@@ -420,7 +478,9 @@ class _TarotScreenState extends State<TarotScreen>
                 style: GoogleFonts.cinzel(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: canDraw ? const Color(0xFFB58E34) : const Color(0xFF6B6080),
+                  color: canDraw
+                      ? const Color(0xFFB58E34)
+                      : const Color(0xFF6B6080),
                   letterSpacing: 3.0,
                 ),
               ),
@@ -461,7 +521,6 @@ class _TarotScreenState extends State<TarotScreen>
                       ),
                     ),
                   ),
-
                 ],
               );
             },
@@ -872,8 +931,19 @@ class _TarotScreenState extends State<TarotScreen>
                 ],
               ),
             )
-          else
+          else ...[
+            Text(
+              'You can change the selected prompt on the chat screen before sending.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                color: Colors.white38,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 12),
             ...questions.map(_followUpButton),
+          ],
         ],
       ),
     );
@@ -1451,20 +1521,14 @@ class _PentacleAltarPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.8;
 
-    final glowPaint = Paint()
-      ..color = const Color(0xFFFFD88A).withValues(alpha: 0.2 + 0.2 * glow)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-
     // -------------------------------------------------------------
     // Shuffling Animated Geometric Cards (Looping Fan Out / Fan In)
     // -------------------------------------------------------------
-    
+
     // We want a precise timing: Fan out (1.5s), Wait (4s), Fan in (1.5s), Wait (4s)
     final timeMs = DateTime.now().millisecondsSinceEpoch;
     final cycleMs = timeMs % 11000;
-    
+
     double fanProgress = 0.0;
     if (cycleMs < 1500) {
       // Fan out smooth ease
@@ -1485,8 +1549,10 @@ class _PentacleAltarPainter extends CustomPainter {
     // Bigger cards
     final cardWidth = size.width * 0.40;
     final cardHeight = cardWidth * 1.6;
-    final cardRect = Rect.fromCenter(center: Offset.zero, width: cardWidth, height: cardHeight);
-    final cardRRect = RRect.fromRectAndRadius(cardRect, const Radius.circular(8));
+    final cardRect = Rect.fromCenter(
+        center: Offset.zero, width: cardWidth, height: cardHeight);
+    final cardRRect =
+        RRect.fromRectAndRadius(cardRect, const Radius.circular(8));
 
     // The pivot point for fanning is near the bottom of the card
     final pivot = Offset(0, cardHeight * 0.35);
@@ -1494,14 +1560,14 @@ class _PentacleAltarPainter extends CustomPainter {
     // We draw 7 cards
     for (int i = 0; i < 7; i++) {
       canvas.save();
-      
+
       // Calculate rotation for this specific card
       // Card indices: 0, 1, 2, 3 (center), 4, 5, 6
-      final offsetFromCenter = i - 3; 
-      
+      final offsetFromCenter = i - 3;
+
       // Max rotation for the outermost cards (0 and 6)
       // A slightly tighter spread since there are more cards
-      final maxAngle = offsetFromCenter * (math.pi / 9); 
+      final maxAngle = offsetFromCenter * (math.pi / 9);
       final currentAngle = maxAngle * fanProgress;
 
       // Translate to pivot, rotate, translate back
@@ -1513,7 +1579,8 @@ class _PentacleAltarPainter extends CustomPainter {
         // Draw Tarotback.png as the card face
         final imgPaint = Paint();
         final srcRect = Rect.fromLTWH(
-          0, 0,
+          0,
+          0,
           cardImage!.width.toDouble(),
           cardImage!.height.toDouble(),
         );

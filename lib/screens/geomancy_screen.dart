@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 
@@ -12,6 +13,7 @@ import '../widgets/ai_report_button.dart';
 import '../widgets/geomancy_line_cast_widget.dart';
 import '../widgets/geomancy_shield_chart.dart';
 import '../widgets/geomancy_share_card.dart';
+import '../constants/random_prompts.dart';
 
 class GeomancyScreen extends StatefulWidget {
   const GeomancyScreen({super.key});
@@ -60,6 +62,7 @@ class _GeomancyScreenState extends State<GeomancyScreen>
 
   bool _isHolding = false;
   bool _isQuestionSubmitted = false;
+  bool _isArtGlowing = false;
   static const double _minLineLength = 40;
   static const double _absoluteMaxLength = 160;
 
@@ -70,10 +73,15 @@ class _GeomancyScreenState extends State<GeomancyScreen>
     'What should I avoid after this reading?',
     'What does the Judge reveal about my question?',
   ];
+  bool _showGuideText = true;
 
   @override
   void initState() {
     super.initState();
+
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _showGuideText = false);
+    });
 
     _breathController = AnimationController(
       vsync: this,
@@ -157,6 +165,7 @@ class _GeomancyScreenState extends State<GeomancyScreen>
     }
 
     FocusScope.of(context).unfocus();
+    unawaited(HapticFeedback.lightImpact());
 
     final center = Offset(_canvasSize.width / 2, _canvasSize.height / 2);
     final start = _lines.isEmpty ? center : _lines.last.end;
@@ -216,6 +225,11 @@ class _GeomancyScreenState extends State<GeomancyScreen>
     );
 
     _holdController.stop();
+    unawaited(
+      line.index == 16
+          ? HapticFeedback.heavyImpact()
+          : HapticFeedback.mediumImpact(),
+    );
 
     setState(() {
       _lines.add(line);
@@ -627,7 +641,8 @@ class _GeomancyScreenState extends State<GeomancyScreen>
           SafeArea(
             child: ListView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              padding: const EdgeInsets.only(
+                  left: 24, right: 24, top: 10, bottom: 120),
               children: [
                 if (!_isQuestionSubmitted) ...[
                   if (_lineCount == 0 && _reading == null) ...[
@@ -639,10 +654,66 @@ class _GeomancyScreenState extends State<GeomancyScreen>
                         child: AnimatedBuilder(
                           animation: Listenable.merge(
                               [_emblemController, _breathAnimation]),
-                          builder: (context, _) => CustomPaint(
-                            painter: _ShieldEmblemPainter(
-                              rotationProgress: _emblemController.value,
-                              pulse: _breathAnimation.value,
+                          builder: (context, _) => Listener(
+                            behavior: HitTestBehavior.opaque,
+                            onPointerDown: (_) =>
+                                setState(() => _isArtGlowing = true),
+                            onPointerUp: (_) =>
+                                setState(() => _isArtGlowing = false),
+                            onPointerCancel: (_) =>
+                                setState(() => _isArtGlowing = false),
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onLongPress: () {
+                                final prompt = randomPrompts[math.Random()
+                                    .nextInt(randomPrompts.length)];
+                                setState(() {
+                                  _questionController.value = TextEditingValue(
+                                    text: prompt,
+                                    selection: TextSelection.collapsed(
+                                        offset: prompt.length),
+                                  );
+                                });
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  boxShadow: _isArtGlowing
+                                      ? [
+                                          BoxShadow(
+                                            color: const Color(0xFFC7A867)
+                                                .withValues(alpha: 0.6),
+                                            blurRadius: 40,
+                                            spreadRadius: 20,
+                                          )
+                                        ]
+                                      : null,
+                                ),
+                                child: CustomPaint(
+                                  painter: _ShieldEmblemPainter(
+                                    rotationProgress: _emblemController.value,
+                                    pulse: _breathAnimation.value,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    AnimatedOpacity(
+                      opacity: _showGuideText ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 800),
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Center(
+                          child: Text(
+                            "Tap and hold for a guided question",
+                            style: GoogleFonts.cormorantGaramond(
+                              fontSize: 14,
+                              color: Colors.white54,
+                              fontStyle: FontStyle.italic,
                             ),
                           ),
                         ),
@@ -1239,6 +1310,16 @@ class _GeomancyScreenState extends State<GeomancyScreen>
               height: 1.55,
               fontStyle: FontStyle.italic,
               fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'You can change the selected prompt on the chat screen before sending.',
+            style: GoogleFonts.inter(
+              color: const Color(0xFFE5D5F5).withAlpha(120),
+              fontSize: 11.5,
+              height: 1.4,
+              fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 16),

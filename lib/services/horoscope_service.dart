@@ -13,7 +13,7 @@ import 'user_profile_cache_service.dart';
 
 class HoroscopeService {
   static const _homeHoroscopeContentVersion =
-      'home_signal_v6_complete_sentences';
+      'home_signal_v12_nasa_transit_brief';
 
   FirebaseFunctions get _functions => FirebaseFunctions.instanceFor(
         region: firebaseFunctionsRegion,
@@ -153,7 +153,7 @@ Fallback daily energy line: $dailyEnergyLine
 
 Respond in this exact format and nothing else:
 BHRIGU_TODAY: [1 sharp sentence, maximum 22 words]
-YOUR_TRANSIT: [1-2 sentences explaining the strongest chart/transit logic]
+YOUR_TRANSIT: [1-2 sentences explaining the strongest NASA/JPL-backed chart/transit logic provided by the backend]
 
 DO: [One complete paragraph, 1-2 sentences. Make it actionable and specific. No bullet points.]
 
@@ -162,7 +162,7 @@ AVOID: [One complete paragraph, 1-2 sentences. Make it psychologically sharp. No
 RELATIONSHIPS: [1-2 direct sentences]
 WORK_MONEY: [1-2 direct sentences]
 INNER_WEATHER: [1-2 direct sentences]
-MANTRA: [1 memorable line, maximum 14 words]
+MANTRA: [Exactly one memorable sentence, maximum 14 words]
 MOON_PHASE_LINE: [1 short line, maximum 12 words, based on the moon phase and the user's cosmic blueprint]
 DAILY_ENERGY_LINE: [1 short line, maximum 12 words, based on today's planetary ruler and the user's cosmic blueprint]
 
@@ -184,7 +184,7 @@ Do not invent missing placements. Do not write generic sun-sign horoscope conten
 Keep this sparse, impressive, modern, slightly confronting, and useful. Do not copy the example.
 Every sentence must be complete and end with a period. Do not use ellipses.
 Do not repeat any sentence or key phrase across sections.
-MANTRA must not repeat, summarize, or rephrase BHRIGU_TODAY; it must be a separate command.
+MANTRA must be exactly one sentence. MANTRA must not repeat, summarize, or rephrase BHRIGU_TODAY; it must be a separate command.
 Do not ask questions at the end. Do not sound like a newspaper horoscope. Do not overuse mystical words.
 ''';
 
@@ -331,7 +331,7 @@ Do not ask questions at the end. Do not sound like a newspaper horoscope. Do not
       );
       final yourTransit = _limitWords(
         _cleanGeneratedLine(yourTransitMatch?.group(1) ?? ''),
-        42,
+        55,
       );
       final doText = _limitWords(
         _cleanGeneratedLine(

@@ -261,39 +261,39 @@ class _MainShellState extends State<MainShell>
 
     return Scaffold(
       backgroundColor: const Color(0xFF050408), // Pitch black base
-      // Extend body so the content flows beautifully under the transparent glass nav bar
-      extendBody: true,
-      body: widget.child,
-      bottomNavigationBar: _buildCustomNavBar(currentIndex),
+      body: Stack(
+        children: [
+          widget.child,
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _buildCustomNavBar(currentIndex),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildCustomNavBar(int currentIndex) {
-    return Container(
-      decoration: BoxDecoration(
-        // High transparency base for a beautiful, sheer glass effect
-        color: const Color(0xFF0A0812).withValues(alpha: 0.35),
-        border: Border(
-          top: BorderSide(
-            color: const Color(0xFFC7A867)
-                .withValues(alpha: 0.1), // Faint antique gold rim lighting
-            width: 1.0,
-          ),
-        ),
-      ),
-      child: ClipRRect(
-        child: BackdropFilter(
-          // Intense blur makes the background content smooth and frosted
-          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-          child: SafeArea(
-            child: Padding(
-              // Reduced padding to make the bar shorter
-              padding: const EdgeInsets.only(
-                top: 8,
-                bottom: 4,
-                left: 8,
-                right: 8,
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.only(left: 20.0, right: 20.0, bottom: 16.0),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(40),
+          child: BackdropFilter(
+            // Intense blur for iOS 'Liquid Glass' effect
+            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF000000).withValues(alpha: 0.3), // Highly translucent base
+                borderRadius: BorderRadius.circular(40),
+                border: Border.all(
+                  color: const Color(0xFFFFFFFF).withValues(alpha: 0.15), // Subtle frosted glass edge
+                  width: 0.5,
+                ),
               ),
+              padding: const EdgeInsets.symmetric(vertical: 10), // Padding inside the floating bar
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
@@ -374,11 +374,10 @@ class _MainShellState extends State<MainShell>
     // Softer Antique Gold for active, muted violet-grey for inactive
     final color = isActive ? const Color(0xFFC7A867) : const Color(0xFF6B6080);
 
-    return GestureDetector(
-      onTap: () => _onTap(index),
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 65,
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _onTap(index),
+        behavior: HitTestBehavior.opaque,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

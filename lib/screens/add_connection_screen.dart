@@ -4,10 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/social_connection_model.dart';
-import '../services/circle_safety_service.dart';
 import '../services/connection_service.dart';
 import '../services/social_profile_service.dart';
-import '../widgets/circle_safety_gate.dart';
 import '../widgets/cosmic_screen_background.dart';
 
 class AddConnectionScreen extends StatefulWidget {
@@ -27,7 +25,6 @@ class AddConnectionScreen extends StatefulWidget {
 class _AddConnectionScreenState extends State<AddConnectionScreen> {
   final _profileService = SocialProfileService();
   final _connectionService = ConnectionService();
-  final _circleSafetyService = CircleSafetyService();
   final _usernameController = TextEditingController();
   final _inviteCodeController = TextEditingController();
 
@@ -62,8 +59,6 @@ class _AddConnectionScreenState extends State<AddConnectionScreen> {
   }
 
   Future<void> _search() async {
-    if (!await _ensureCircleSafetyAccepted()) return;
-
     // FIXED: Clear stale results immediately so old entries are not visible
     // while the new search is in flight.
     setState(() {
@@ -90,8 +85,6 @@ class _AddConnectionScreenState extends State<AddConnectionScreen> {
   }
 
   Future<void> _sendRequest(PublicAstrologyProfile profile) async {
-    if (!await _ensureCircleSafetyAccepted()) return;
-
     setState(() => _loading = true);
 
     try {
@@ -117,8 +110,6 @@ class _AddConnectionScreenState extends State<AddConnectionScreen> {
   }
 
   Future<void> _createInvite() async {
-    if (!await _ensureCircleSafetyAccepted()) return;
-
     setState(() => _loading = true);
 
     try {
@@ -141,8 +132,6 @@ class _AddConnectionScreenState extends State<AddConnectionScreen> {
   }
 
   Future<void> _acceptInvite() async {
-    if (!await _ensureCircleSafetyAccepted()) return;
-
     setState(() => _loading = true);
 
     try {
@@ -169,20 +158,6 @@ class _AddConnectionScreenState extends State<AddConnectionScreen> {
         setState(() => _loading = false);
       }
     }
-  }
-
-  Future<bool> _ensureCircleSafetyAccepted() async {
-    try {
-      final accepted = await _circleSafetyService.hasAcceptedCurrentPolicy();
-      if (accepted) return true;
-
-      _showError('Review and accept Circle Guidelines first.');
-    } catch (e, stack) {
-      _logError('Circle safety check failed', e, stack);
-      _showError('Could not verify Circle Guidelines right now.');
-    }
-
-    return false;
   }
 
   void _showError(String message) {
@@ -219,9 +194,8 @@ class _AddConnectionScreenState extends State<AddConnectionScreen> {
       body: CosmicScreenBackground(
         child: Padding(
           padding: EdgeInsets.only(top: topPadding),
-          child: CircleSafetyGate(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 110),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 110),
               children: [
                 _relationshipSelector(),
                 const SizedBox(height: 18),
@@ -325,7 +299,6 @@ class _AddConnectionScreenState extends State<AddConnectionScreen> {
             ),
           ),
         ),
-      ),
     );
   }
 
