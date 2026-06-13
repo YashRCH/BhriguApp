@@ -46,15 +46,7 @@ class TarotService {
     required TarotCard present,
     required TarotCard future,
   }) async {
-    final userData = await _getUserData();
-    final aiResponseLanguage = normalizeAiResponseLanguage(
-      userData['aiResponseLanguage'],
-    );
-
-    final birthData = userData.isEmpty
-        ? 'Birth data not available.'
-        : 'Name: ${userData['name']}, DOB: ${userData['dob']}, '
-            'Time: ${userData['timeOfBirth']}, Place: ${userData['placeOfBirth']}';
+    var aiResponseLanguage = englishAiResponseLanguage;
 
     try {
       if (await _session.currentUserOrWait() == null) {
@@ -63,6 +55,16 @@ class TarotService {
           aiResponseLanguage: aiResponseLanguage,
         );
       }
+
+      final userData = await _getUserData();
+      aiResponseLanguage = normalizeAiResponseLanguage(
+        userData['aiResponseLanguage'],
+      );
+
+      final birthData = userData.isEmpty
+          ? 'Birth data not available.'
+          : 'Name: ${userData['name']}, DOB: ${userData['dob']}, '
+              'Time: ${userData['timeOfBirth']}, Place: ${userData['placeOfBirth']}';
 
       final callable = _functions.httpsCallable(
         'generateTarotReading',
