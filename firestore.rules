@@ -316,6 +316,21 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /users/{userId}/wallet/{walletId} {
+      allow read: if isOwner(userId);
+      allow create, update, delete: if false;
+    }
+
+    match /users/{userId}/quota/{quotaId} {
+      allow read: if isOwner(userId);
+      allow create, update, delete: if false;
+    }
+
+    match /users/{userId}/purchases/{purchaseId} {
+      allow read: if isOwner(userId);
+      allow create, update, delete: if false;
+    }
+
     match /users/{userId}/owlCompanion/{docId} {
       allow read, create, update: if isOwner(userId);
       allow delete: if false;

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../constants/monetization_constants.dart';
 import '../models/payment_feature.dart';
 
 class PaymentEntitlementService {
@@ -14,16 +15,22 @@ class PaymentEntitlementService {
     required PaymentFeature feature,
     DateTime? now,
   }) async {
-    final doc = await _firestore
-        .collection('users')
-        .doc(uid)
-        .collection('entitlements')
-        .doc(feature.entitlementId)
-        .get();
+    final entitlements =
+        _firestore.collection('users').doc(uid).collection('entitlements');
 
-    if (!doc.exists) return false;
+    final plusDoc = await entitlements.doc(bhriguPlusEntitlementId).get();
+    if (_isActiveEntitlement(plusDoc.data(), now: now)) {
+      return true;
+    }
 
-    final data = doc.data() ?? {};
+    final doc = await entitlements.doc(feature.entitlementId).get();
+
+    return _isActiveEntitlement(doc.data(), now: now);
+  }
+
+  bool _isActiveEntitlement(Map<String, dynamic>? data, {DateTime? now}) {
+    if (data == null) return false;
+
     final active = data['active'] == true;
 
     if (!active) return false;

@@ -11,6 +11,7 @@ import 'package:astrology_guru_app/models/owl_companion_state.dart';
 import 'package:astrology_guru_app/constants/tarot_hints.dart';
 import 'package:astrology_guru_app/models/geomancy_figure_model.dart';
 import 'package:astrology_guru_app/models/geomancy_reading_flow.dart';
+import 'package:astrology_guru_app/models/monetization_status.dart';
 import 'package:astrology_guru_app/models/partner_match_flow.dart';
 import 'package:astrology_guru_app/models/partner_match_model.dart';
 import 'package:astrology_guru_app/models/tarot_card.dart';
@@ -191,6 +192,41 @@ void main() {
     expect(PaymentFeature.geomancyReading.productId, 'bhrigu.geomancy.reading');
     expect(PaymentFeature.partnerMatch.entitlementId, 'partner_match');
     expect(PaymentFeature.bhriguChat.productId, 'bhrigu.chat.session');
+  });
+
+  test('monetization status parses Plus and Dakshana state safely', () {
+    final status = MonetizationStatus.fromMap({
+      'mode': 'shadow',
+      'plusActive': true,
+      'plan': 'yearly',
+      'plusExpiresAt': '2027-06-14T00:00:00.000Z',
+      'dakshana': {
+        'chat': '5',
+        'tarot': 1.0,
+        'geomancy': null,
+      },
+      'usage': {
+        'chat': 12.0,
+        'tarot': '3',
+      },
+      'limits': {
+        'chat': 1500,
+        'chatDaily': '100',
+      },
+    });
+
+    expect(status.mode, 'shadow');
+    expect(status.plusActive, isTrue);
+    expect(status.plan, 'yearly');
+    expect(status.plusExpiresAt?.year, 2027);
+    expect(status.dakshana.active, isTrue);
+    expect(status.dakshana.chat, 5);
+    expect(status.dakshana.tarot, 1);
+    expect(status.dakshana.geomancy, 0);
+    expect(status.dakshana.totalCredits, 6);
+    expect(status.canBuyDakshana, isFalse);
+    expect(status.usage['chat'], 12);
+    expect(status.limits['chatDaily'], 100);
   });
 
   test('tarot reading flow tracks reveal and payment-ready states', () {

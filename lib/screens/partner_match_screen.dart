@@ -11,6 +11,7 @@ import '../models/partner_match_model.dart';
 import '../services/partner_match_service.dart';
 import '../services/follow_up_context_service.dart';
 import '../widgets/ai_report_button.dart';
+import '../widgets/ai_disclaimer.dart';
 import '../widgets/compatibility_metric_card.dart';
 import '../widgets/compatibility_score_ring.dart';
 import '../widgets/heart_signal_card.dart';
@@ -512,6 +513,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen>
                     label: 'Report',
                   ),
                 ),
+                const AiDisclaimer(),
               ],
             ),
           ),
@@ -725,6 +727,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen>
               label: 'Report',
             ),
           ),
+          const AiDisclaimer(),
         ],
       ),
     );

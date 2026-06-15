@@ -12,6 +12,7 @@ import '../services/streak_reward_service.dart';
 import '../services/user_profile_cache_service.dart';
 import '../utils/zodiac_signs.dart';
 import '../widgets/ai_report_button.dart';
+import '../widgets/ai_disclaimer.dart';
 import '../widgets/planet_asset.dart';
 import '../widgets/owl_home_card.dart';
 import '../widgets/owl_sprite_animator.dart';

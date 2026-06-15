@@ -10,8 +10,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
 import '../services/auth_service.dart';
+import '../services/monetization_service.dart';
 import '../services/user_profile_cache_service.dart';
 import '../utils/zodiac_signs.dart';
+import '../widgets/monetization_paywall_preview.dart';
 import '../widgets/zodiac_sign_icon.dart';
 import 'cosmic_blueprint_screen.dart';
 
@@ -24,6 +26,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
+  final _monetizationService = MonetizationService();
   Map<String, dynamic>? _userData;
   bool _loading = true;
   bool _deletingAccount = false;
@@ -894,66 +897,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _planCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: const Color(0xFF3A2D50),
-        ),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF1A1630),
-            Color(0xFF151126),
-          ],
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Free Tier',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFE5D5F5),
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  '5 messages / day',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF6B6080),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {},
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFB58E34),
-              foregroundColor: const Color(0xFF050408),
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text(
-              'Upgrade',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
+    return MonetizationPaywallPreview(
+      service: _monetizationService,
     );
   }
 
@@ -1098,10 +1043,10 @@ class _ProfileScreenState extends State<ProfileScreen>
             icon: Icons.privacy_tip_outlined,
             title: 'Privacy Policy',
             onTap: () async {
-              final url =
-                  Uri.parse('https://astrology-guru-app.web.app/privacy.html');
+              final url = Uri.parse(
+                  'https://astrology-guru-app.firebaseapp.com/privacy.html?v=1');
               if (await canLaunchUrl(url)) {
-                await launchUrl(url);
+                await launchUrl(url, mode: LaunchMode.inAppBrowserView);
               }
             },
           ),
@@ -1110,10 +1055,10 @@ class _ProfileScreenState extends State<ProfileScreen>
             icon: Icons.gavel_rounded,
             title: 'Terms of Service & Disclaimer',
             onTap: () async {
-              final url =
-                  Uri.parse('https://astrology-guru-app.web.app/privacy.html');
+              final url = Uri.parse(
+                  'https://astrology-guru-app.firebaseapp.com/terms.html?v=1');
               if (await canLaunchUrl(url)) {
-                await launchUrl(url);
+                await launchUrl(url, mode: LaunchMode.inAppBrowserView);
               }
             },
           ),

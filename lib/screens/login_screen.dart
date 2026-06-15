@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -412,42 +413,48 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: GestureDetector(
-                            onTap: () async {
-                              final url = Uri.parse('https://astrology-guru-app.web.app/privacy.html');
-                              if (await canLaunchUrl(url)) {
-                                await launchUrl(url);
-                              }
-                            },
-                            child: RichText(
-                              text: TextSpan(
-                                style: GoogleFonts.inter(
-                                  color: const Color(0xFFE5D5F5),
-                                  fontSize: 13,
-                                  height: 1.4,
-                                ),
-                                children: const [
-                                  TextSpan(text: 'I agree to the '),
-                                  TextSpan(
-                                    text: 'Terms of Service',
-                                    style: TextStyle(
-                                      color: Color(0xFFB58E34),
-                                      fontWeight: FontWeight.bold,
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                  ),
-                                  TextSpan(text: ' and '),
-                                  TextSpan(
-                                    text: 'Privacy Policy',
-                                    style: TextStyle(
-                                      color: Color(0xFFB58E34),
-                                      fontWeight: FontWeight.bold,
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                  ),
-                                  TextSpan(text: '.'),
-                                ],
+                          child: RichText(
+                            text: TextSpan(
+                              style: GoogleFonts.inter(
+                                color: const Color(0xFFE5D5F5),
+                                fontSize: 13,
+                                height: 1.4,
                               ),
+                              children: [
+                                const TextSpan(text: 'I am 13 or older, and I agree to the '),
+                                TextSpan(
+                                  text: 'Terms of Service',
+                                  style: const TextStyle(
+                                    color: Color(0xFFB58E34),
+                                    fontWeight: FontWeight.bold,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                  recognizer: TapGestureRecognizer()
+                                    ..onTap = () async {
+                                      final url = Uri.parse('https://astrology-guru-app.firebaseapp.com/terms.html?v=1');
+                                      if (await canLaunchUrl(url)) {
+                                        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                                      }
+                                    },
+                                ),
+                                const TextSpan(text: ' and '),
+                                TextSpan(
+                                  text: 'Privacy Policy',
+                                  style: const TextStyle(
+                                    color: Color(0xFFB58E34),
+                                    fontWeight: FontWeight.bold,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                  recognizer: TapGestureRecognizer()
+                                    ..onTap = () async {
+                                      final url = Uri.parse('https://astrology-guru-app.firebaseapp.com/privacy.html?v=1');
+                                      if (await canLaunchUrl(url)) {
+                                        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                                      }
+                                    },
+                                ),
+                                const TextSpan(text: '.'),
+                              ],
                             ),
                           ),
                         ),

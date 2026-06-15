@@ -13,7 +13,6 @@ import '../models/chat_message.dart';
 import '../models/follow_up_context_model.dart';
 import '../services/groq_service.dart';
 import '../services/follow_up_context_service.dart';
-import '../services/user_profile_cache_service.dart';
 import '../providers/chat_provider.dart';
 import '../widgets/ai_report_button.dart';
 import 'cosmic_blueprint_screen.dart';
@@ -50,8 +49,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Timer? _hintTimer;
   int _hintIndex = 0;
 
-  static const String _ephemerisTrustLine =
-      'Powered by NASA/JPL Horizons Data';
+  static const String _ephemerisTrustLine = 'Powered by NASA/JPL Horizons Data';
   static const int _apiHistoryLimit = 5;
 
   late final AnimationController _pulseController;
@@ -162,34 +160,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
 
     try {
-      final currentLanguage =
-          await UserProfileCacheService.instance.aiResponseLanguage();
       final followUpContext = await _followUpService.getFollowUpContext(
         contextId,
       );
 
       if (!mounted || requestId != _followUpContextRequestId) return;
-
-      if (followUpContext != null &&
-          followUpContext.aiResponseLanguage != currentLanguage) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'This reading was created in another response language. Switch back to continue it, or create a new reading.',
-              style: GoogleFonts.inter(),
-            ),
-            backgroundColor: const Color(0xFF1A1630),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-
-        setState(() {
-          _clearAutoFilledFollowUpQuestion();
-          _activeFollowUpContext = null;
-          _loadingFollowUpContext = false;
-        });
-        return;
-      }
 
       setState(() {
         _activeFollowUpContext = followUpContext;
@@ -240,30 +215,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Future<void> _send() async {
     final text = _controller.text.trim();
 
-    if (text.isEmpty || _isTyping) return;
+    if (text.isEmpty || _isTyping || _loadingFollowUpContext) return;
 
     _stickToBottom = true;
     final language =
         await ref.read(chatProvider.notifier).ensureActiveLanguage();
     if (!mounted) return;
-
-    if (_activeFollowUpContext != null &&
-        _activeFollowUpContext!.aiResponseLanguage != language) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'This reading was created in another response language. Switch back to continue it, or create a new reading.',
-            style: GoogleFonts.inter(),
-          ),
-          backgroundColor: const Color(0xFF1A1630),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      setState(() {
-        _activeFollowUpContext = null;
-      });
-      return;
-    }
 
     ref.read(chatProvider.notifier).addMessage(
           ChatMessage(
@@ -505,7 +462,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.only(bottom: 80.0), // Padding to lift above floating router
+          padding: const EdgeInsets.only(
+              bottom: 80.0), // Padding to lift above floating router
           child: _inputBar(),
         ),
       ),
@@ -544,53 +502,53 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                           child: IgnorePointer(
                             ignoring: messages.isEmpty,
                             child: ListView.builder(
-                            controller: _scrollController,
-                            keyboardDismissBehavior:
-                                ScrollViewKeyboardDismissBehavior.onDrag,
-                            padding: const EdgeInsets.only(
-                              left: 16,
-                              right: 16,
-                              top: 16,
-                              bottom: 26,
+                              controller: _scrollController,
+                              keyboardDismissBehavior:
+                                  ScrollViewKeyboardDismissBehavior.onDrag,
+                              padding: const EdgeInsets.only(
+                                left: 16,
+                                right: 16,
+                                top: 16,
+                                bottom: 26,
+                              ),
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              addAutomaticKeepAlives: false,
+                              addRepaintBoundaries: false,
+                              itemCount: messages.length,
+                              itemBuilder: (_, i) {
+                                final msg = messages[i];
+
+                                if (msg.role == 'assistant' &&
+                                    msg.content.isEmpty &&
+                                    _isTyping) {
+                                  return _typingIndicator();
+                                }
+
+                                if (msg.content.isEmpty) {
+                                  return const SizedBox();
+                                }
+
+                                final isStreaming = _isTyping &&
+                                    i == messages.length - 1 &&
+                                    msg.role == 'assistant';
+
+                                if (isStreaming) {
+                                  return _buildStreamingMessage(msg);
+                                }
+
+                                return _buildMessage(msg);
+                              },
                             ),
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            addAutomaticKeepAlives: false,
-                            addRepaintBoundaries: false,
-                            itemCount: messages.length,
-                            itemBuilder: (_, i) {
-                              final msg = messages[i];
-
-                              if (msg.role == 'assistant' &&
-                                  msg.content.isEmpty &&
-                                  _isTyping) {
-                                return _typingIndicator();
-                              }
-
-                              if (msg.content.isEmpty) {
-                                return const SizedBox();
-                              }
-
-                              final isStreaming = _isTyping &&
-                                  i == messages.length - 1 &&
-                                  msg.role == 'assistant';
-
-                              if (isStreaming) {
-                                return _buildStreamingMessage(msg);
-                              }
-
-                              return _buildMessage(msg);
-                            },
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -624,7 +582,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'BHRIGU',
+                      'Bhrigu AI',
                       style: GoogleFonts.cinzel(
                         color: const Color(0xFFC7A867),
                         fontSize: 24,
@@ -647,6 +605,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                             height: 1.2,
                             fontWeight: FontWeight.w500,
                             letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                    AnimatedOpacity(
+                      opacity: _showGuideText ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 800),
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          "Bhrigu AI can make mistakes",
+                          style: GoogleFonts.inter(
+                            fontSize: 9,
+                            color: Colors.white54,
+                            fontStyle: FontStyle.italic,
                           ),
                         ),
                       ),
@@ -726,29 +699,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       setState(() {
                         _controller.value = TextEditingValue(
                           text: prompt,
-                          selection: TextSelection.collapsed(offset: prompt.length),
+                          selection:
+                              TextSelection.collapsed(offset: prompt.length),
                         );
                       });
                     },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      boxShadow: _isArtGlowing
-                          ? [
-                              BoxShadow(
-                                color: const Color(0xFFC7A867)
-                                    .withValues(alpha: 0.6),
-                                blurRadius: 40,
-                                spreadRadius: 20,
-                              )
-                            ]
-                          : null,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: _isArtGlowing
+                            ? [
+                                BoxShadow(
+                                  color: const Color(0xFFC7A867)
+                                      .withValues(alpha: 0.6),
+                                  blurRadius: 40,
+                                  spreadRadius: 20,
+                                )
+                              ]
+                            : null,
+                      ),
+                      child: _animatedTeslaGlobe(size: compact ? 102 : 130),
                     ),
-                    child: _animatedTeslaGlobe(size: compact ? 102 : 130),
                   ),
                 ),
-              ),
                 AnimatedOpacity(
                   opacity: _showGuideText ? 1.0 : 0.0,
                   duration: const Duration(milliseconds: 800),
@@ -770,21 +744,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                    'Ask Bhrigu anything',
-                    style: GoogleFonts.cormorantGaramond(
-                      color: Colors.white,
-                      fontSize: compact ? 25 : 28,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Your cosmic blueprint guides every answer',
-                    style: GoogleFonts.inter(
-                      color: const Color(0xFF9D6FE8),
-                      fontSize: compact ? 12 : 13,
-                    ),
-                  ),
+                        'Ask Bhrigu anything',
+                        style: GoogleFonts.cormorantGaramond(
+                          color: Colors.white,
+                          fontSize: compact ? 25 : 28,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Your cosmic blueprint guides every answer',
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFF9D6FE8),
+                          fontSize: compact ? 12 : 13,
+                        ),
+                      ),
                     ],
                   ),
                 ),

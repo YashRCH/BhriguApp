@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
 import 'router.dart';
 import 'services/push_notification_service.dart';
+import 'services/revenue_cat_service.dart';
 
 const _enableAppCheck = bool.fromEnvironment('ENABLE_APP_CHECK');
 
@@ -33,6 +34,7 @@ void main() async {
         options: DefaultFirebaseOptions.currentPlatform,
       );
       await _activateAppCheck();
+      await RevenueCatService.instance.configure();
 
       try {
         final pushService = PushNotificationService();

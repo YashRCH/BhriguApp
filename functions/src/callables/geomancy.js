@@ -330,6 +330,7 @@ Follow the geomancy reading structure exactly. Preserve the required all-caps he
         prompt,
         maxTokens: GEOMANCY_MAX_OUTPUT_TOKENS,
         temperature: GEOMANCY_READING_TEMPERATURE,
+        model: GEMINI_FLASH_LITE_MODEL,
       });
       text = await ensureHinglishText({
         text,

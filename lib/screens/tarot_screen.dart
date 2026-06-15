@@ -11,6 +11,7 @@ import '../models/tarot_reading_flow.dart';
 import '../services/follow_up_context_service.dart';
 import '../services/tarot_service.dart';
 import '../widgets/ai_report_button.dart';
+import '../widgets/ai_disclaimer.dart';
 import '../widgets/tarot_share_card.dart';
 import '../constants/random_prompts.dart';
 
@@ -847,6 +848,7 @@ class _TarotScreenState extends State<TarotScreen>
                       label: 'Report',
                     ),
                   ),
+                  const AiDisclaimer(),
                 ],
               ),
       ),

@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/user_model.dart';
 import 'astrology_service.dart';
+import 'revenue_cat_service.dart';
 import 'social_profile_service.dart';
 import 'user_profile_cache_service.dart';
 
@@ -50,6 +51,7 @@ class AuthService {
       rethrow;
     }
     unawaited(_storage.delete(key: 'user_id'));
+    unawaited(RevenueCatService.instance.identifyCurrentUser());
 
     return cred;
   }
@@ -84,6 +86,7 @@ class AuthService {
     }
 
     unawaited(_storage.delete(key: 'user_id'));
+    unawaited(RevenueCatService.instance.identifyCurrentUser());
 
     _generateChartsAfterLogin(cred.user!.uid);
 
@@ -107,6 +110,7 @@ class AuthService {
     );
 
     unawaited(_storage.delete(key: 'user_id'));
+    unawaited(RevenueCatService.instance.identifyCurrentUser());
 
     _generateChartsAfterLogin(cred.user!.uid);
 
@@ -334,6 +338,8 @@ class AuthService {
 
   Future<void> signOut() async {
     final uid = _auth.currentUser?.uid;
+
+    await RevenueCatService.instance.logOut();
 
     try {
       await _googleSignIn.signOut();

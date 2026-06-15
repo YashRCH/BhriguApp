@@ -242,6 +242,7 @@ async function generateDailyHoroscopeText(prompt) {
         maxTokens: 900,
         temperature: 0.7,
         timeoutMs: DAILY_HOROSCOPE_AI_TIMEOUT_MS,
+        model: GEMINI_FLASH_LITE_MODEL,
       });
     } catch (error) {
       lastError = error;

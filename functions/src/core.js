@@ -25,7 +25,7 @@ const BHRIGU_TUNED_MODEL = "endpoints/6058371191452729344";
 const GROQ_PARTNER_MATCH_MODEL = "llama-3.3-70b-versatile";
 const GROQ_BHRIGU_CHAT_MODEL = "llama-3.3-70b-versatile";
 
-const TAROT_READING_CONTENT_VERSION = "tarot_gemini25_lite_v4";
+const TAROT_READING_CONTENT_VERSION = "tarot_flash_lite_json_v1";
 const GEOMANCY_READING_CONTENT_VERSION = "geomancy_gemini25_lite_v3";
 const TAROT_MAX_OUTPUT_TOKENS = 1400;
 const GEOMANCY_MAX_OUTPUT_TOKENS = 1200;
@@ -240,6 +240,7 @@ ${preserveFormatInstruction}${contextInstruction}`,
       prompt: String(text || ""),
       maxTokens,
       temperature: 0.25,
+      model: GEMINI_FLASH_LITE_MODEL,
     });
   } catch (error) {
     console.error(
@@ -488,11 +489,18 @@ async function generateGeminiReadingText({
   temperature,
   model = BHRIGU_TUNED_MODEL,
   timeoutMs = AI_REQUEST_TIMEOUT_MS,
+  responseMimeType,
 }) {
   const { token, projectId } = await getVertexAuth();
   const region = FUNCTION_REGION || "us-central1";
 
-  const combinedPrompt = systemInstruction
+  // Tuned endpoints (endpoints/...) don't reliably support the
+  // systemInstruction API field or responseMimeType in generationConfig.
+  // For those, prepend the system instruction into the user message
+  // (the approach that was proven working on origin/main).
+  const isEndpoint = model.startsWith("endpoints/");
+
+  const effectivePrompt = (isEndpoint && systemInstruction)
     ? `${systemInstruction}\n\n${prompt}`
     : prompt;
 
@@ -502,18 +510,31 @@ async function generateGeminiReadingText({
         role: "user",
         parts: [
           {
-            text: combinedPrompt,
+            text: effectivePrompt,
           },
         ],
       },
     ],
+    // Standard Gemini models: use proper systemInstruction API field
+    ...(!isEndpoint && systemInstruction
+      ? {
+          systemInstruction: {
+            parts: [
+              {
+                text: systemInstruction,
+              },
+            ],
+          },
+        }
+      : {}),
     generationConfig: {
       maxOutputTokens: maxTokens,
       temperature,
+      // responseMimeType (e.g. application/json) only for standard models
+      ...(!isEndpoint && responseMimeType ? { responseMimeType } : {}),
     },
   };
 
-  const isEndpoint = model.startsWith("endpoints/");
   const modelPath = isEndpoint 
     ? model 
     : `publishers/google/models/${model}`;
@@ -535,7 +556,13 @@ async function generateGeminiReadingText({
   const text = parts.map((part) => part.text || "").join("").trim();
 
   if (!text) {
-    throw new Error("Gemini returned an empty reading.");
+    const error = new Error("Gemini returned an empty reading.");
+    error.responseData = response.data;
+    error.candidateCount = candidates.length;
+    error.finishReasons = candidates.map((candidate) => {
+      return candidate.finishReason || "unknown";
+    });
+    throw error;
   }
 
   return text;

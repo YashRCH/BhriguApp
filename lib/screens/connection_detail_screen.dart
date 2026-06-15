@@ -15,6 +15,7 @@ import '../widgets/compatibility_metric_card.dart';
 import '../widgets/compatibility_score_ring.dart';
 import '../widgets/cosmic_screen_background.dart';
 import '../widgets/heart_signal_card.dart';
+import '../widgets/ai_disclaimer.dart';
 
 class ConnectionDetailScreen extends StatefulWidget {
   final String connectionId;
@@ -717,6 +718,9 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
               _textCard(label: 'TENSIONS', text: reading.tensions),
               _textCard(label: 'BHRIGU GUIDANCE', text: reading.advice),
             ],
+            const SizedBox(height: 18),
+            const AiDisclaimer(),
+            const SizedBox(height: 18),
           ],
         );
       },

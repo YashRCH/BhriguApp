@@ -425,6 +425,79 @@ ${future}
 ${closing}`.trim();
     }
 
+    function parseTarotJsonText(rawText) {
+      const source = String(rawText || "").trim();
+      const jsonStart = source.indexOf("{");
+      const jsonEnd = source.lastIndexOf("}");
+
+      if (jsonStart === -1 || jsonEnd === -1) {
+        throw new Error("No JSON object found");
+      }
+
+      const parsed = JSON.parse(source.substring(jsonStart, jsonEnd + 1));
+      const requiredKeys = ["past", "present", "future", "closing"];
+
+      for (const key of requiredKeys) {
+        if (typeof parsed[key] !== "string" || parsed[key].trim().length === 0) {
+          throw new Error(`Missing tarot JSON field: ${key}`);
+        }
+      }
+
+      return parsed;
+    }
+
+    async function repairTarotJson(rawText) {
+      const repairText = await generateGeminiReadingText({
+        systemInstruction:
+          `You convert tarot reading drafts into strict JSON for an app. Preserve the user's enquiry, assigned card names, card positions, specific advice, and retrieved tarot knowledge. If the draft answers only the enquiry without using cards and positions, rebuild it from the retrieved tarot knowledge below. Return only valid JSON with keys past, present, future, and closing. Do not add markdown, headings, labels, or questions.\n${languageInstruction(aiResponseLanguage)}`,
+        prompt: `
+SEEKER_ENQUIRY:
+${enquiryText}
+
+PAST CARD:
+${pastName}
+
+PRESENT CARD:
+${presentName}
+
+FUTURE CARD:
+${futureName}
+
+Retrieved tarot knowledge:
+PAST: ${pastKnowledge}
+PRESENT: ${presentKnowledge}
+FUTURE: ${futureKnowledge}
+
+Required simple formula:
+PAST = SEEKER_ENQUIRY + past-tense meaning of ${pastName} + PAST retrieved tarot knowledge.
+PRESENT = SEEKER_ENQUIRY + present-tense meaning of ${presentName} + PRESENT retrieved tarot knowledge.
+FUTURE = SEEKER_ENQUIRY + future-facing meaning of ${futureName} + FUTURE retrieved tarot knowledge.
+
+Rules:
+- Name the assigned card once in each section.
+- Do not answer SEEKER_ENQUIRY by itself.
+- Do not mix card positions.
+- Keep language simple and easy to understand.
+
+Draft to preserve and structure:
+${String(rawText || "").slice(0, 8000)}
+
+Return only valid JSON in this exact structure:
+{
+  "past": "85 to 120 words, 4 to 5 complete sentences. Use past tense. Name ${pastName} once. Use PAST retrieved tarot knowledge to explain the earlier pattern behind SEEKER_ENQUIRY.",
+  "present": "85 to 120 words, 4 to 5 complete sentences. Use present tense. Name ${presentName} once. Use PRESENT retrieved tarot knowledge to explain the current reality around SEEKER_ENQUIRY.",
+  "future": "85 to 120 words, 4 to 5 complete sentences. Use future-facing language. Name ${futureName} once. Use FUTURE retrieved tarot knowledge to explain the likely direction of SEEKER_ENQUIRY.",
+  "closing": "25 to 45 words. Give one firm final answer tying all three cards to SEEKER_ENQUIRY. No question."
+}`,
+        maxTokens: TAROT_MAX_OUTPUT_TOKENS,
+        temperature: 0.2,
+        model: GEMINI_FLASH_LITE_MODEL,
+        responseMimeType: "application/json",
+      });
+
+      return parseTarotJsonText(repairText);
+    }
+
     try {
       const rawText = await generateGeminiReadingText({
         systemInstruction:
@@ -446,41 +519,31 @@ Hard constraints:
 - Only write the actual reading content.`,
         maxTokens: TAROT_MAX_OUTPUT_TOKENS,
         temperature: TAROT_READING_TEMPERATURE,
+        model: GEMINI_FLASH_LITE_MODEL,
+        responseMimeType: "application/json",
       });
 
       let parsed;
 
       try {
-        const jsonStart = rawText.indexOf("{");
-        const jsonEnd = rawText.lastIndexOf("}");
-
-        if (jsonStart === -1 || jsonEnd === -1) {
-          throw new Error("No JSON object found");
-        }
-
-        const jsonText = rawText.substring(jsonStart, jsonEnd + 1);
-        parsed = JSON.parse(jsonText);
+        parsed = parseTarotJsonText(rawText);
       } catch (parseError) {
-        console.error("Tarot JSON parse error:", parseError);
+        console.warn("Tarot JSON parse error, attempting repair:", parseError);
 
-        await recordUsageEvent(decodedToken.uid, {
-          feature: "tarot_reading_fallback",
-          provider: "local_fallback",
-          model: "fallback",
-          cached: false,
-        });
+        try {
+          parsed = await repairTarotJson(rawText);
 
-        return {
-          text: await ensureHinglishText({
-            text: buildFallbackText(),
-            aiResponseLanguage,
-            preserveFormatInstruction:
-              "Preserve PAST, PRESENT, FUTURE headings and all card names exactly.",
-            enquiryContext: `The user's original enquiry was: "${enquiryText}". CRITICAL: You must preserve every specific reference, noun, and detail related to this enquiry from the original text.`,
-            maxTokens: TAROT_MAX_OUTPUT_TOKENS,
-          }),
-          aiResponseLanguage,
-        };
+          await recordUsageEvent(decodedToken.uid, {
+            feature: "tarot_reading_json_repair",
+            provider: "gemini",
+            model: GEMINI_FLASH_LITE_MODEL,
+            cached: false,
+          });
+        } catch (repairError) {
+          console.error("Tarot JSON repair error:", repairError);
+
+          throw repairError;
+        }
       }
 
       const finalText = await ensureHinglishText({
@@ -491,6 +554,7 @@ Hard constraints:
         enquiryContext: `The user's original enquiry was: "${enquiryText}". CRITICAL: You must preserve every specific reference, noun, and detail related to this enquiry from the original text.`,
         maxTokens: TAROT_MAX_OUTPUT_TOKENS,
       });
+
       await writeCachedReading(
         decodedToken.uid,
         cacheKey,
@@ -512,10 +576,22 @@ Hard constraints:
         aiResponseLanguage,
       };
     } catch (error) {
-      console.error(
-        "Tarot Gemini error:",
-        error.response?.data || error.message
-      );
+      const aiError = error.response?.data || error.responseData || {};
+      const aiDetails = {
+        status: error.response?.status || null,
+        code: aiError.error?.code || aiError.code || null,
+        type: aiError.error?.type || aiError.type || null,
+        message: aiError.error?.message || aiError.message || error.message,
+        finishReasons: error.finishReasons || null,
+        candidateCount: error.candidateCount || null,
+        usage: {
+          totalTokens: 0,
+          model: GEMINI_FLASH_LITE_MODEL,
+          provider: "gemini",
+        },
+      };
+
+      console.error("Tarot Gemini error:", aiDetails);
 
       await recordUsageEvent(decodedToken.uid, {
         feature: "tarot_reading_fallback",

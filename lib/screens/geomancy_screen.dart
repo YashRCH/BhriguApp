@@ -10,6 +10,7 @@ import '../models/geomancy_reading_flow.dart';
 import '../services/geomancy_service.dart';
 import '../services/follow_up_context_service.dart';
 import '../widgets/ai_report_button.dart';
+import '../widgets/ai_disclaimer.dart';
 import '../widgets/geomancy_line_cast_widget.dart';
 import '../widgets/geomancy_shield_chart.dart';
 import '../widgets/geomancy_share_card.dart';
@@ -1205,6 +1206,7 @@ class _GeomancyScreenState extends State<GeomancyScreen>
               label: 'Report',
             ),
           ),
+          const AiDisclaimer(),
         ],
       ),
     );

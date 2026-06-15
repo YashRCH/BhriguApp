@@ -10,11 +10,11 @@ import 'owl_flight_overlay.dart';
 
 /// Cosmetic gift items the owl can bring.
 const _celestialGifts = [
-  {'name': 'Star Crystal', 'icon': '💎', 'lore': 'A shard of frozen starlight, said to amplify inner clarity.'},
-  {'name': 'Lunar Feather', 'icon': '🪶', 'lore': 'A feather kissed by moonlight, carrying whispers of forgotten dreams.'},
-  {'name': 'Cosmic Amulet', 'icon': '🔮', 'lore': 'An ancient charm that hums with the resonance of distant galaxies.'},
-  {'name': 'Astral Seed', 'icon': '✨', 'lore': 'A seed from the celestial garden, waiting to bloom in your spirit.'},
-  {'name': 'Nebula Tear', 'icon': '🌌', 'lore': 'A drop of condensed cosmos, shimmering with infinite potential.'},
+  {'name': 'Star Crystal', 'icon': '💎', 'lore': 'A shard of frozen starlight, said to amplify inner clarity.', 'benefit': '✦ Geomancy readings improved · Updated context'},
+  {'name': 'Lunar Feather', 'icon': '🪶', 'lore': 'A feather kissed by moonlight, carrying whispers of forgotten dreams.', 'benefit': '✦ Tarot insights deepened · Dream clarity enhanced'},
+  {'name': 'Cosmic Amulet', 'icon': '🔮', 'lore': 'An ancient charm that hums with the resonance of distant galaxies.', 'benefit': '✦ Compatibility reading refined · Cosmic bond strengthened'},
+  {'name': 'Astral Seed', 'icon': '✨', 'lore': 'A seed from the celestial garden, waiting to bloom in your spirit.', 'benefit': '✦ Daily horoscope precision boosted · Celestial alignment synced'},
+  {'name': 'Nebula Tear', 'icon': '🌌', 'lore': 'A drop of condensed cosmos, shimmering with infinite potential.', 'benefit': '✦ Natal chart depth expanded · Planetary influence attuned'},
 ];
 
 /// Interactive Owl Companion card for the HomeScreen.
@@ -236,7 +236,28 @@ class _OwlHomeCardState extends State<OwlHomeCard>
                 color: Color(0xFFE5D5F5),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                color: const Color(0xFF2E1065).withValues(alpha: 0.6),
+                border: Border.all(
+                  color: const Color(0xFFC7A867).withValues(alpha: 0.25),
+                ),
+              ),
+              child: Text(
+                gift['benefit']!,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.cinzel(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  height: 1.5,
+                  color: const Color(0xFFC7A867),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             Text(
               'Hoot! Your owl brought you a gift.',
               textAlign: TextAlign.center,

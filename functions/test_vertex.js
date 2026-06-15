@@ -3,7 +3,7 @@ const axios = require('axios');
 const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
 
 async function run() {
-  const model = "1707331001459408896";
+  const model = "6058371191452729344";
   const projectId = "astrology-guru-app";
   const client = await auth.getClient();
   const token = await client.getAccessToken();

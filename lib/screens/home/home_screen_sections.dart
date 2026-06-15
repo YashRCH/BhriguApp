@@ -541,6 +541,7 @@ extension _HomeScreenSections on _HomeScreenState {
               label: 'Report',
             ),
           ),
+          const AiDisclaimer(),
         ],
       ),
     );

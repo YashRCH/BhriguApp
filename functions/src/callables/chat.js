@@ -187,11 +187,7 @@ exports.generateBhriguChat = onCall(
       request.data.aiResponseLanguage,
       userData
     );
-    const activeFollowUpContext =
-      followUpContext &&
-      normalizeAiResponseLanguage(followUpContext.aiResponseLanguage) === aiResponseLanguage
-        ? followUpContext
-        : null;
+    const activeFollowUpContext = followUpContext;
     const safeHistory = Array.isArray(history)
       ? history
           .filter((m) => {
@@ -598,11 +594,11 @@ ${message}
 
       const sourceType = cleanSourceType(context.sourceType);
       const originalQuestion = context.originalQuestion || "";
-      const selectedFollowUpQuestion = context.selectedFollowUpQuestion || message;
+      const selectedFollowUpQuestion = String(message || "").trim() ||
+        context.selectedFollowUpQuestion ||
+        "";
+      const suggestedFollowUpQuestion = context.selectedFollowUpQuestion || "";
       const readingTitle = context.readingTitle || "Previous Reading";
-      const readingSummary = context.readingSummary || "";
-      const sourceData = context.sourceData || {};
-      const userSnapshot = context.userSnapshot || {};
 
       return `${basePrompt}
 
@@ -628,15 +624,60 @@ ${originalQuestion}
 User's selected follow-up question:
 ${selectedFollowUpQuestion}
 
-Reading summary:
+Original suggested follow-up prompt:
+${suggestedFollowUpQuestion}
+
+Source reading details are provided in the user prompt under FOLLOW-UP SOURCE CONTEXT.
+`;
+    }
+
+    function buildFollowUpUserPrompt(basePrompt, context) {
+      if (!context || typeof context !== "object") {
+        return basePrompt;
+      }
+
+      const sourceType = cleanSourceType(context.sourceType);
+      const currentQuestion = String(message || "").trim() ||
+        context.selectedFollowUpQuestion ||
+        "";
+      const suggestedQuestion = context.selectedFollowUpQuestion || "";
+      const readingTitle = context.readingTitle || "Previous Reading";
+      const originalQuestion = context.originalQuestion || "";
+      const readingSummary = context.readingSummary || "";
+      const sourceData = context.sourceData || {};
+
+      return `FOLLOW-UP SOURCE CONTEXT: SOURCE READING CONTEXT IS PRIMARY.
+Answer the current follow-up question from the source reading context below.
+Do not give a general chat answer first.
+Do not make the saved birth chart the main source unless the source reading context asks for astrology support.
+If the source is tarot, geomancy, compatibility, daily energy, or horoscope, use that source as the main evidence.
+
+Primary source rule:
+${followUpPrimaryRule(sourceType)}
+
+Current follow-up question:
+${currentQuestion}
+
+Original suggested follow-up prompt:
+${suggestedQuestion}
+
+Source type:
+${sourceType || "unknown"}
+
+Reading title:
+${readingTitle}
+
+Original reading question:
+${originalQuestion}
+
+Source reading summary:
 ${readingSummary}
 
-Source data:
+Full source reading data:
 ${safeJson(sourceData)}
 
-User snapshot:
-${safeJson(userSnapshot)}
-`;
+Recent chat and current user message:
+${basePrompt}`;
     }
 
     const activeSystemPrompt = `${buildFollowUpSystemPrompt(
@@ -668,20 +709,28 @@ ${safeJson(userSnapshot)}
     let text = "";
 
     try {
+      const baseChatPrompt = messageListToPrompt(chatMessages.slice(1));
+      const chatPrompt = buildFollowUpUserPrompt(
+        baseChatPrompt,
+        activeFollowUpContext
+      );
+
       text = await generateGeminiReadingText({
         systemInstruction: activeSystemPrompt,
-        prompt: messageListToPrompt(chatMessages.slice(1)),
+        prompt: chatPrompt,
         temperature: isDeepFollowUp ? 0.55 : 0.8,
         maxTokens: 4096,
         model: modelUsed,
       });
     } catch (error) {
-      const aiError = error.response?.data || {};
+      const aiError = error.response?.data || error.responseData || {};
       const aiDetails = {
         status: error.response?.status || null,
         code: aiError.error?.code || aiError.code || null,
         type: aiError.error?.type || aiError.type || null,
         message: aiError.error?.message || aiError.message || error.message,
+        finishReasons: error.finishReasons || null,
+        candidateCount: error.candidateCount || null,
         usage: {
           totalTokens: 0,
           model: BHRIGU_TUNED_MODEL,
