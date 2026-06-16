@@ -1985,7 +1985,7 @@ exports.generateConnectionCompatibility = onCall(
     secrets: [GEMINI_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 180,
-    memory: "512MiB",
+    memory: "256MiB",
   }),
   async (request) => {
     const auth = requireCallableAuth(request);
@@ -2224,7 +2224,7 @@ exports.generateConnectionDailyEnergy = onCall(
     secrets: [GEMINI_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 180,
-    memory: "512MiB",
+    memory: "256MiB",
   }),
   async (request) => {
     const auth = requireCallableAuth(request);

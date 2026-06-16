@@ -79,7 +79,7 @@ async function deleteUserConnections(firestore, uid) {
 exports.deleteAccount = onCall(
   callableRuntimeOptions({
     region: FUNCTION_REGION,
-    timeoutSeconds: 540,
+    timeoutSeconds: 180,
     memory: "1GiB",
   }),
   async (request) => {

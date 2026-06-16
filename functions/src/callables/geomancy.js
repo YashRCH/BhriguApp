@@ -148,7 +148,7 @@ exports.generateGeomancyReading = onCall(
     secrets: [GEMINI_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 120,
-    memory: "512MiB",
+    memory: "256MiB",
   }),
   async (request) => {
     const auth = requireCallableAuth(request);

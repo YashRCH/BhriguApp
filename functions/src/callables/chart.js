@@ -143,7 +143,7 @@ exports.calculateNatalChart = onCall(
   callableRuntimeOptions({
     region: FUNCTION_REGION,
     timeoutSeconds: 180,
-    memory: "512MiB",
+    memory: "256MiB",
   }),
   async (request) => {
     const data = request.data || {};

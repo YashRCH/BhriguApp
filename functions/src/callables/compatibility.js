@@ -194,7 +194,7 @@ exports.retrieveCompatibilityKnowledge = onCall(
     secrets: [GEMINI_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 60,
-    memory: "512MiB",
+    memory: "256MiB",
   }),
   async (request) => {
     const auth = requireCallableAuth(request);
@@ -267,7 +267,7 @@ exports.generatePartnerMatchReading = onCall(
     secrets: [GEMINI_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 180,
-    memory: "512MiB",
+    memory: "256MiB",
   }),
   async (request) => {
     const auth = requireCallableAuth(request);

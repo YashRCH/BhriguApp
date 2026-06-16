@@ -342,10 +342,19 @@ async function writeCachedReading(
   }
 }
 
+const DEFAULT_CONCURRENCY = 80;
+const DEFAULT_MAX_INSTANCES = 30;
+
 function callableRuntimeOptions(options = {}) {
+  const defaults = {
+    concurrency: DEFAULT_CONCURRENCY,
+    maxInstances: DEFAULT_MAX_INSTANCES,
+  };
+  const merged = { ...defaults, ...options };
+
   return APP_CHECK_ENFORCEMENT_ENABLED
-    ? { ...options, enforceAppCheck: true }
-    : options;
+    ? { ...merged, enforceAppCheck: true }
+    : merged;
 }
 
 function requireCallableAuth(request) {
@@ -1097,14 +1106,19 @@ async function fetchHorizonsVectorLongitude(body, utcDate) {
   };
 }
 
+const HORIZONS_PARALLEL_BATCH_SIZE = 3;
+
 async function fetchHorizonsLongitudesSequentially(utcDate) {
   const positions = [];
 
-  for (let index = 0; index < HORIZONS_BODIES.length; index += 1) {
-    const body = HORIZONS_BODIES[index];
-    positions.push(await fetchHorizonsLongitude(body, utcDate));
+  for (let i = 0; i < HORIZONS_BODIES.length; i += HORIZONS_PARALLEL_BATCH_SIZE) {
+    const batch = HORIZONS_BODIES.slice(i, i + HORIZONS_PARALLEL_BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map((body) => fetchHorizonsLongitude(body, utcDate))
+    );
+    positions.push(...batchResults);
 
-    if (index < HORIZONS_BODIES.length - 1) {
+    if (i + HORIZONS_PARALLEL_BATCH_SIZE < HORIZONS_BODIES.length) {
       await sleep(HORIZONS_INTER_BODY_DELAY_MS);
     }
   }
