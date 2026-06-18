@@ -51,7 +51,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (!_isLogin && !_acceptedTerms) {
       setState(() {
-        _error = 'You must accept the Terms of Service and Privacy Policy to create an account.';
+        _error =
+            'You must accept the Terms of Service and Privacy Policy to create an account.';
         _info = null;
       });
       return;
@@ -74,8 +75,6 @@ class _LoginScreenState extends State<LoginScreen> {
           password,
         );
 
-        // TODO: Uncomment this when re-enabling email verification for full release
-        /*
         await _auth.signOut();
 
         if (!mounted) return;
@@ -84,10 +83,9 @@ class _LoginScreenState extends State<LoginScreen> {
           _isLogin = true;
           _passwordController.clear();
           _info =
-              'Verification email sent. Please verify your email, then sign in.';
+              'Verification email sent. Check your inbox, Spam, Promotions, or Updates, then sign in.';
         });
         return;
-        */
       }
       if (mounted) {
         final completed = await _auth.hasCompletedOnboarding();
@@ -107,7 +105,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (!_isLogin && !_acceptedTerms) {
       setState(() {
-        _error = 'You must accept the Terms of Service and Privacy Policy to create an account.';
+        _error =
+            'You must accept the Terms of Service and Privacy Policy to create an account.';
         _info = null;
       });
       return;
@@ -166,7 +165,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String _friendlyError(String e) {
     if (e.contains('email-not-verified')) {
-      return 'Please verify your email, then sign in.';
+      return 'Please verify your email first. Check Spam, Promotions, or Updates if it is not in your inbox.';
     }
     if (e.contains('user-not-found') ||
         e.contains('wrong-password') ||
@@ -390,8 +389,20 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ],
+                  if (!_isLogin) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      'Email links can land in Spam, Promotions, or Updates.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFF6B6080),
+                        fontSize: 11,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
-                  
+
                   if (!_isLogin) ...[
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -421,7 +432,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                 height: 1.4,
                               ),
                               children: [
-                                const TextSpan(text: 'I am 13 or older, and I agree to the '),
+                                const TextSpan(
+                                    text:
+                                        'I am 13 or older, and I agree to the '),
                                 TextSpan(
                                   text: 'Terms of Service',
                                   style: const TextStyle(
@@ -431,9 +444,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                   recognizer: TapGestureRecognizer()
                                     ..onTap = () async {
-                                      final url = Uri.parse('https://astrology-guru-app.firebaseapp.com/terms.html?v=1');
+                                      final url = Uri.parse(
+                                          'https://astrology-guru-app.firebaseapp.com/terms.html?v=1');
                                       if (await canLaunchUrl(url)) {
-                                        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                                        await launchUrl(url,
+                                            mode: LaunchMode.inAppBrowserView);
                                       }
                                     },
                                 ),
@@ -447,9 +462,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                   recognizer: TapGestureRecognizer()
                                     ..onTap = () async {
-                                      final url = Uri.parse('https://astrology-guru-app.firebaseapp.com/privacy.html?v=1');
+                                      final url = Uri.parse(
+                                          'https://astrology-guru-app.firebaseapp.com/privacy.html?v=1');
                                       if (await canLaunchUrl(url)) {
-                                        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                                        await launchUrl(url,
+                                            mode: LaunchMode.inAppBrowserView);
                                       }
                                     },
                                 ),
@@ -461,7 +478,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                     ),
                     const SizedBox(height: 24),
-                  ] else 
+                  ] else
                     const SizedBox(height: 16),
 
                   // Main Action Button (Email)
@@ -588,44 +605,71 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 48),
-
-                  // Toggle login/signup
-                  GestureDetector(
-                    onTap: () => setState(() {
-                      _isLogin = !_isLogin;
-                      _error = null;
-                      _info = null;
-                    }),
-                    child: RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: _isLogin
-                                ? "Don't have an account?  "
-                                : 'Already have an account?  ',
-                            style: GoogleFonts.inter(
-                              color: const Color(0xFF6B6080),
-                              fontSize: 14,
-                            ),
-                          ),
-                          TextSpan(
-                            text: _isLogin ? 'Sign up' : 'Sign in',
-                            style: GoogleFonts.inter(
-                              color: const Color(0xFFB58E34),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                        ],
-                      ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Fastest path: continue with Google.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF6B6080),
+                      fontSize: 11,
+                      height: 1.35,
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  _accountSwitchBox(),
                 ],
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _accountSwitchBox() {
+    return GestureDetector(
+      onTap: () => setState(() {
+        _isLogin = !_isLogin;
+        _error = null;
+        _info = null;
+      }),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFB58E34).withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFFB58E34).withValues(alpha: 0.42),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _isLogin ? 'New to BHR1GU?' : 'Already have an account?',
+              textAlign: TextAlign.center,
+              softWrap: true,
+              style: GoogleFonts.inter(
+                color: const Color(0xFFBEB2D4),
+                fontSize: 12,
+                height: 1.3,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _isLogin ? 'Create an account' : 'Sign in',
+              textAlign: TextAlign.center,
+              softWrap: true,
+              style: GoogleFonts.cinzel(
+                color: const Color(0xFFB58E34),
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+                height: 1.25,
+              ),
+            ),
+          ],
         ),
       ),
     );

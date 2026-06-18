@@ -68,11 +68,7 @@ class AuthService {
     await cred.user?.reload();
     final user = _auth.currentUser ?? cred.user;
 
-    // Set with --dart-define=REQUIRE_EMAIL_VERIFICATION=true for public release.
-    const requireEmailVerification =
-        bool.fromEnvironment('REQUIRE_EMAIL_VERIFICATION');
-
-    if (user != null && !user.emailVerified && requireEmailVerification) {
+    if (user != null && !user.emailVerified) {
       try {
         await user.sendEmailVerification();
       } catch (e) {

@@ -26,10 +26,26 @@
     "public": "public",
     "ignore": [
       "firebase.json",
-      "**/.*",
+      ".git",
+      ".firebase",
       "**/node_modules/**"
     ],
+    "headers": [
+      {
+        "source": "/.well-known/assetlinks.json",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ]
+      }
+    ],
     "rewrites": [
+      {
+        "source": "/.well-known/assetlinks.json",
+        "destination": "/assetlinks.json"
+      },
       {
         "source": "/invite/**",
         "destination": "/invite.html"

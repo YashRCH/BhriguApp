@@ -45,24 +45,22 @@ final appRouter = GoRouter(
   redirect: (context, state) async {
     final user = _routerAuth.currentUser;
     final path = state.uri.path;
+    final targetUrl = state.uri.hasQuery ? '$path?${state.uri.query}' : path;
     final from = _safeRedirectLocation(state.uri.queryParameters['from']);
 
     // If not logged in, force them to login
     if (user == null) {
       if (path == '/login') return null;
 
-      return _withFrom('/login', state.uri.toString());
+      return _withFrom('/login', targetUrl);
     }
 
-    // Prevent navigation away from login if the user is signing up/in with email but hasn't verified.
-    // This stops the app from bouncing to /onboarding and back to /login, which destroys the error state.
-    // TODO: Uncomment when re-enabling email verification
-    /*
-    final isPasswordProvider = user.providerData.any((p) => p.providerId == 'password');
+    // Keep unverified email/password users on login until they verify.
+    final isPasswordProvider =
+        user.providerData.any((p) => p.providerId == 'password');
     if (isPasswordProvider && !user.emailVerified) {
       return path == '/login' ? null : '/login';
     }
-    */
 
     bool completed = false;
     try {
@@ -87,7 +85,7 @@ final appRouter = GoRouter(
 
     // A signed-in user must finish onboarding before entering the main shell.
     if (!completed) {
-      return _withFrom('/onboarding', state.uri.toString());
+      return _withFrom('/onboarding', targetUrl);
     }
 
     return null;
@@ -286,14 +284,17 @@ class _MainShellState extends State<MainShell>
             filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
             child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xFF000000).withValues(alpha: 0.3), // Highly translucent base
+                color: const Color(0xFF000000)
+                    .withValues(alpha: 0.3), // Highly translucent base
                 borderRadius: BorderRadius.circular(40),
                 border: Border.all(
-                  color: const Color(0xFFFFFFFF).withValues(alpha: 0.15), // Subtle frosted glass edge
+                  color: const Color(0xFFFFFFFF)
+                      .withValues(alpha: 0.15), // Subtle frosted glass edge
                   width: 0.5,
                 ),
               ),
-              padding: const EdgeInsets.symmetric(vertical: 10), // Padding inside the floating bar
+              padding: const EdgeInsets.symmetric(
+                  vertical: 10), // Padding inside the floating bar
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
@@ -458,7 +459,8 @@ class _SpinningRing extends StatefulWidget {
   State<_SpinningRing> createState() => _SpinningRingState();
 }
 
-class _SpinningRingState extends State<_SpinningRing> with SingleTickerProviderStateMixin {
+class _SpinningRingState extends State<_SpinningRing>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(seconds: 8),
@@ -506,11 +508,12 @@ class _RingPainter extends CustomPainter {
       width: diameter,
       height: diameter,
     );
-    
+
     canvas.drawArc(rect, 0, math.pi * 0.7, false, paint);
     canvas.drawArc(rect, math.pi, math.pi * 0.7, false, paint);
   }
 
   @override
-  bool shouldRepaint(covariant _RingPainter oldDelegate) => oldDelegate.color != color;
+  bool shouldRepaint(covariant _RingPainter oldDelegate) =>
+      oldDelegate.color != color;
 }

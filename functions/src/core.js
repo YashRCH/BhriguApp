@@ -15,7 +15,9 @@ const PLACES_REQUEST_TIMEOUT_MS = 12000;
 
 axios.defaults.timeout = AI_REQUEST_TIMEOUT_MS;
 
-admin.initializeApp();
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 
 const GROQ_API_KEY = defineSecret("GROQ_API_KEY");
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
@@ -40,9 +42,12 @@ const BHRIGU_CHAT_KNOWLEDGE_LIMIT = 5;
 
 const HORIZONS_API_URL = "https://ssd.jpl.nasa.gov/api/horizons.api";
 const HORIZONS_TIMEOUT_MS = 18000;
-const HORIZONS_MAX_ATTEMPTS = 2;
-const HORIZONS_RETRY_DELAY_MS = 500;
-const HORIZONS_INTER_BODY_DELAY_MS = 120;
+const HORIZONS_MAX_ATTEMPTS = 4;
+const HORIZONS_RETRY_DELAY_MS = 750;
+const HORIZONS_INTER_BODY_DELAY_MS = 350;
+const DAILY_TRANSIT_LOCK_TTL_MS = 4 * 60 * 1000;
+const DAILY_TRANSIT_WAIT_TIMEOUT_MS = 90 * 1000;
+const DAILY_TRANSIT_WAIT_POLL_MS = 1000;
 const MILLISECONDS_PER_DAY = 86400000;
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
@@ -1012,7 +1017,13 @@ async function fetchHorizonsJson(body, params) {
         attempt < HORIZONS_MAX_ATTEMPTS &&
         isRetryableHorizonsError(error)
       ) {
-        await sleep(HORIZONS_RETRY_DELAY_MS * attempt);
+        const retryDelay =
+          HORIZONS_RETRY_DELAY_MS * (2 ** (attempt - 1));
+        console.warn(
+          `Horizons request failed for ${body.name}; retrying attempt ${attempt + 1}/${HORIZONS_MAX_ATTEMPTS} after ${retryDelay}ms.`,
+          error.status || error.code || error.name || error.message
+        );
+        await sleep(retryDelay);
         continue;
       }
 
@@ -1057,11 +1068,10 @@ async function fetchHorizonsLongitude(body, utcDate) {
     };
   }
 
+  const ecliptic = await fetchHorizonsObserverEcliptic(body, utcDate);
   const nextDate = new Date(utcDate.getTime() + MILLISECONDS_PER_DAY);
-  const [ecliptic, nextEcliptic] = await Promise.all([
-    fetchHorizonsObserverEcliptic(body, utcDate),
-    fetchHorizonsObserverEcliptic(body, nextDate),
-  ]);
+  await sleep(HORIZONS_INTER_BODY_DELAY_MS);
+  const nextEcliptic = await fetchHorizonsObserverEcliptic(body, nextDate);
 
   const retrograde = signedAngularDistance(nextEcliptic.longitude, ecliptic.longitude) < 0;
 
@@ -1106,19 +1116,14 @@ async function fetchHorizonsVectorLongitude(body, utcDate) {
   };
 }
 
-const HORIZONS_PARALLEL_BATCH_SIZE = 3;
-
 async function fetchHorizonsLongitudesSequentially(utcDate) {
   const positions = [];
 
-  for (let i = 0; i < HORIZONS_BODIES.length; i += HORIZONS_PARALLEL_BATCH_SIZE) {
-    const batch = HORIZONS_BODIES.slice(i, i + HORIZONS_PARALLEL_BATCH_SIZE);
-    const batchResults = await Promise.all(
-      batch.map((body) => fetchHorizonsLongitude(body, utcDate))
-    );
-    positions.push(...batchResults);
+  for (let index = 0; index < HORIZONS_BODIES.length; index += 1) {
+    const body = HORIZONS_BODIES[index];
+    positions.push(await fetchHorizonsLongitude(body, utcDate));
 
-    if (i + HORIZONS_PARALLEL_BATCH_SIZE < HORIZONS_BODIES.length) {
+    if (index < HORIZONS_BODIES.length - 1) {
       await sleep(HORIZONS_INTER_BODY_DELAY_MS);
     }
   }
@@ -1302,29 +1307,141 @@ async function calculateDailyTransitsForDateKey(dateKey) {
   };
 }
 
+function hasCompleteDailyTransitData(data = {}) {
+  return (
+    data.calculationVersion === CHART_CALCULATION_VERSION &&
+    Array.isArray(data.tropicalPlanets) &&
+    data.tropicalPlanets.length >= HORIZONS_BODIES.length &&
+    Array.isArray(data.siderealPlanets) &&
+    data.siderealPlanets.length >= HORIZONS_BODIES.length &&
+    data.siderealMoonSign &&
+    data.siderealMoonNakshatra
+  );
+}
+
+function firestoreTimestampMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value === "number") return value;
+
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function markDailyTransitGenerationFailed(transitRef, lockOwner, error) {
+  try {
+    await admin.firestore().runTransaction(async (transaction) => {
+      const snap = await transaction.get(transitRef);
+      const data = snap.data() || {};
+
+      if (data.generationLockOwner !== lockOwner) return;
+
+      transaction.set(
+        transitRef,
+        {
+          generationStatus: "failed",
+          generationError: String(error?.message || error || "Unknown error").slice(0, 500),
+          generationFailedAt: admin.firestore.FieldValue.serverTimestamp(),
+          generationLockOwner: null,
+          generationLockExpiresAt: null,
+        },
+        { merge: true }
+      );
+    });
+  } catch (lockError) {
+    console.error(
+      "Daily transit failure lock cleanup error:",
+      lockError.message || lockError
+    );
+  }
+}
+
 async function getDailyTransits(dateKey) {
   const transitRef = admin.firestore().collection("dailyTransits").doc(dateKey);
-  const transitDoc = await transitRef.get();
+  const lockOwner = crypto.randomUUID();
+  const waitUntil = Date.now() + DAILY_TRANSIT_WAIT_TIMEOUT_MS;
 
-  if (transitDoc.exists) {
-    const data = transitDoc.data() || {};
+  while (Date.now() < waitUntil) {
+    const decision = await admin.firestore().runTransaction(async (transaction) => {
+      const transitDoc = await transaction.get(transitRef);
+      const data = transitDoc.data() || {};
 
-    if (data.calculationVersion === CHART_CALCULATION_VERSION) {
-      return data;
+      if (hasCompleteDailyTransitData(data)) {
+        return {
+          action: "cached",
+          data,
+        };
+      }
+
+      const lockExpiresAt = firestoreTimestampMillis(data.generationLockExpiresAt);
+      const lockIsAvailable =
+        !data.generationLockOwner || lockExpiresAt <= Date.now();
+
+      if (lockIsAvailable) {
+        transaction.set(
+          transitRef,
+          {
+            dateKey,
+            generationStatus: "generating",
+            generationLockOwner: lockOwner,
+            generationLockExpiresAt: admin.firestore.Timestamp.fromMillis(
+              Date.now() + DAILY_TRANSIT_LOCK_TTL_MS
+            ),
+            generationStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+            generationError: null,
+          },
+          { merge: true }
+        );
+
+        return {
+          action: "generate",
+        };
+      }
+
+      return {
+        action: "wait",
+        lockOwner: data.generationLockOwner,
+      };
+    });
+
+    if (decision.action === "cached") {
+      return decision.data;
     }
+
+    if (decision.action === "generate") {
+      try {
+        const transits = await calculateDailyTransitsForDateKey(dateKey);
+
+        await transitRef.set(
+          {
+            ...transits,
+            generationStatus: "ready",
+            generationLockOwner: null,
+            generationLockExpiresAt: null,
+            generationError: null,
+            generatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        return transits;
+      } catch (error) {
+        await markDailyTransitGenerationFailed(transitRef, lockOwner, error);
+        throw error;
+      }
+    }
+
+    await sleep(DAILY_TRANSIT_WAIT_POLL_MS);
   }
 
-  const transits = await calculateDailyTransitsForDateKey(dateKey);
+  const finalDoc = await transitRef.get();
+  const finalData = finalDoc.data() || {};
 
-  await transitRef.set(
-    {
-      ...transits,
-      generatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
+  if (hasCompleteDailyTransitData(finalData)) {
+    return finalData;
+  }
 
-  return transits;
+  throw new Error(`Timed out waiting for daily transit generation for ${dateKey}.`);
 }
 
 function currentSkyCacheKey(now = new Date()) {

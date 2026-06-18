@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -27,8 +28,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   final _nameController = TextEditingController();
   final _usernameController = TextEditingController();
 
-  DateTime? _dob;
-  TimeOfDay? _tob;
+  DateTime? _dob = _defaultBirthDate;
+  TimeOfDay? _tob = _defaultBirthTime;
+  final ValueNotifier<DateTime> _dobPreview =
+      ValueNotifier<DateTime>(_defaultBirthDate);
+  final ValueNotifier<TimeOfDay> _tobPreview =
+      ValueNotifier<TimeOfDay>(_defaultBirthTime);
   String _place = '';
   double? _latitude;
   double? _longitude;
@@ -37,6 +42,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   int _step = 0;
   bool _saving = false;
   String? _submitError;
+
+  static final DateTime _defaultBirthDate = DateTime(2002, 1, 1);
+  static const TimeOfDay _defaultBirthTime = TimeOfDay(hour: 11, minute: 11);
 
   late AnimationController _plasmaController;
   late AnimationController _entranceController;
@@ -122,63 +130,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   void dispose() {
     _nameController.dispose();
     _usernameController.dispose();
+    _dobPreview.dispose();
+    _tobPreview.dispose();
     _plasmaController.dispose();
     _entranceController.dispose();
     super.dispose();
-  }
-
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(1995),
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFFB58E34),
-              onPrimary: Colors.black,
-              surface: Color(0xFF1E1430),
-              onSurface: Color(0xFFE5D5F5),
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked == null || !mounted) return;
-
-    setState(() {
-      _dob = picked;
-    });
-  }
-
-  Future<void> _pickTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: const TimeOfDay(hour: 6, minute: 0),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFFB58E34),
-              onPrimary: Colors.black,
-              surface: Color(0xFF1E1430),
-              onSurface: Color(0xFFE5D5F5),
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked == null || !mounted) return;
-
-    setState(() {
-      _tob = picked;
-    });
   }
 
   Future<void> _pickPlace() async {
@@ -227,7 +183,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
       try {
         final username = _cleanUsername(_usernameController.text);
-        final doc = await FirebaseFirestore.instance.collection('usernames').doc(username).get();
+        final doc = await FirebaseFirestore.instance
+            .collection('usernames')
+            .doc(username)
+            .get();
         if (doc.exists) {
           final uid = FirebaseAuth.instance.currentUser?.uid;
           if (doc.data()?['uid'] != uid) {
@@ -241,7 +200,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       } catch (e) {
         setState(() {
           _saving = false;
-          _submitError = 'Could not verify username. Please check your connection and try again.';
+          _submitError =
+              'Could not verify username. Please check your connection and try again.';
         });
         return;
       }
@@ -612,106 +572,19 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         return _buildUsernameStep(key: key);
 
       case 3:
-        return Column(
+        return SingleChildScrollView(
           key: key,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            GestureDetector(
-              onTap: _pickDate,
-              child: _glassInput(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.calendar_today,
-                        color: Color(0xFFB58E34),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          _dob == null
-                              ? 'Select date of birth'
-                              : '${_dob!.day} / ${_dob!.month} / ${_dob!.year}',
-                          style: GoogleFonts.cormorantGaramond(
-                            fontSize: 22,
-                            color: _dob == null
-                                ? Colors.white30
-                                : const Color(0xFFE5D5F5),
-                            fontStyle: _dob == null
-                                ? FontStyle.italic
-                                : FontStyle.normal,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
+          primary: false,
+          physics: const BouncingScrollPhysics(),
+          child: _buildInlineDateStep(),
         );
 
       case 4:
-        return Column(
+        return SingleChildScrollView(
           key: key,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            GestureDetector(
-              onTap: _pickTime,
-              child: _glassInput(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.access_time,
-                        color: Color(0xFFB58E34),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          _tob == null
-                              ? 'Select time of birth'
-                              : _tob!.format(context),
-                          style: GoogleFonts.cormorantGaramond(
-                            fontSize: 22,
-                            color: _tob == null
-                                ? Colors.white30
-                                : const Color(0xFFE5D5F5),
-                            fontStyle: _tob == null
-                                ? FontStyle.italic
-                                : FontStyle.normal,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border(
-                  left: BorderSide(
-                    color: const Color(0xFFB58E34).withValues(alpha: 0.3),
-                    width: 2,
-                  ),
-                ),
-              ),
-              child: Text(
-                'Time of birth determines your Ascendant (Lagna) — the exact point where the eastern horizon met the cosmos at your arrival.',
-                style: GoogleFonts.cormorantGaramond(
-                  fontSize: 18,
-                  color: const Color(0xFFC7A867).withValues(alpha: 0.8),
-                  fontStyle: FontStyle.italic,
-                  height: 1.5,
-                ),
-              ),
-            ),
-          ],
+          primary: false,
+          physics: const BouncingScrollPhysics(),
+          child: _buildInlineTimeStep(),
         );
 
       case 5:
@@ -821,6 +694,218 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       default:
         return SizedBox(key: key);
     }
+  }
+
+  Widget _buildInlineDateStep() {
+    final selectedDate = _dob ?? _defaultBirthDate;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ValueListenableBuilder<DateTime>(
+          valueListenable: _dobPreview,
+          builder: (context, value, _) {
+            return _pickerLabel(
+              icon: Icons.calendar_today,
+              label: 'Select date of birth',
+              value: _formatSelectedDate(value),
+            );
+          },
+        ),
+        const SizedBox(height: 14),
+        _inlineWheelFrame(
+          child: CupertinoDatePicker(
+            mode: CupertinoDatePickerMode.date,
+            initialDateTime: selectedDate,
+            minimumDate: DateTime(1900),
+            maximumDate: DateTime.now(),
+            backgroundColor: Colors.transparent,
+            changeReportingBehavior: ChangeReportingBehavior.onScrollEnd,
+            onDateTimeChanged: (value) {
+              final selected = DateTime(value.year, value.month, value.day);
+              _dob = selected;
+              _dobPreview.value = selected;
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInlineTimeStep() {
+    final selectedTime = _tob ?? _defaultBirthTime;
+    final selectedDateTime = DateTime(
+      2002,
+      1,
+      1,
+      selectedTime.hour,
+      selectedTime.minute,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ValueListenableBuilder<TimeOfDay>(
+          valueListenable: _tobPreview,
+          builder: (context, value, _) {
+            return _pickerLabel(
+              icon: Icons.access_time,
+              label: 'Select time of birth',
+              value: value.format(context),
+            );
+          },
+        ),
+        const SizedBox(height: 14),
+        _inlineWheelFrame(
+          child: CupertinoDatePicker(
+            mode: CupertinoDatePickerMode.time,
+            initialDateTime: selectedDateTime,
+            use24hFormat: false,
+            minuteInterval: 1,
+            backgroundColor: Colors.transparent,
+            changeReportingBehavior: ChangeReportingBehavior.onScrollEnd,
+            onDateTimeChanged: (value) {
+              final selected =
+                  TimeOfDay(hour: value.hour, minute: value.minute);
+              _tob = selected;
+              _tobPreview.value = selected;
+            },
+          ),
+        ),
+        const SizedBox(height: 22),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: const Color(0xFFB58E34).withValues(alpha: 0.3),
+                width: 2,
+              ),
+            ),
+          ),
+          child: Text(
+            'Time of birth determines your Ascendant (Lagna) - the exact point where the eastern horizon met the cosmos at your arrival.',
+            style: GoogleFonts.cormorantGaramond(
+              fontSize: 18,
+              color: const Color(0xFFC7A867).withValues(alpha: 0.8),
+              fontStyle: FontStyle.italic,
+              height: 1.5,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _pickerLabel({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Icon(
+          icon,
+          color: const Color(0xFFB58E34),
+          size: 18,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: GoogleFonts.inter(
+              color: const Color(0xFFBEB2D4),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              height: 1.25,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.cinzel(
+              color: const Color(0xFFB58E34),
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              height: 1.2,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _inlineWheelFrame({required Widget child}) {
+    return SizedBox(
+      height: 156,
+      width: double.infinity,
+      child: CupertinoTheme(
+        data: CupertinoThemeData(
+          brightness: Brightness.dark,
+          primaryColor: const Color(0xFFB58E34),
+          scaffoldBackgroundColor: Colors.transparent,
+          textTheme: CupertinoTextThemeData(
+            dateTimePickerTextStyle: GoogleFonts.inter(
+              color: const Color(0xFFE5D5F5),
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            child,
+            IgnorePointer(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _wheelGuideLine(),
+                  const SizedBox(height: 36),
+                  _wheelGuideLine(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _wheelGuideLine() {
+    return Container(
+      height: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFB58E34).withValues(alpha: 0.26),
+        borderRadius: BorderRadius.circular(999),
+      ),
+    );
+  }
+
+  String _formatSelectedDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 
   Widget _buildUsernameStep({required Key key}) {
