@@ -8,6 +8,9 @@ const {
   GEMINI_FLASH_LITE_MODEL,
   callableRuntimeOptions,
   requireCallableAuth,
+  requireRequestData,
+  boundedString,
+  boundedPlainObject,
   normalizeAiResponseLanguage,
   resolveAiResponseLanguage,
   languageInstruction,
@@ -1363,7 +1366,13 @@ exports.acceptCircleSafetyPolicy = onCall(
   callableRuntimeOptions({ region: FUNCTION_REGION }),
   async (request) => {
     const auth = requireCallableAuth(request);
-    const version = String(request.data?.version || "").trim();
+    const requestData = requireRequestData(request, { maxBytes: 2000 });
+    const version = boundedString(requestData.version, {
+      field: "Circle policy version",
+      max: 80,
+      required: true,
+      trim: true,
+    });
 
     if (version !== CIRCLE_SAFETY_POLICY_VERSION) {
       throw new HttpsError(
@@ -1395,11 +1404,11 @@ exports.createOrUpdatePublicProfile = onCall(
   async (request) => {
     const auth = requireCallableAuth(request);
     const uid = auth.uid;
-    const data = request.data || {};
-    const username = cleanUsername(data.username);
+    const requestData = requireRequestData(request, { maxBytes: 25000 });
+    const username = cleanUsername(requestData.username);
     assertUsername(username);
     const onboardingUserData = normalizeOnboardingUserData(
-      data.onboardingUserData,
+      requestData.onboardingUserData,
       username
     );
 
@@ -1476,7 +1485,8 @@ exports.searchPublicProfiles = onCall(
   }),
   async (request) => {
     const auth = requireCallableAuth(request);
-    const username = cleanUsername(request.data.username);
+    const requestData = requireRequestData(request, { maxBytes: 2000 });
+    const username = cleanUsername(requestData.username);
     assertUsername(username);
 
     const usernameDoc = await admin.firestore().collection("usernames").doc(username).get();
@@ -1499,7 +1509,8 @@ exports.createInvite = onCall(
   }),
   async (request) => {
     const auth = requireCallableAuth(request);
-    const relationshipType = cleanRelationshipType(request.data.relationshipType);
+    const requestData = requireRequestData(request, { maxBytes: 2000 });
+    const relationshipType = cleanRelationshipType(requestData.relationshipType);
 
     // Rate limit: max 10 pending invites per hour per user.
     const oneHourAgoMillis = Date.now() - 1000 * 60 * 60;
@@ -1554,7 +1565,13 @@ exports.acceptInvite = onCall(
   }),
   async (request) => {
     const auth = requireCallableAuth(request);
-    const code = String(request.data.code || "").trim().toUpperCase();
+    const requestData = requireRequestData(request, { maxBytes: 2000 });
+    const code = boundedString(requestData.code, {
+      field: "Invite code",
+      max: 80,
+      required: true,
+      trim: true,
+    }).toUpperCase();
     if (!code) throw new HttpsError("invalid-argument", "Invite code is required.");
 
     const snap = await admin
@@ -1631,8 +1648,14 @@ exports.sendConnectionRequest = onCall(
   }),
   async (request) => {
     const auth = requireCallableAuth(request);
-    const targetUid = String(request.data.targetUid || "").trim();
-    const relationshipType = cleanRelationshipType(request.data.relationshipType);
+    const requestData = requireRequestData(request, { maxBytes: 3000 });
+    const targetUid = boundedString(requestData.targetUid, {
+      field: "Target UID",
+      max: 160,
+      required: true,
+      trim: true,
+    });
+    const relationshipType = cleanRelationshipType(requestData.relationshipType);
 
     if (!targetUid || targetUid === auth.uid) {
       throw new HttpsError("invalid-argument", "Choose another BHR1GU user.");
@@ -1722,7 +1745,13 @@ exports.acceptConnectionRequest = onCall(
   }),
   async (request) => {
     const auth = requireCallableAuth(request);
-    const requesterUid = String(request.data.requesterUid || "").trim();
+    const requestData = requireRequestData(request, { maxBytes: 2000 });
+    const requesterUid = boundedString(requestData.requesterUid, {
+      field: "Requester UID",
+      max: 160,
+      required: true,
+      trim: true,
+    });
 
     if (!requesterUid || requesterUid === auth.uid) {
       throw new HttpsError("invalid-argument", "Requester is required.");
@@ -1762,7 +1791,13 @@ exports.declineConnectionRequest = onCall(
   }),
   async (request) => {
     const auth = requireCallableAuth(request);
-    const requesterUid = String(request.data.requesterUid || "").trim();
+    const requestData = requireRequestData(request, { maxBytes: 2000 });
+    const requesterUid = boundedString(requestData.requesterUid, {
+      field: "Requester UID",
+      max: 160,
+      required: true,
+      trim: true,
+    });
 
     if (!requesterUid || requesterUid === auth.uid) {
       throw new HttpsError("invalid-argument", "Requester UID is required.");
@@ -1809,7 +1844,13 @@ exports.cancelConnectionRequest = onCall(
   }),
   async (request) => {
     const auth = requireCallableAuth(request);
-    const targetUid = String(request.data.targetUid || "").trim();
+    const requestData = requireRequestData(request, { maxBytes: 2000 });
+    const targetUid = boundedString(requestData.targetUid, {
+      field: "Target UID",
+      max: 160,
+      required: true,
+      trim: true,
+    });
 
     if (!targetUid || targetUid === auth.uid) {
       throw new HttpsError("invalid-argument", "Target UID is required.");
@@ -1851,7 +1892,13 @@ exports.removeConnection = onCall(
   }),
   async (request) => {
     const auth = requireCallableAuth(request);
-    const connectionId = String(request.data.connectionId || "").trim();
+    const requestData = requireRequestData(request, { maxBytes: 2000 });
+    const connectionId = boundedString(requestData.connectionId, {
+      field: "Connection ID",
+      max: 340,
+      required: true,
+      trim: true,
+    });
     // requireActive: false so that remove works on active connections (not pending — use cancel/decline for those)
     const { data } = await requireConnectionMember(connectionId, auth.uid, { requireActive: true });
     const memberIds = Array.isArray(data.memberIds) ? data.memberIds : [];
@@ -1888,7 +1935,13 @@ exports.blockConnection = onCall(
   }),
   async (request) => {
     const auth = requireCallableAuth(request);
-    const otherUid = String(request.data.otherUid || "").trim();
+    const requestData = requireRequestData(request, { maxBytes: 2000 });
+    const otherUid = boundedString(requestData.otherUid, {
+      field: "User",
+      max: 160,
+      required: true,
+      trim: true,
+    });
     if (!otherUid || otherUid === auth.uid) {
       throw new HttpsError("invalid-argument", "User is required.");
     }
@@ -1939,8 +1992,14 @@ exports.switchRelationshipType = onCall(
   }),
   async (request) => {
     const auth = requireCallableAuth(request);
-    const connectionId = String(request.data.connectionId || "").trim();
-    const newType = cleanRelationshipType(request.data.relationshipType);
+    const requestData = requireRequestData(request, { maxBytes: 3000 });
+    const connectionId = boundedString(requestData.connectionId, {
+      field: "Connection ID",
+      max: 340,
+      required: true,
+      trim: true,
+    });
+    const newType = cleanRelationshipType(requestData.relationshipType);
 
     const { ref: connectionRef, data } = await requireConnectionMember(connectionId, auth.uid);
     const memberIds = Array.isArray(data.memberIds) ? data.memberIds : [];
@@ -1988,8 +2047,14 @@ exports.generateConnectionCompatibility = onCall(
     memory: "256MiB",
   }),
   async (request) => {
+    const requestData = requireRequestData(request, { maxBytes: 40000 });
     const auth = requireCallableAuth(request);
-    const connectionId = String(request.data.connectionId || "").trim();
+    const connectionId = boundedString(requestData.connectionId, {
+      field: "connectionId",
+      max: 128,
+      required: true,
+      trim: true,
+    });
     const { data } = await requireConnectionMember(connectionId, auth.uid);
     const memberIds = memberPairFromConnection(data);
     const relationshipType = cleanRelationshipType(data.relationshipType);
@@ -2030,14 +2095,16 @@ exports.generateConnectionCompatibility = onCall(
     ]);
     const userA = userADoc.data() || {};
     const userB = userBDoc.data() || {};
-    const aiResponseLanguage = await resolveAiResponseLanguage(auth.uid, request.data.aiResponseLanguage);
+    const aiResponseLanguage = await resolveAiResponseLanguage(auth.uid, requestData.aiResponseLanguage);
     const isFriend = relationshipType === "friend";
 
     if (!isFriend) {
-      const heartSignal = String(request.data.heartSignal || "").trim();
-      if (!heartSignal) {
-        throw new HttpsError("invalid-argument", "Heart signal is required for partner compatibility.");
-      }
+      const heartSignal = boundedString(requestData.heartSignal, {
+        field: "Heart signal",
+        max: 500,
+        required: true,
+        trim: true,
+      });
 
       const otherUid = memberIds.find((uid) => uid !== auth.uid);
       if (!otherUid) {
@@ -2227,8 +2294,14 @@ exports.generateConnectionDailyEnergy = onCall(
     memory: "256MiB",
   }),
   async (request) => {
+    const requestData = requireRequestData(request, { maxBytes: 12000 });
     const auth = requireCallableAuth(request);
-    const connectionId = String(request.data.connectionId || "").trim();
+    const connectionId = boundedString(requestData.connectionId, {
+      field: "connectionId",
+      max: 128,
+      required: true,
+      trim: true,
+    });
 
     // FIXED: Always compute dateKey server-side. Never trust the client-supplied value.
     const dateKey = dateKeyFromDate(new Date());
@@ -2245,7 +2318,7 @@ exports.generateConnectionDailyEnergy = onCall(
     ]);
     const userA = userADoc.data() || {};
     const userB = userBDoc.data() || {};
-    const aiResponseLanguage = await resolveAiResponseLanguage(auth.uid, request.data.aiResponseLanguage);
+    const aiResponseLanguage = await resolveAiResponseLanguage(auth.uid, requestData.aiResponseLanguage);
     const labels = [
       "A_HEADING",
       "A_FEELING",
@@ -2372,8 +2445,14 @@ exports.createConnectionFollowUpContext = onCall(
     region: FUNCTION_REGION,
   }),
   async (request) => {
+    const requestData = requireRequestData(request, { maxBytes: 40000 });
     const auth = requireCallableAuth(request);
-    const sourceType = String(request.data.sourceType || "").trim();
+    const sourceType = boundedString(requestData.sourceType, {
+      field: "sourceType",
+      max: 80,
+      required: true,
+      trim: true,
+    });
     const allowedSourceTypes = new Set([
       "friend_compatibility",
       "partner_compatibility",
@@ -2384,7 +2463,11 @@ exports.createConnectionFollowUpContext = onCall(
       throw new HttpsError("invalid-argument", "Invalid follow-up source type.");
     }
 
-    const connectionId = String(request.data.connectionId || "").trim();
+    const connectionId = boundedString(requestData.connectionId, {
+      field: "connectionId",
+      max: 128,
+      trim: true,
+    });
     if (connectionId) {
       await requireConnectionMember(connectionId, auth.uid);
     }
@@ -2393,7 +2476,7 @@ exports.createConnectionFollowUpContext = onCall(
     const userData = userDoc.data() || {};
     const aiResponseLanguage = await resolveAiResponseLanguage(
       auth.uid,
-      request.data.aiResponseLanguage,
+      requestData.aiResponseLanguage,
       userData
     );
     const contextRef = admin
@@ -2406,13 +2489,27 @@ exports.createConnectionFollowUpContext = onCall(
     await contextRef.set({
       uid: auth.uid,
       sourceType,
-      originalQuestion: String(request.data.originalQuestion || "").slice(0, 500),
-      selectedFollowUpQuestion: String(request.data.selectedFollowUpQuestion || "").slice(0, 500),
-      readingTitle: String(request.data.readingTitle || "Connection Reading").slice(0, 160),
-      readingSummary: String(request.data.readingSummary || "").slice(0, 5000),
-      sourceData: request.data.sourceData && typeof request.data.sourceData === "object"
-        ? request.data.sourceData
-        : {},
+      originalQuestion: boundedString(requestData.originalQuestion, {
+        field: "Original question",
+        max: 500,
+      }),
+      selectedFollowUpQuestion: boundedString(requestData.selectedFollowUpQuestion, {
+        field: "Follow-up question",
+        max: 500,
+      }),
+      readingTitle: boundedString(requestData.readingTitle, {
+        field: "Reading title",
+        max: 160,
+        fallback: "Connection Reading",
+      }),
+      readingSummary: boundedString(requestData.readingSummary, {
+        field: "Reading summary",
+        max: 5000,
+      }),
+      sourceData: boundedPlainObject(requestData.sourceData, {
+        field: "Source data",
+        maxBytes: 20000,
+      }),
       userSnapshot: {
         name: userData.name || "",
         westernChart: userData.westernChart || null,

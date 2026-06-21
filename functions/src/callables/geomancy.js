@@ -49,6 +49,9 @@ const {
   writeCachedReading,
   callableRuntimeOptions,
   requireCallableAuth,
+  requireRequestData,
+  boundedString,
+  boundedPlainObject,
   cleanMetricKey,
   recordUsageEvent,
   isTimeoutError,
@@ -143,28 +146,46 @@ const {
   readCompatibilityKnowledgeDocs,
   retrieveTarotKnowledge,
 } = require("../core");
+const {
+  requireMeteredFeature,
+  refundMeteredFeatureCharge,
+  REVENUECAT_SECRET_API_KEY,
+} = require("../monetization/quota");
 exports.generateGeomancyReading = onCall(
   callableRuntimeOptions({
-    secrets: [GEMINI_API_KEY],
+    secrets: [GEMINI_API_KEY, REVENUECAT_SECRET_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 120,
     memory: "256MiB",
   }),
   async (request) => {
+    const data = requireRequestData(request, { maxBytes: 50000 });
     const auth = requireCallableAuth(request);
     const decodedToken = { uid: auth.uid };
 
-    const question =
-      typeof request.data.question === "string"
-        ? request.data.question.trim()
-        : "";
+    const question = boundedString(data.question, {
+      field: "Question",
+      max: 1000,
+      trim: true,
+    });
     const aiResponseLanguage = await resolveAiResponseLanguage(
       decodedToken.uid,
-      request.data.aiResponseLanguage
+      data.aiResponseLanguage
     );
-    const birthData = request.data.birthData || "Birth data not available.";
-    const answer = request.data.answer || "Mixed result";
-    const chart = request.data.chart || {};
+    const birthData = boundedString(data.birthData, {
+      field: "Birth data",
+      max: 2500,
+      fallback: "Birth data not available.",
+    });
+    const answer = boundedString(data.answer, {
+      field: "Answer",
+      max: 120,
+      fallback: "Mixed result",
+    });
+    const chart = boundedPlainObject(data.chart, {
+      field: "Geomancy chart",
+      maxBytes: 16000,
+    });
 
     const judge = chart.judge || {};
     const leftWitness = chart.leftWitness || {};
@@ -182,53 +203,79 @@ exports.generateGeomancyReading = onCall(
       aiResponseLanguage,
     });
 
-    const cachedText = await readCachedReading(
-      decodedToken.uid,
-      cacheKey,
-      GEOMANCY_READING_CONTENT_VERSION,
-      aiResponseLanguage
-    );
+    const meteringCharge = await requireMeteredFeature(decodedToken.uid, "geomancy");
+    let cachedText;
 
-    if (cachedText) {
-      const safeCachedText = await ensureHinglishText({
-        text: cachedText,
-        aiResponseLanguage,
-        preserveFormatInstruction:
-          "Preserve THE JUDGEMENT, THE WITNESSES, THE RECONCILER, and EARTH'S COUNSEL headings exactly.",
-        enquiryContext: `The user's original enquiry was: "${question}". CRITICAL: You must preserve every specific reference, noun, and detail related to this enquiry from the original text.`,
-        maxTokens: GEOMANCY_MAX_OUTPUT_TOKENS,
-      });
-
-      if (safeCachedText !== cachedText) {
-        try {
-          await writeCachedReading(
-            decodedToken.uid,
-            cacheKey,
-            GEOMANCY_READING_CONTENT_VERSION,
-            safeCachedText,
-            aiResponseLanguage
-          );
-        } catch (repairError) {
-          console.warn(
-            "Failed to persist repaired geomancy cache text.",
-            repairError
-          );
-        }
+    try {
+      cachedText = await readCachedReading(
+        decodedToken.uid,
+        cacheKey,
+        GEOMANCY_READING_CONTENT_VERSION,
+        aiResponseLanguage
+      );
+    } catch (error) {
+      try {
+        await refundMeteredFeatureCharge(decodedToken.uid, meteringCharge);
+      } catch (refundError) {
+        console.error("Geomancy cache metering refund failed:", refundError);
       }
 
-      await recordUsageEvent(decodedToken.uid, {
-        feature: "geomancy_reading",
-        provider: "firestore_cache",
-        model: "cached",
-        cached: true,
-      });
+      throw error;
+    }
 
-      return {
-        text: safeCachedText,
-        cached: true,
-        deduped: true,
-        aiResponseLanguage,
-      };
+    if (cachedText) {
+      try {
+        const safeCachedText = await ensureHinglishText({
+          text: cachedText,
+          aiResponseLanguage,
+          preserveFormatInstruction:
+            "Preserve THE JUDGEMENT, THE WITNESSES, THE RECONCILER, and EARTH'S COUNSEL headings exactly.",
+          enquiryContext: `The user's original enquiry was: "${question}". CRITICAL: You must preserve every specific reference, noun, and detail related to this enquiry from the original text.`,
+          maxTokens: GEOMANCY_MAX_OUTPUT_TOKENS,
+        });
+
+        if (safeCachedText !== cachedText) {
+          try {
+            await writeCachedReading(
+              decodedToken.uid,
+              cacheKey,
+              GEOMANCY_READING_CONTENT_VERSION,
+              safeCachedText,
+              aiResponseLanguage
+            );
+          } catch (repairError) {
+            console.warn(
+              "Failed to persist repaired geomancy cache text.",
+              repairError
+            );
+          }
+        }
+
+        await recordUsageEvent(decodedToken.uid, {
+          feature: "geomancy_reading",
+          provider: "firestore_cache",
+          model: "cached",
+          cached: true,
+        });
+
+        return {
+          text: safeCachedText,
+          cached: true,
+          deduped: true,
+          aiResponseLanguage,
+        };
+      } catch (error) {
+        try {
+          await refundMeteredFeatureCharge(decodedToken.uid, meteringCharge);
+        } catch (refundError) {
+          console.error(
+            "Geomancy cached-reading metering refund failed:",
+            refundError
+          );
+        }
+
+        throw error;
+      }
     }
 
     const geminiPrompt = `${languageInstruction(aiResponseLanguage)}
@@ -365,6 +412,12 @@ Follow the geomancy reading structure exactly. Preserve the required all-caps he
         "Geomancy Gemini error:",
         error.response?.data || error.message
       );
+
+      try {
+        await refundMeteredFeatureCharge(decodedToken.uid, meteringCharge);
+      } catch (refundError) {
+        console.error("Geomancy metering refund failed:", refundError);
+      }
 
       if (isTimeoutError(error)) {
         throw new HttpsError(

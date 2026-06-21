@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
 import '../models/geomancy_figure_model.dart';
+import '../utils/cloud_function_error_messages.dart';
 import 'firebase_session_service.dart';
 import 'user_profile_cache_service.dart';
 
@@ -361,14 +362,8 @@ class GeomancyService {
 
     try {
       if (await _session.currentUserOrWait() == null) {
-        return _GeomancyInterpretationResult(
-          text: _fallbackReading(
-            question,
-            chart,
-            answer,
-            aiResponseLanguage: aiResponseLanguage,
-          ),
-          aiResponseLanguage: aiResponseLanguage,
+        throw const FeatureAccessException(
+          'Please sign in again to continue.',
         );
       }
 
@@ -413,28 +408,30 @@ class GeomancyService {
       final responseLanguage = normalizeAiResponseLanguage(
         data['aiResponseLanguage'] ?? aiResponseLanguage,
       );
+      final text = data['text'] as String?;
+
+      if (text == null || text.trim().isEmpty) {
+        throw StateError('Geomancy function returned an empty reading.');
+      }
 
       return _GeomancyInterpretationResult(
-        text: data['text'] as String? ??
-            _fallbackReading(
-              question,
-              chart,
-              answer,
-              aiResponseLanguage: responseLanguage,
-            ),
+        text: text,
         aiResponseLanguage: responseLanguage,
       );
+    } on FeatureAccessException {
+      rethrow;
+    } on FirebaseFunctionsException catch (e) {
+      if (kDebugMode) {
+        debugPrint('Geomancy function code: ${e.code}');
+        debugPrint('Geomancy function message: ${e.message}');
+        debugPrint('Geomancy function details: ${e.details}');
+      }
+      throw featureAccessExceptionFrom(e);
     } catch (e) {
-      debugPrint('Geomancy Groq error: $e');
-      return _GeomancyInterpretationResult(
-        text: _fallbackReading(
-          question,
-          chart,
-          answer,
-          aiResponseLanguage: aiResponseLanguage,
-        ),
-        aiResponseLanguage: aiResponseLanguage,
-      );
+      if (kDebugMode) {
+        debugPrint('Geomancy Groq error: $e');
+      }
+      throw Exception('Could not complete this geomancy reading.');
     }
   }
 
@@ -608,53 +605,5 @@ class GeomancyService {
     } catch (e) {
       debugPrint('Prune geomancy readings error: $e');
     }
-  }
-
-  String _fallbackReading(
-    String question,
-    GeomancyChartModel chart,
-    String answer, {
-    String aiResponseLanguage = englishAiResponseLanguage,
-  }) {
-    final q = question.trim().isEmpty ? 'your question' : question.trim();
-
-    if (normalizeAiResponseLanguage(aiResponseLanguage) ==
-        hinglishAiResponseLanguage) {
-      return '''
-DIRECT ANSWER
-$q ke liye Judge ${chart.judge.name} hai, isliye answer hai: $answer. Yeh random sign nahi hai; aapki sixteen lines se bana hua final signal hai.
-
-THE JUDGE
-${chart.judge.name}, ${chart.judge.latinName}, matter ki main force dikhata hai. ${chart.judge.meaning} Isse main verdict samjho, poori kahani nahi.
-
-THE WITNESSES
-Left Witness, ${chart.leftWitness.name}, situation mein already active force dikhata hai. Right Witness, ${chart.rightWitness.name}, batata hai ki kya approach kar raha hai ya abhi form ho raha hai. Dono milkar answer ke peeche ki movement explain karte hain.
-
-THE RECONCILER
-Reconciler, ${chart.reconciler.name}, deeper lesson dikhata hai: ${chart.reconciler.meaning} Is answer ko impulse se nahi, steady judgement se use karo.
-
-CLOSING
-Pattern ne itna clearly bol diya hai ki aap next step zyada grounded tareeke se le sakte ho.
-'''
-          .trim();
-    }
-
-    return '''
-DIRECT ANSWER
-For $q, the Judge is ${chart.judge.name}, so the answer is $answer. This is not a random sign; it is the final voice formed from your sixteen lines.
-
-THE JUDGE
-${chart.judge.name}, ${chart.judge.latinName}, shows the central force of the matter. ${chart.judge.meaning} Treat this as the main verdict, not as the whole story.
-
-THE WITNESSES
-The Left Witness, ${chart.leftWitness.name}, shows the force already active in the situation. The Right Witness, ${chart.rightWitness.name}, shows what is approaching, responding, or still forming. Together, they describe the movement behind the answer.
-
-THE RECONCILER
-The Reconciler, ${chart.reconciler.name}, reveals the deeper lesson: ${chart.reconciler.meaning} Let the answer guide your next step with patience, not impulse.
-
-CLOSING
-The pattern has spoken clearly enough for you to move with steadier judgment.
-'''
-        .trim();
   }
 }

@@ -1,23 +1,35 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
+import '../constants/firebase_constants.dart';
 import '../models/owl_companion_state.dart';
-import '../utils/date_keys.dart';
+import '../utils/cloud_function_error_messages.dart';
 
 /// Manages the owl companion state in Firestore.
 ///
 /// Document path: `users/{uid}/owlCompanion/state`
 class OwlCompanionService {
   final FirebaseFirestore _firestore;
+  final FirebaseFunctions _functions;
 
-  OwlCompanionService({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+  OwlCompanionService({
+    FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
+  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+        _functions = functions ??
+            FirebaseFunctions.instanceFor(region: firebaseFunctionsRegion);
 
   DocumentReference<Map<String, dynamic>> _stateRef(String uid) {
-    return _firestore.collection('users').doc(uid).collection('owlCompanion').doc('state');
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('owlCompanion')
+        .doc('state');
   }
 
-  /// Load the owl companion state. Creates a default document if missing.
+  /// Load the owl companion state. Missing documents use local defaults until
+  /// the backend creates server-managed progress on the first pet.
   Future<OwlCompanionState> loadOwlState(String uid) async {
     try {
       final doc = await _stateRef(uid).get();
@@ -26,10 +38,7 @@ class OwlCompanionService {
         return OwlCompanionState.fromMap(doc.data()!);
       }
 
-      // Create default state
-      const defaultState = OwlCompanionState();
-      await _stateRef(uid).set(defaultState.toMap());
-      return defaultState;
+      return const OwlCompanionState();
     } catch (e) {
       debugPrint('OwlCompanionService.loadOwlState error: $e');
       return const OwlCompanionState.empty();
@@ -39,38 +48,32 @@ class OwlCompanionService {
   /// Pet the owl. Returns a [PetResult] with the updated state and a message.
   Future<PetResult> petOwl(String uid) async {
     try {
-      final doc = await _stateRef(uid).get();
-      final state = doc.exists && doc.data() != null
-          ? OwlCompanionState.fromMap(doc.data()!)
-          : const OwlCompanionState();
-
-      final today = formatDateKey(DateTime.now());
-
-      // Petting is unlimited, but the Moon Bond only fills once a day.
-      int newProgress = state.petProgress;
-      bool newRewardAvailable = state.rewardAvailable;
-
-      if (state.lastPetDate != today && !state.rewardAvailable) {
-        newProgress += 1;
-        if (newProgress >= 4) {
-          newProgress = 0;
-          newRewardAvailable = true;
-        }
-      }
-
-      final updatedState = state.copyWith(
-        petProgress: newProgress,
-        lastPetDate: today,
-        rewardAvailable: newRewardAvailable,
-        updatedAt: DateTime.now(),
+      final response = await _functions.httpsCallable('petOwlCompanion').call();
+      final data = _mapFromValue(response.data);
+      final state = OwlCompanionState.fromMap(
+        _mapFromValue(data?['state']) ?? const <String, dynamic>{},
       );
 
-      await _stateRef(uid).set(updatedState.toMap(), SetOptions(merge: true));
-
       return PetResult(
-        state: updatedState,
-        success: true,
-        message: 'Hoot.',
+        state: state,
+        success: data?['success'] == true,
+        rewardType: data?['rewardType']?.toString(),
+        readingCreditsGranted: _intFromValue(data?['readingCreditsGranted']),
+        message: data?['message']?.toString() ?? 'Hoot.',
+      );
+    } on FirebaseFunctionsException catch (e) {
+      if (kDebugMode) {
+        debugPrint('OwlCompanionService.petOwl function code: ${e.code}');
+        debugPrint('OwlCompanionService.petOwl function message: ${e.message}');
+        debugPrint('OwlCompanionService.petOwl function details: ${e.details}');
+      }
+      return PetResult(
+        state: const OwlCompanionState.empty(),
+        success: false,
+        message: functionErrorMessage(
+          e,
+          fallback: 'Could not pet the owl. Please try again.',
+        ),
       );
     } catch (e) {
       debugPrint('OwlCompanionService.petOwl error: $e');
@@ -83,29 +86,56 @@ class OwlCompanionService {
   }
 
   /// Claim the available reward.
-  Future<OwlCompanionState> claimReward(String uid) async {
+  Future<OwlRewardClaimResult> claimReward(String uid) async {
     try {
-      final doc = await _stateRef(uid).get();
-      final state = doc.exists && doc.data() != null
-          ? OwlCompanionState.fromMap(doc.data()!)
-          : const OwlCompanionState();
-
-      if (!state.rewardAvailable) {
-        return state;
-      }
-
-      final updatedState = state.copyWith(
-        rewardAvailable: false,
-        rewardClaimedCount: state.rewardClaimedCount + 1,
-        updatedAt: DateTime.now(),
+      final response =
+          await _functions.httpsCallable('claimOwlMoonReward').call();
+      final data = _mapFromValue(response.data);
+      final state = OwlCompanionState.fromMap(
+        _mapFromValue(data?['state']) ?? const <String, dynamic>{},
       );
 
-      await _stateRef(uid).set(updatedState.toMap(), SetOptions(merge: true));
-
-      return updatedState;
+      return OwlRewardClaimResult(
+        state: state,
+        success: true,
+        claimed: data?['claimed'] == true,
+        rewardType: data?['rewardType']?.toString(),
+        chatMessagesGranted: _intFromValue(data?['chatMessagesGranted']),
+        readingCreditsGranted: _intFromValue(data?['readingCreditsGranted']),
+        message: data?['message']?.toString() ?? 'Gift opened.',
+      );
+    } on FirebaseFunctionsException catch (e) {
+      if (kDebugMode) {
+        debugPrint('OwlCompanionService.claimReward function code: ${e.code}');
+        debugPrint(
+          'OwlCompanionService.claimReward function message: ${e.message}',
+        );
+        debugPrint(
+            'OwlCompanionService.claimReward function details: ${e.details}');
+      }
+      return OwlRewardClaimResult(
+        state: const OwlCompanionState.empty(),
+        success: false,
+        claimed: false,
+        rewardType: null,
+        chatMessagesGranted: 0,
+        readingCreditsGranted: 0,
+        message: functionErrorMessage(
+          e,
+          fallback: 'Could not open gift. Try again.',
+        ),
+      );
     } catch (e) {
       debugPrint('OwlCompanionService.claimReward error: $e');
-      return const OwlCompanionState.empty();
+      return const OwlRewardClaimResult(
+        state: OwlCompanionState.empty(),
+        success: false,
+        claimed: false,
+        rewardType: null,
+        chatMessagesGranted: 0,
+        readingCreditsGranted: 0,
+        message: 'Could not open gift. Try again.',
+      );
     }
   }
 
@@ -126,4 +156,19 @@ class OwlCompanionService {
       return const OwlCompanionState.empty();
     }
   }
+}
+
+Map<String, dynamic>? _mapFromValue(dynamic value) {
+  if (value is! Map) return null;
+
+  return value.map(
+    (key, mapValue) => MapEntry(key.toString(), mapValue),
+  );
+}
+
+int _intFromValue(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.round();
+  if (value is String) return int.tryParse(value) ?? 0;
+  return 0;
 }

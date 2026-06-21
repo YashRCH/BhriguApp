@@ -44,6 +44,7 @@ class MonetizationStatus {
   final DateTime? plusExpiresAt;
   final DakshanaWallet dakshana;
   final Map<String, int> usage;
+  final Map<String, int> rewards;
   final Map<String, int> limits;
 
   const MonetizationStatus({
@@ -53,6 +54,7 @@ class MonetizationStatus {
     required this.plusExpiresAt,
     required this.dakshana,
     required this.usage,
+    required this.rewards,
     required this.limits,
   });
 
@@ -63,6 +65,17 @@ class MonetizationStatus {
         plusExpiresAt = null,
         dakshana = const DakshanaWallet.empty(),
         usage = const {},
+        rewards = const {},
+        limits = const {};
+
+  const MonetizationStatus.unavailable()
+      : mode = 'unavailable',
+        plusActive = false,
+        plan = 'free',
+        plusExpiresAt = null,
+        dakshana = const DakshanaWallet.empty(),
+        usage = const {},
+        rewards = const {},
         limits = const {};
 
   bool get canBuyDakshana => dakshana.totalCredits == 0;
@@ -81,6 +94,7 @@ class MonetizationStatus {
             : null,
       ),
       usage: _intMap(data['usage']),
+      rewards: _intMap(data['rewards']),
       limits: _intMap(data['limits']),
     );
   }

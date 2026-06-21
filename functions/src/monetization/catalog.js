@@ -9,19 +9,50 @@ const DAKSHANA_CREDITS = {
 };
 
 const PLAN_LIMITS = {
-  free: {},
+  free: {
+    chat: 5,
+    tarot: 5,
+    geomancy: 5,
+  },
   monthly: {
     chat: 50,
     tarot: 20,
     geomancy: 20,
-    circleCompatibility: 1,
+    manualMatch: 15,
   },
   yearly: {
     chat: 1500,
     chatDaily: 100,
     tarot: 300,
     geomancy: 300,
-    circleCompatibility: 1,
+  },
+};
+
+const METERED_FEATURES = {
+  chat: {
+    quotaField: "chat",
+    dakshanaField: "chat",
+    label: "BHR1GU chat",
+    unlimitedPlans: ["yearly"],
+  },
+  tarot: {
+    quotaField: "tarot",
+    dakshanaField: "tarot",
+    label: "Tarot reading",
+    unlimitedPlans: ["yearly"],
+  },
+  geomancy: {
+    quotaField: "geomancy",
+    dakshanaField: "geomancy",
+    label: "Geomancy reading",
+    unlimitedPlans: ["yearly"],
+  },
+  manualMatch: {
+    quotaField: "manualMatch",
+    dakshanaField: null,
+    label: "Manual match",
+    includedPlans: ["monthly", "yearly"],
+    unlimitedPlans: ["yearly"],
   },
 };
 
@@ -48,9 +79,9 @@ const DAKSHANA_REVOKE_EVENTS = new Set([
 ]);
 
 function monetizationMode() {
-  return String(process.env.MONETIZATION_ENFORCEMENT_MODE || "off")
+  return String(process.env.MONETIZATION_ENFORCEMENT_MODE || "enforce")
     .trim()
-    .toLowerCase() || "off";
+    .toLowerCase() || "enforce";
 }
 
 module.exports = {
@@ -59,6 +90,7 @@ module.exports = {
   DAKSHANA_PRODUCT,
   DAKSHANA_CREDITS,
   PLAN_LIMITS,
+  METERED_FEATURES,
   ACTIVE_SUBSCRIPTION_EVENTS,
   INACTIVE_SUBSCRIPTION_EVENTS,
   DAKSHANA_GRANT_EVENTS,

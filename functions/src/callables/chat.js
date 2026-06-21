@@ -49,10 +49,13 @@ const {
   writeCachedReading,
   callableRuntimeOptions,
   requireCallableAuth,
+  requireRequestData,
+  boundedString,
+  boundedPlainObject,
+  boundedArray,
   cleanMetricKey,
   recordUsageEvent,
   isTimeoutError,
-  isRetryableAiError,
   generateGeminiReadingText,
   generateGroqReadingText,
   generateUserReadingText,
@@ -143,30 +146,84 @@ const {
   readCompatibilityKnowledgeDocs,
   retrieveTarotKnowledge,
 } = require("../core");
+const {
+  requireMeteredFeature,
+  refundMeteredFeatureCharge,
+  REVENUECAT_SECRET_API_KEY,
+} = require("../monetization/quota");
+
+async function generateBhriguChatText({
+  activeSystemPrompt,
+  chatPrompt,
+  isDeepFollowUp,
+}) {
+  return {
+    text: await generateGeminiReadingText({
+      systemInstruction: activeSystemPrompt,
+      prompt: chatPrompt,
+      temperature: isDeepFollowUp ? 0.55 : 0.8,
+      maxTokens: 4096,
+      model: BHRIGU_TUNED_MODEL,
+    }),
+    provider: "gemini",
+    model: BHRIGU_TUNED_MODEL,
+    fallback: false,
+  };
+}
+
+const ASSISTANT_GREETING_PREFIXES = [
+  "Understood. I am Bhrigu. How can I help you?",
+  "Samjha. Main Bhrigu hoon. Aapki madad kaise kar sakta hoon?",
+];
+
+function stripAssistantGreetingPrefix(content) {
+  const text = String(content || "").trim();
+
+  for (const greeting of ASSISTANT_GREETING_PREFIXES) {
+    if (text === greeting) {
+      return "";
+    }
+
+    if (text.startsWith(`${greeting}\n`)) {
+      return text.slice(greeting.length).trim();
+    }
+
+    if (text.startsWith(`${greeting} `)) {
+      return text.slice(greeting.length).trim();
+    }
+  }
+
+  return text;
+}
+
 exports.generateBhriguChat = onCall(
   callableRuntimeOptions({
-    secrets: [GEMINI_API_KEY],
+    secrets: [GEMINI_API_KEY, REVENUECAT_SECRET_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 120,
     memory: "1GiB",
   }),
   async (request) => {
+    const data = requireRequestData(request, { maxBytes: 65000 });
     const auth = requireCallableAuth(request);
     const uid = auth.uid;
-    const message = request.data.message;
-    const history = request.data.history || [];
-    const followUpContext =
-      request.data.followUpContext && typeof request.data.followUpContext === "object"
-        ? request.data.followUpContext
-        : null;
-
-    if (!message || typeof message !== "string") {
-      throw new HttpsError("invalid-argument", "Message is required.");
-    }
-
-    if (message.length > 2500) {
-      throw new HttpsError("invalid-argument", "Message is too long.");
-    }
+    const message = boundedString(data.message, {
+      field: "Message",
+      max: 2500,
+      required: true,
+      trim: true,
+    });
+    const history = boundedArray(data.history, {
+      field: "History",
+      maxItems: 20,
+      maxBytes: 36000,
+    });
+    const followUpContext = data.followUpContext
+      ? boundedPlainObject(data.followUpContext, {
+          field: "Follow-up context",
+          maxBytes: 24000,
+        })
+      : null;
 
     let userData = {};
 
@@ -184,7 +241,7 @@ exports.generateBhriguChat = onCall(
 
     const aiResponseLanguage = await resolveAiResponseLanguage(
       uid,
-      request.data.aiResponseLanguage,
+      data.aiResponseLanguage,
       userData
     );
     const activeFollowUpContext = followUpContext;
@@ -192,17 +249,28 @@ exports.generateBhriguChat = onCall(
       ? history
           .filter((m) => {
             return (
-              m &&
-              typeof m.role === "string" &&
-              typeof m.content === "string" &&
+            m &&
+            typeof m.role === "string" &&
+            typeof m.content === "string" &&
               normalizeAiResponseLanguage(m.aiResponseLanguage) === aiResponseLanguage &&
               ["user", "assistant"].includes(m.role)
             );
           })
           .map((m) => ({
             role: m.role,
-            content: m.content,
+            content: m.role === "assistant"
+              ? stripAssistantGreetingPrefix(
+                  boundedString(m.content, {
+                    field: "History message",
+                    max: 2500,
+                  })
+                )
+              : boundedString(m.content, {
+                  field: "History message",
+                  max: 2500,
+                }).trim(),
           }))
+          .filter((m) => m.content.trim().length > 0)
           .slice(-12)
       : [];
     const historyWithoutCurrentMessage = safeHistory.filter((m, index) => {
@@ -362,9 +430,6 @@ Never tell the user that planet data is missing or unavailable. If exact transit
         : "Use saved chart, supporting reference wisdom, and current date only. Do not mention why transit-specific claims are omitted.";
     const ragKnowledgeContext = retrievedKnowledge ||
       "No supporting reference wisdom available.";
-    const recentConversationContext = historyWithoutCurrentMessage.length
-      ? messageListToPrompt(historyWithoutCurrentMessage)
-      : "No prior conversation.";
     const followUpContextText = activeFollowUpContext
       ? "Provided below in FOLLOW-UP PRIORITY MODE."
       : "Not provided";
@@ -506,6 +571,8 @@ Plain text only. No markdown symbols. No asterisks. No brackets.
 Maximum 2 sentences per paragraph.
 Separate each idea with a blank line.
 Do not ask a question at the end.
+Do not introduce yourself again.
+Do not open with "Understood", "I am Bhrigu", or a generic helper greeting.
 Question Category: ${questionCategory}
 Question Focus: ${questionFocus}
 Current moment:
@@ -543,18 +610,20 @@ ${savedChartData}
 Supporting reference wisdom:
 ${ragKnowledgeContext}
 
-Recent conversation:
-${recentConversationContext}
-
 Follow-up context:
 ${followUpContextText}
-
-User asks:
-${message}
 `;
 
     function cleanSourceType(value) {
       return String(value || "").trim().toLowerCase();
+    }
+
+    function isPrivateGuidanceSource(sourceType) {
+      return [
+        "private_guidance",
+        "connection_private_guidance",
+        "private_connection_guidance",
+      ].includes(sourceType);
     }
 
     function followUpPrimaryRule(sourceType) {
@@ -567,17 +636,18 @@ ${message}
       }
 
       if (
+        isPrivateGuidanceSource(sourceType) ||
         sourceType === "bhrigu_match" ||
         sourceType === "match" ||
         sourceType === "partner_match" ||
         sourceType === "friend_compatibility" ||
         sourceType === "partner_compatibility"
       ) {
-        return "Use the BHR1GU connection compatibility reading as the main source of truth. Use the relationship type, scores, shared summary, strengths, tensions, advice, daily bond signal, user profile, and connected person's public profile if available. Keep private follow-up guidance visible only to the asking user.";
+        return "Use the private guidance source context as the main source of truth. Use the relationship type, scores, shared summary, strengths, tensions, advice, daily bond signal, user profile, and connected person's public profile if available. Keep private follow-up guidance visible only to the asking user.";
       }
 
       if (sourceType === "connection_daily_energy") {
-        return "Use the connected person's daily energy, do guidance, avoid guidance, best approach, and bond signal as the main source of truth. Do not claim certainty about the other person's mind; frame guidance as astrology-informed.";
+        return "Use the private guidance source context as the main source of truth, especially the connected person's daily energy, do guidance, avoid guidance, best approach, and bond signal. Do not claim certainty about the other person's mind; frame guidance as astrology-informed.";
       }
 
       if (sourceType === "horoscope") {
@@ -650,7 +720,7 @@ Source reading details are provided in the user prompt under FOLLOW-UP SOURCE CO
 Answer the current follow-up question from the source reading context below.
 Do not give a general chat answer first.
 Do not make the saved birth chart the main source unless the source reading context asks for astrology support.
-If the source is tarot, geomancy, compatibility, daily energy, or horoscope, use that source as the main evidence.
+If the source is tarot, geomancy, private guidance, compatibility, daily energy, or horoscope, use that source as the main evidence.
 
 Primary source rule:
 ${followUpPrimaryRule(sourceType)}
@@ -685,44 +755,55 @@ ${basePrompt}`;
       activeFollowUpContext
     )}${languageInstruction(aiResponseLanguage)}`;
 
-    const chatMessages = [
-      {
-        role: "system",
-        content: activeSystemPrompt,
-      },
-      {
-        role: "assistant",
-        content: aiResponseLanguage === "hinglish"
-          ? "Samjha. Main Bhrigu hoon. Aapki madad kaise kar sakta hoon?"
-          : "Understood. I am Bhrigu. How can I help you?",
-      },
-      ...historyWithoutCurrentMessage,
-      {
-        role: "user",
-        content: message,
-      },
-    ];
+    function buildChatPrompt() {
+      const promptHistory = activeFollowUpContext
+        ? []
+        : historyWithoutCurrentMessage;
+      const conversationPrompt = messageListToPrompt([
+        ...promptHistory,
+        {
+          role: "user",
+          content: message,
+        },
+      ]);
+
+      return `Conversation to continue:
+${conversationPrompt}
+
+Reply only as ASSISTANT to the final USER message.
+Continue naturally from the recent conversation when it matters.
+Do not repeat, quote, or prepend any previous assistant message.
+If the user asks for "more", "tell me more", "continue", or similar, expand the immediately previous assistant answer instead of restarting.`;
+    }
 
     const isDeepFollowUp = Boolean(activeFollowUpContext);
     let providerUsed = "gemini";
     let modelUsed = BHRIGU_TUNED_MODEL;
     let text = "";
+    const meteringCharge = await requireMeteredFeature(uid, "chat");
 
     try {
-      const baseChatPrompt = messageListToPrompt(chatMessages.slice(1));
+      const baseChatPrompt = buildChatPrompt();
       const chatPrompt = buildFollowUpUserPrompt(
         baseChatPrompt,
         activeFollowUpContext
       );
 
-      text = await generateGeminiReadingText({
-        systemInstruction: activeSystemPrompt,
-        prompt: chatPrompt,
-        temperature: isDeepFollowUp ? 0.55 : 0.8,
-        maxTokens: 4096,
-        model: modelUsed,
+      const generation = await generateBhriguChatText({
+        activeSystemPrompt,
+        chatPrompt,
+        isDeepFollowUp,
       });
+      text = generation.text;
+      providerUsed = generation.provider;
+      modelUsed = generation.model;
     } catch (error) {
+      try {
+        await refundMeteredFeatureCharge(uid, meteringCharge);
+      } catch (refundError) {
+        console.error("Bhrigu chat metering refund failed:", refundError);
+      }
+
       const aiError = error.response?.data || error.responseData || {};
       const aiDetails = {
         status: error.response?.status || null,
@@ -747,21 +828,40 @@ ${basePrompt}`;
       );
     }
 
-    text = await ensureHinglishText({
-      text: text.trim(),
-      aiResponseLanguage,
-      preserveFormatInstruction:
-        "Preserve paragraph breaks and plain-text format. Do not add markdown.",
-      enquiryContext: `The user's original message was: "${message}". CRITICAL: You must preserve every specific reference, noun, and detail related to this message from the original text.`,
-      maxTokens: 700,
-    });
+    try {
+      const cleanedText = stripAssistantGreetingPrefix(text);
+      if (cleanedText) {
+        text = cleanedText;
+      }
 
-    await recordUsageEvent(uid, {
-      feature: isDeepFollowUp ? "chat_follow_up" : "bhrigu_chat",
-      provider: providerUsed,
-      model: modelUsed,
-      cached: false,
-    });
+      text = await ensureHinglishText({
+        text: text.trim(),
+        aiResponseLanguage,
+        preserveFormatInstruction:
+          "Preserve paragraph breaks and plain-text format. Do not add markdown.",
+        enquiryContext: `The user's original message was: "${message}". CRITICAL: You must preserve every specific reference, noun, and detail related to this message from the original text.`,
+        maxTokens: 700,
+      });
+
+      await recordUsageEvent(uid, {
+        feature: isDeepFollowUp ? "chat_follow_up" : "bhrigu_chat",
+        provider: providerUsed,
+        model: modelUsed,
+        cached: false,
+      });
+    } catch (error) {
+      try {
+        await refundMeteredFeatureCharge(uid, meteringCharge);
+      } catch (refundError) {
+        console.error("Bhrigu chat post-processing refund failed:", refundError);
+      }
+
+      console.error("Bhrigu chat post-processing failed:", error);
+      throw new HttpsError(
+        "internal",
+        "Bhrigu connection failed. Please try again."
+      );
+    }
 
     return {
       text: text.trim(),

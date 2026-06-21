@@ -45,6 +45,8 @@ const {
   writeCachedReading,
   callableRuntimeOptions,
   requireCallableAuth,
+  requireRequestData,
+  boundedString,
   cleanMetricKey,
   recordUsageEvent,
   isTimeoutError,
@@ -146,18 +148,35 @@ exports.calculateNatalChart = onCall(
     memory: "256MiB",
   }),
   async (request) => {
-    const data = request.data || {};
+    const data = requireRequestData(request, { maxBytes: 12000 });
     const auth = requireCallableAuth(request);
     const decodedToken = { uid: auth.uid };
 
-    const birthDate = data.birthDate;
-    const timeOfBirth = String(data.timeOfBirth || "");
-    const placeOfBirth = String(data.placeOfBirth || "");
+    const birthDate = boundedString(data.birthDate, {
+      field: "birthDate",
+      max: 32,
+      required: true,
+      trim: true,
+    });
+    const timeOfBirth = boundedString(data.timeOfBirth, {
+      field: "timeOfBirth",
+      max: 32,
+      trim: true,
+    });
+    const placeOfBirth = boundedString(data.placeOfBirth, {
+      field: "placeOfBirth",
+      max: 160,
+      trim: true,
+    });
     const latitude = typeof data.latitude === "number" ? data.latitude : null;
     const longitude = typeof data.longitude === "number" ? data.longitude : null;
 
-    if (!birthDate || typeof birthDate !== "string") {
-      throw new HttpsError("invalid-argument", "birthDate is required.");
+    if (latitude !== null && (latitude < -90 || latitude > 90)) {
+      throw new HttpsError("invalid-argument", "latitude is invalid.");
+    }
+
+    if (longitude !== null && (longitude < -180 || longitude > 180)) {
+      throw new HttpsError("invalid-argument", "longitude is invalid.");
     }
 
     try {

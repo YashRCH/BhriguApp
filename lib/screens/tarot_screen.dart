@@ -12,6 +12,8 @@ import '../services/follow_up_context_service.dart';
 import '../services/tarot_service.dart';
 import '../widgets/ai_report_button.dart';
 import '../widgets/ai_disclaimer.dart';
+import '../widgets/feature_quota_chip.dart';
+import '../widgets/plans_cta_button.dart';
 import '../widgets/tarot_share_card.dart';
 import '../constants/random_prompts.dart';
 
@@ -35,6 +37,7 @@ class _TarotScreenState extends State<TarotScreen>
   final List<AnimationController> _flipControllers = [];
   final List<Animation<double>> _flipAnimations = [];
   int _readingRequestId = 0;
+  int _quotaRefreshTick = 0;
 
   late final AnimationController _breathController;
   late final Animation<double> _breathAnimation;
@@ -177,6 +180,7 @@ class _TarotScreenState extends State<TarotScreen>
         result.text,
         aiResponseLanguage: result.aiResponseLanguage,
       );
+      _quotaRefreshTick++;
     });
   }
 
@@ -421,6 +425,12 @@ class _TarotScreenState extends State<TarotScreen>
           ),
         ),
         const SizedBox(height: 18),
+        FeatureQuotaChip(
+          feature: FeatureQuotaKind.tarot,
+          refreshKey: _quotaRefreshTick,
+          alignment: Alignment.center,
+        ),
+        const SizedBox(height: 6),
         Container(
           decoration: BoxDecoration(
             color: const Color(0xFF0A0812).withValues(alpha: 0.8),
@@ -551,6 +561,12 @@ class _TarotScreenState extends State<TarotScreen>
           children: List.generate(3, (i) => _buildCard(i)),
         ),
         const SizedBox(height: 40),
+        FeatureQuotaChip(
+          feature: FeatureQuotaKind.tarot,
+          refreshKey: _quotaRefreshTick,
+          alignment: Alignment.center,
+        ),
+        const SizedBox(height: 6),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(24),
@@ -839,6 +855,11 @@ class _TarotScreenState extends State<TarotScreen>
                   ),
                   const SizedBox(height: 30),
                   ..._buildReadingParagraphs(_reading),
+                  if (isPlansRecoveryMessage(_reading)) ...[
+                    const SizedBox(height: 12),
+                    PlansCtaButton(message: _reading),
+                    const SizedBox(height: 4),
+                  ],
                   Align(
                     alignment: Alignment.centerRight,
                     child: AiReportButton(

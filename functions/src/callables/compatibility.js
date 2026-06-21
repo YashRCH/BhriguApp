@@ -49,6 +49,9 @@ const {
   writeCachedReading,
   callableRuntimeOptions,
   requireCallableAuth,
+  requireRequestData,
+  boundedString,
+  boundedPlainObject,
   cleanMetricKey,
   recordUsageEvent,
   isTimeoutError,
@@ -143,51 +146,132 @@ const {
   readCompatibilityKnowledgeDocs,
   retrieveTarotKnowledge,
 } = require("../core");
+const {
+  requireMeteredFeature,
+  refundMeteredFeatureCharge,
+  REVENUECAT_SECRET_API_KEY,
+} = require("../monetization/quota");
 exports.generateCompatibilityEmbedding = onCall(
   callableRuntimeOptions({
     secrets: [GEMINI_API_KEY],
     region: FUNCTION_REGION,
   }),
   async (request) => {
-    const auth = requireCallableAuth(request);
-    const decodedToken = { uid: auth.uid };
+    const data = requireRequestData(request, { maxBytes: 12000 });
+    requireCallableAuth(request);
 
-    const text = request.data.text;
+    boundedString(data.text, {
+      field: "Text",
+      max: 4000,
+      required: true,
+      trim: true,
+    });
 
-    if (!text || typeof text !== "string") {
-      throw new HttpsError("invalid-argument", "Text is required.");
-    }
-
-    if (text.length > 4000) {
-      throw new HttpsError("invalid-argument", "Text is too long.");
-    }
-
-    try {
-      const values = await generateGeminiEmbedding(text);
-
-      await recordUsageEvent(decodedToken.uid, {
-        feature: "compatibility_embedding",
-        provider: "gemini",
-        model: "gemini-embedding-001",
-        cached: false,
-      });
-
-      return {
-        values: values,
-      };
-    } catch (error) {
-      console.error(
-        "Compatibility Gemini embedding error:",
-        error.response?.data || error.message
-      );
-
-      throw new HttpsError(
-        "internal",
-        "Compatibility embedding generation failed."
-      );
-    }
+    throw new HttpsError(
+      "failed-precondition",
+      "Compatibility embedding generation is server-side only."
+    );
   }
 );
+
+function formatCompatibilityKnowledgeChunk(chunk) {
+  const tags = Array.isArray(chunk.tags) && chunk.tags.length
+    ? `Tags: ${chunk.tags.join(", ")}`
+    : "";
+  return [
+    chunk.title ? `Title: ${chunk.title}` : "",
+    chunk.category ? `Category: ${chunk.category}` : "",
+    tags,
+    chunk.text || "",
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+async function retrieveCompatibilityKnowledgeForMatch(uid, query, limit = 5) {
+  try {
+    const queryEmbedding = await generateGeminiEmbedding(query);
+    const docs = await readCompatibilityKnowledgeDocs();
+    const scoredChunks = [];
+
+    docs.forEach((data) => {
+      if (!Array.isArray(data.embedding)) return;
+
+      const score = cosineSimilarity(queryEmbedding, data.embedding);
+      const tags = Array.isArray(data.tags)
+        ? data.tags.map((tag) => String(tag))
+        : [];
+
+      scoredChunks.push({
+        title: String(data.title || ""),
+        category: String(data.category || ""),
+        tags,
+        text: String(data.text || ""),
+        score,
+      });
+    });
+
+    scoredChunks.sort((a, b) => b.score - a.score);
+
+    await recordUsageEvent(uid, {
+      feature: "compatibility_rag",
+      provider: "gemini",
+      model: "gemini-embedding-001",
+      cached: false,
+    });
+
+    const knowledge = scoredChunks
+      .slice(0, limit)
+      .map(formatCompatibilityKnowledgeChunk)
+      .filter(Boolean)
+      .join("\n---\n");
+
+    return knowledge || "No specific compatibility knowledge retrieved.";
+  } catch (error) {
+    console.error(
+      "Compatibility retrieval error:",
+      error.response?.data || error.message
+    );
+    return "No specific compatibility knowledge retrieved.";
+  }
+}
+
+function buildCompatibilityRetrievalQuery({
+  user,
+  partner,
+  scores,
+  marriageGunaMatch,
+  userSun,
+  partnerSun,
+  userMoon,
+  partnerMoon,
+  connectionType,
+  verdict,
+}) {
+  return `
+User Sun Sign: ${userSun}
+User Moon Style: ${userMoon}
+
+Partner Sun Sign: ${partnerSun}
+Partner Moon Style: ${partnerMoon}
+
+Compatibility Scores:
+Overall: ${scores.overall}
+Emotional Harmony: ${scores.emotional}
+Attraction Pull: ${scores.attraction}
+Communication: ${scores.communication}
+Long-term Stability: ${scores.stability}
+Karmic Bond: ${scores.karmic}
+
+36 Guna Marriage Match:
+${JSON.stringify(marriageGunaMatch)}
+
+Connection Type: ${connectionType}
+Verdict: ${verdict}
+User feeling: ${partner.emotionalPrompt || ""}
+`;
+}
 
 exports.retrieveCompatibilityKnowledge = onCall(
   callableRuntimeOptions({
@@ -197,94 +281,61 @@ exports.retrieveCompatibilityKnowledge = onCall(
     memory: "256MiB",
   }),
   async (request) => {
-    const auth = requireCallableAuth(request);
-    const decodedToken = { uid: auth.uid };
+    const data = requireRequestData(request, { maxBytes: 14000 });
+    requireCallableAuth(request);
 
-    const query = String(request.data.query || "").trim();
-    const limit = Math.min(
+    boundedString(data.query, {
+      field: "Query",
+      max: 4000,
+      required: true,
+      trim: true,
+    });
+    Math.min(
       10,
-      Math.max(1, Number.parseInt(request.data.limit, 10) || 5)
+      Math.max(1, Number.parseInt(data.limit, 10) || 5)
     );
 
-    if (!query) {
-      throw new HttpsError("invalid-argument", "Query is required.");
-    }
-
-    if (query.length > 4000) {
-      throw new HttpsError("invalid-argument", "Query is too long.");
-    }
-
-    try {
-      const queryEmbedding = await generateGeminiEmbedding(query);
-      const docs = await readCompatibilityKnowledgeDocs();
-      const scoredChunks = [];
-
-      docs.forEach((data) => {
-        if (!Array.isArray(data.embedding)) return;
-
-        const score = cosineSimilarity(queryEmbedding, data.embedding);
-        const tags = Array.isArray(data.tags)
-          ? data.tags.map((tag) => String(tag))
-          : [];
-
-        scoredChunks.push({
-          title: String(data.title || ""),
-          category: String(data.category || ""),
-          tags,
-          text: String(data.text || ""),
-          score,
-        });
-      });
-
-      scoredChunks.sort((a, b) => b.score - a.score);
-
-      await recordUsageEvent(decodedToken.uid, {
-        feature: "compatibility_rag",
-        provider: "gemini",
-        model: "gemini-embedding-001",
-        cached: false,
-      });
-
-      return {
-        chunks: scoredChunks.slice(0, limit),
-      };
-    } catch (error) {
-      console.error(
-        "Compatibility retrieval error:",
-        error.response?.data || error.message
-      );
-
-      throw new HttpsError(
-        "internal",
-        "Compatibility knowledge retrieval failed."
-      );
-    }
+    return { chunks: [] };
   }
 );
 
 exports.generatePartnerMatchReading = onCall(
   callableRuntimeOptions({
-    secrets: [GEMINI_API_KEY],
+    secrets: [GEMINI_API_KEY, REVENUECAT_SECRET_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 180,
     memory: "256MiB",
   }),
   async (request) => {
+    const data = requireRequestData(request, { maxBytes: 90000 });
     const auth = requireCallableAuth(request);
     const decodedToken = { uid: auth.uid };
 
-    const user = request.data.user || {};
-    const partner = request.data.partner || {};
-    const scores = request.data.scores || {};
-    const marriageGunaMatch = request.data.marriageGunaMatch || {};
-    const userSun = request.data.userSun || "";
-    const partnerSun = request.data.partnerSun || "";
-    const userMoon = request.data.userMoon || "";
-    const partnerMoon = request.data.partnerMoon || "";
-    const connectionType = request.data.connectionType || "";
-    const verdict = request.data.verdict || "";
-    const retrievedKnowledge =
-      request.data.retrievedKnowledge || "No specific compatibility knowledge retrieved.";
+    const user = boundedPlainObject(data.user, {
+      field: "User profile",
+      maxBytes: 16000,
+    });
+    const partner = boundedPlainObject(data.partner, {
+      field: "Partner profile",
+      maxBytes: 16000,
+    });
+    const scores = boundedPlainObject(data.scores, {
+      field: "Scores",
+      maxBytes: 4000,
+    });
+    const marriageGunaMatch = boundedPlainObject(data.marriageGunaMatch, {
+      field: "Guna match",
+      maxBytes: 16000,
+    });
+    const userSun = boundedString(data.userSun, { field: "User sun", max: 80 });
+    const partnerSun = boundedString(data.partnerSun, { field: "Partner sun", max: 80 });
+    const userMoon = boundedString(data.userMoon, { field: "User moon", max: 120 });
+    const partnerMoon = boundedString(data.partnerMoon, { field: "Partner moon", max: 120 });
+    const connectionType = boundedString(data.connectionType, {
+      field: "Connection type",
+      max: 80,
+    });
+    const verdict = boundedString(data.verdict, { field: "Verdict", max: 160 });
     const userDoc = await admin
       .firestore()
       .collection("users")
@@ -293,7 +344,7 @@ exports.generatePartnerMatchReading = onCall(
     const userData = userDoc.data() || {};
     const aiResponseLanguage = await resolveAiResponseLanguage(
       decodedToken.uid,
-      request.data.aiResponseLanguage,
+      data.aiResponseLanguage,
       userData
     );
     const userNatalChart = {
@@ -303,6 +354,10 @@ exports.generatePartnerMatchReading = onCall(
       chartCalculationVersion: userData.chartCalculationVersion || "Unknown",
     };
     let partnerNatalChart = null;
+    const meteringCharge = await requireMeteredFeature(
+      decodedToken.uid,
+      "manualMatch"
+    );
 
     try {
       if (partner.dob) {
@@ -317,6 +372,23 @@ exports.generatePartnerMatchReading = onCall(
     } catch (chartError) {
       console.error("Partner chart calculation failed:", chartError);
     }
+
+    const retrievedKnowledge = await retrieveCompatibilityKnowledgeForMatch(
+      decodedToken.uid,
+      buildCompatibilityRetrievalQuery({
+        user,
+        partner,
+        scores,
+        marriageGunaMatch,
+        userSun,
+        partnerSun,
+        userMoon,
+        partnerMoon,
+        connectionType,
+        verdict,
+      }),
+      5
+    );
 
     const prompt = `
 Write as Bhrigu, an ancient calm sage speaking with quiet certainty. The tone should feel wise, spiritual, poetic, and human, not like a report. Use simple but sacred language. Avoid robotic phrases like "pattern suggests", "compatibility judgement", "emotional rhythm", or "future potential" unless they sound natural. Speak as if reading two souls, while still grounding every claim in the data below.
@@ -469,6 +541,12 @@ ${languageInstruction(aiResponseLanguage)}
         aiResponseLanguage,
       };
     } catch (error) {
+      try {
+        await refundMeteredFeatureCharge(decodedToken.uid, meteringCharge);
+      } catch (refundError) {
+        console.error("Partner match metering refund failed:", refundError);
+      }
+
       console.error(
         "Partner match Gemini error:",
         error.response?.data || error.message
@@ -488,14 +566,21 @@ exports.generateCompatibilityInsight = onCall(
     region: FUNCTION_REGION,
   }),
   async (request) => {
+    const data = requireRequestData(request, { maxBytes: 60000 });
     const auth = requireCallableAuth(request);
     const decodedToken = { uid: auth.uid };
 
-    const westernChart = request.data.westernChart;
-    const vedicChart = request.data.vedicChart;
+    const westernChart = boundedPlainObject(data.westernChart, {
+      field: "Western chart",
+      maxBytes: 24000,
+    });
+    const vedicChart = boundedPlainObject(data.vedicChart, {
+      field: "Vedic chart",
+      maxBytes: 24000,
+    });
     const aiResponseLanguage = await resolveAiResponseLanguage(
       decodedToken.uid,
-      request.data.aiResponseLanguage
+      data.aiResponseLanguage
     );
 
     const prompt = `

@@ -3,17 +3,20 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
+import '../models/monetization_status.dart';
 import '../services/auth_service.dart';
 import '../services/monetization_service.dart';
+import '../services/revenue_cat_service.dart';
 import '../services/user_profile_cache_service.dart';
 import '../utils/zodiac_signs.dart';
-import '../widgets/monetization_paywall_preview.dart';
+import '../widgets/plans_cta_button.dart';
 import '../widgets/zodiac_sign_icon.dart';
 import 'cosmic_blueprint_screen.dart';
 
@@ -26,13 +29,14 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
-  final _monetizationService = MonetizationService();
   Map<String, dynamic>? _userData;
   bool _loading = true;
   bool _deletingAccount = false;
   bool _updatingLanguage = false;
   bool _languageExpanded = false;
   String _version = '';
+  late final Future<MonetizationStatus> _planStatusFuture;
+  final MonetizationService _monetizationService = MonetizationService();
 
   late final AnimationController _blueprintController;
   late final Animation<double> _blueprintPulse;
@@ -61,6 +65,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
     );
 
+    _planStatusFuture = _monetizationService.status();
     _loadData();
   }
 
@@ -355,6 +360,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       await callable.call({'confirmation': 'confirm'});
       await AuthService().clearLocalSession(uid: uid);
+      await RevenueCatService.instance.logOut();
 
       try {
         await GoogleSignIn().signOut();
@@ -897,9 +903,92 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _planCard() {
-    return MonetizationPaywallPreview(
-      service: _monetizationService,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => context.push(plansRoute),
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF120F22).withValues(alpha: 0.58),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: const Color(0xFFC7A867).withValues(alpha: 0.24),
+              width: 0.8,
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: FutureBuilder<MonetizationStatus>(
+                  future: _planStatusFuture,
+                  builder: (context, snapshot) {
+                    final planLine = _profilePlanLine(snapshot.data);
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Bhrigu Plans',
+                          style: TextStyle(
+                            color: Color(0xFFE5D5F5),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            height: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          planLine,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF8E83A8),
+                            fontSize: 11,
+                            height: 1.3,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              const PlansCtaButton(
+                label: 'See plans',
+                alignment: Alignment.centerRight,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
+  }
+
+  static String _profilePlanLine(MonetizationStatus? status) {
+    if (status == null || status.mode == 'unavailable') {
+      return 'Plan: checking';
+    }
+
+    if (status.plusActive) {
+      switch (status.plan.trim().toLowerCase()) {
+        case 'yearly':
+        case 'annual':
+          return 'Plan: Yearly Plus';
+        case 'monthly':
+          return 'Plan: Monthly Plus';
+        default:
+          return 'Plan: Bhrigu Plus';
+      }
+    }
+
+    if (status.dakshana.totalCredits > 0) {
+      return 'Plan: Dakshana credits';
+    }
+
+    return 'Plan: Free';
   }
 
   Widget _languageCard() {

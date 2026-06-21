@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -7,13 +8,17 @@ import '../constants/monetization_constants.dart';
 import '../models/monetization_status.dart';
 import '../services/monetization_service.dart';
 
+enum _PlusPlanKind { monthly, yearly }
+
 class MonetizationPaywallPreview extends StatefulWidget {
   const MonetizationPaywallPreview({
     super.key,
     required this.service,
+    this.onStatusChanged,
   });
 
   final MonetizationService service;
+  final ValueChanged<MonetizationStatus>? onStatusChanged;
 
   @override
   State<MonetizationPaywallPreview> createState() =>
@@ -28,6 +33,7 @@ class _MonetizationPaywallPreviewState
   bool _restoring = false;
   bool _openingManageLink = false;
   DateTime? _dakshanaPurchasePendingUntil;
+  String? _secureSyncErrorMessage;
 
   static const _gold = Color(0xFFB58E34);
   static const _softGold = Color(0xFFC7A867);
@@ -41,34 +47,72 @@ class _MonetizationPaywallPreviewState
   @override
   void initState() {
     super.initState();
-    _future = _load();
+    _future = _load(syncSecure: true);
   }
 
-  Future<_MonetizationPanelData> _load() async {
+  Future<_MonetizationPanelData> _load({bool syncSecure = false}) async {
+    MonetizationStatus? syncedStatus;
     try {
+      if (syncSecure) {
+        syncedStatus = await _syncSecureOrStatus();
+      }
+
       final results = await Future.wait<dynamic>([
-        widget.service.status(),
+        syncedStatus != null
+            ? Future<MonetizationStatus>.value(syncedStatus)
+            : widget.service.status(),
         widget.service.offerings(),
         widget.service.customerInfo(),
       ]);
 
-      return _MonetizationPanelData(
+      final data = _MonetizationPanelData(
         status: results[0] as MonetizationStatus,
         offerings: results[1] as Offerings?,
         customerInfo: results[2] as CustomerInfo?,
       );
+      if (mounted) {
+        widget.onStatusChanged?.call(data.status);
+      }
+      return data;
     } catch (_) {
-      return const _MonetizationPanelData(
-        status: MonetizationStatus.free(),
+      const data = _MonetizationPanelData(
+        status: MonetizationStatus.unavailable(),
         offerings: null,
         customerInfo: null,
       );
+      if (mounted) {
+        widget.onStatusChanged?.call(data.status);
+      }
+      return data;
     }
   }
 
-  void _refresh() {
+  Future<MonetizationStatus> _syncSecureOrStatus() async {
+    try {
+      final status = await widget.service.syncRevenueCatPurchases();
+      _setSecureSyncError(null);
+      return status;
+    } catch (error) {
+      _setSecureSyncError(_friendlyError(error));
+      return widget.service.status();
+    }
+  }
+
+  void _setSecureSyncError(String? message) {
+    if (_secureSyncErrorMessage == message) return;
+    if (!mounted) {
+      _secureSyncErrorMessage = message;
+      return;
+    }
+
     setState(() {
-      _future = _load();
+      _secureSyncErrorMessage = message;
+    });
+  }
+
+  void _refresh({bool syncSecure = false}) {
+    setState(() {
+      _future = _load(syncSecure: syncSecure);
     });
   }
 
@@ -80,15 +124,27 @@ class _MonetizationPaywallPreviewState
     });
 
     try {
-      final restored = await widget.service.restorePurchases();
+      final customerInfo = await widget.service.restorePurchasesInfo();
+      final restored = customerInfo != null;
+      final plusInRevenueCat = _plusActiveInRevenueCat(customerInfo);
+      final syncedStatus = restored
+          ? await _waitForSecureSync(
+              expectPlus: plusInRevenueCat,
+              expectDakshana: false,
+            )
+          : null;
       if (!mounted) return;
 
       _showSnack(
-        restored
-            ? 'Restore checked. Entitlements may take a moment to sync.'
-            : 'Billing is not configured for this build yet.',
+        syncedStatus?.plusActive == true
+            ? '${_planLabel(syncedStatus!.plan)} Plus restored and active.'
+            : plusInRevenueCat
+                ? _secureSyncPendingMessage(purchaseCompleted: false)
+                : restored
+                    ? 'Restore checked. No active plan found.'
+                    : 'Purchases are not available in this build yet.',
       );
-      _refresh();
+      _refresh(syncSecure: true);
     } catch (e) {
       if (!mounted) return;
       _showSnack('Could not restore purchases: ${_friendlyError(e)}');
@@ -101,7 +157,10 @@ class _MonetizationPaywallPreviewState
     }
   }
 
-  Future<void> _purchase(Package package) async {
+  Future<void> _purchase(
+    Package package, {
+    _PlusPlanKind? plusPlan,
+  }) async {
     final key = _packageKey(package);
     if (_purchasingKey != null) return;
 
@@ -110,12 +169,18 @@ class _MonetizationPaywallPreviewState
     });
 
     try {
-      final completed = await widget.service.purchasePackage(package);
+      final customerInfo = await widget.service.purchasePackageInfo(package);
+      final completed = customerInfo != null;
       if (!mounted) return;
 
-      if (completed &&
-          _matchesProductId(
-              package.storeProduct.identifier, dakshanaProductId)) {
+      final isPlusPurchase = _matchesProductId(
+            package.storeProduct.identifier,
+            bhriguPlusProductId,
+          ) ||
+          _plusActiveInRevenueCat(customerInfo);
+      final isDakshanaPurchase =
+          _matchesProductId(package.storeProduct.identifier, dakshanaProductId);
+      if (completed && isDakshanaPurchase) {
         setState(() {
           _dakshanaPurchasePendingUntil = DateTime.now().add(
             const Duration(minutes: 2),
@@ -123,12 +188,26 @@ class _MonetizationPaywallPreviewState
         });
       }
 
+      final syncedStatus = completed
+          ? await _waitForSecureSync(
+              expectPlus: isPlusPurchase,
+              expectedPlusPlan: isPlusPurchase ? plusPlan : null,
+              expectDakshana: isDakshanaPurchase,
+            )
+          : null;
+      if (!mounted) return;
+
       _showSnack(
         completed
-            ? 'Purchase completed. Access may take a moment to sync.'
-            : 'Billing is not configured for this build yet.',
+            ? _purchaseResultMessage(
+                status: syncedStatus,
+                expectPlus: isPlusPurchase,
+                expectedPlusPlan: isPlusPurchase ? plusPlan : null,
+                expectDakshana: isDakshanaPurchase,
+              )
+            : 'Purchases are not available in this build yet.',
       );
-      _refresh();
+      _refresh(syncSecure: true);
     } on PlatformException catch (e) {
       if (!mounted || _isPurchaseCancelled(e)) return;
       _showSnack('Could not complete purchase: ${_friendlyError(e)}');
@@ -192,8 +271,21 @@ class _MonetizationPaywallPreviewState
         final defaultOffering =
             data.offerings?.getOffering('default') ?? data.offerings?.current;
         final dakshanaOffering = data.offerings?.getOffering('dakshana');
-        final monthly = defaultOffering?.monthly;
-        final yearly = defaultOffering?.annual;
+        final monthly = _packageForPlusPlan(
+          defaultOffering,
+          data.offerings,
+          _PlusPlanKind.monthly,
+        );
+        Package? yearly = _packageForPlusPlan(
+          defaultOffering,
+          data.offerings,
+          _PlusPlanKind.yearly,
+        );
+        if (monthly != null &&
+            yearly != null &&
+            _packageKey(monthly) == _packageKey(yearly)) {
+          yearly = null;
+        }
         final dakshana = _packageForProduct(
               dakshanaOffering,
               dakshanaProductId,
@@ -203,55 +295,80 @@ class _MonetizationPaywallPreviewState
         final dakshanaSyncPending = _dakshanaSyncPending(status);
         final hasLiveProducts =
             monthly != null || yearly != null || dakshana != null;
+        final activePlusPlan =
+            status.plusActive ? _planKindForStatus(status.plan) : null;
+        final plusSyncPending = !status.plusActive && plusInRevenueCat;
+        final unknownPlusActive = status.plusActive && activePlusPlan == null;
+        final monthlyDisabled = plusSyncPending ||
+            unknownPlusActive ||
+            activePlusPlan == _PlusPlanKind.monthly ||
+            activePlusPlan == _PlusPlanKind.yearly;
+        final yearlyDisabled = plusSyncPending ||
+            unknownPlusActive ||
+            activePlusPlan == _PlusPlanKind.yearly;
+        final monthlyDisabledLabel = plusSyncPending
+            ? 'Updating'
+            : unknownPlusActive
+                ? 'Active'
+                : activePlusPlan == _PlusPlanKind.yearly
+                    ? 'Included'
+                    : 'Current';
+        final yearlyDisabledLabel = plusSyncPending
+            ? 'Updating'
+            : unknownPlusActive
+                ? 'Active'
+                : 'Current';
 
         return _shell(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _header(status, data.customerInfo),
-              const SizedBox(height: 14),
-              _statusStrip(status, data.customerInfo),
+              if (!status.plusActive && plusInRevenueCat) ...[
+                const SizedBox(height: 12),
+                _backendSyncNotice(detail: _secureSyncErrorMessage),
+              ],
               if (!hasLiveProducts) ...[
                 const SizedBox(height: 14),
                 _syncNotice(),
               ],
               const SizedBox(height: 16),
               _planRow(
-                icon: Icons.auto_awesome_rounded,
                 title: 'Bhrigu Plus Monthly',
-                subtitle: '50 chats, 20 tarot, 20 geomancy each month.',
+                subtitle:
+                    '50 messages, 20 tarot readings, 20 geomancy readings. Manual matches unlocked.',
                 price: _price(monthly, 'INR 129 / USD 11.00'),
                 package: monthly,
-                disabled: status.plusActive || plusInRevenueCat,
-                disabledLabel: status.plusActive ? 'Active' : 'Syncing',
+                plusPlan: _PlusPlanKind.monthly,
+                disabled: monthlyDisabled,
+                disabledLabel: monthlyDisabledLabel,
               ),
               const _DividerLine(),
               _planRow(
-                icon: Icons.workspace_premium_rounded,
                 title: 'Bhrigu Plus Yearly',
-                subtitle: 'User-facing unlimited readings. Unlocks everything.',
+                subtitle: 'Unlimited messages, readings, and manual matches.',
                 price: _price(yearly, 'INR 1111 / USD 111.00'),
                 package: yearly,
-                disabled: status.plusActive || plusInRevenueCat,
-                disabledLabel: status.plusActive ? 'Active' : 'Syncing',
+                plusPlan: _PlusPlanKind.yearly,
+                disabled: yearlyDisabled,
+                disabledLabel: yearlyDisabledLabel,
               ),
               const _DividerLine(),
               _planRow(
-                icon: Icons.local_fire_department_rounded,
-                title: '1 Dakshana',
-                subtitle: '5 chats, 1 tarot, 1 geomancy. One active pack.',
+                title: 'Dakshana Pack',
+                subtitle:
+                    '5 chat messages, 1 tarot reading, 1 geomancy reading. One pack can be active at a time.',
                 price: _price(dakshana, 'INR 49 / USD 2.00'),
                 package: dakshana,
                 disabled: !status.canBuyDakshana || dakshanaSyncPending,
-                disabledLabel:
-                    dakshanaSyncPending ? 'Syncing' : 'Use current pack',
+                disabledLabel: dakshanaSyncPending ? 'Updating' : 'Current',
               ),
               const SizedBox(height: 16),
               _actions(),
               const SizedBox(height: 10),
-              const Text(
-                'No enforcement is active in this build. Existing features stay available while billing is tested.',
-                style: TextStyle(
+              Text(
+                _enforcementCopy(status),
+                style: const TextStyle(
                   color: _dim,
                   fontSize: 11,
                   height: 1.35,
@@ -286,29 +403,16 @@ class _MonetizationPaywallPreviewState
 
     return Row(
       children: [
-        Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: const Color(0xFF0F0A18).withValues(alpha: 0.7),
-            borderRadius: BorderRadius.circular(13),
-            border: Border.all(color: _gold.withValues(alpha: 0.42)),
-          ),
-          child: const Icon(
-            Icons.stars_rounded,
-            color: _softGold,
-            size: 20,
-          ),
-        ),
-        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                status.plusActive ? 'Bhrigu Plus' : 'Free Tier',
-                style: const TextStyle(
-                  fontSize: 17,
+              const Text(
+                'Choose your plan',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 16,
                   fontWeight: FontWeight.w800,
                   color: _ink,
                 ),
@@ -316,10 +420,12 @@ class _MonetizationPaywallPreviewState
               const SizedBox(height: 2),
               Text(
                 status.plusActive
-                    ? '${_planLabel(status.plan)} access synced from Play.'
+                    ? 'Your plan is active. You can manage or restore anytime.'
                     : plusInRevenueCat
-                        ? 'Purchase seen by RevenueCat. Backend sync pending.'
-                        : 'Plans are ready for purchase testing.',
+                        ? 'Your purchase is confirmed. We are updating your access.'
+                        : status.dakshana.totalCredits > 0
+                            ? '${status.dakshana.totalCredits} Dakshana credits available.'
+                            : 'Pick Plus for regular guidance, or Dakshana for a small pack.',
                 style: const TextStyle(
                   fontSize: 12,
                   color: _muted,
@@ -331,66 +437,12 @@ class _MonetizationPaywallPreviewState
         ),
         IconButton(
           tooltip: 'Refresh plans',
-          onPressed: _refresh,
+          onPressed: () => _refresh(syncSecure: true),
           icon: const Icon(Icons.refresh_rounded),
           color: _softGold,
           visualDensity: VisualDensity.compact,
         ),
       ],
-    );
-  }
-
-  Widget _statusStrip(MonetizationStatus status, CustomerInfo? customerInfo) {
-    final plusInRevenueCat = _plusActiveInRevenueCat(customerInfo);
-    final chips = <Widget>[
-      _metricChip('Mode', status.mode),
-      if (status.plusActive) _metricChip('Plus', _planLabel(status.plan)),
-      if (!status.plusActive && plusInRevenueCat)
-        _metricChip('RevenueCat', 'Pending sync'),
-      if (status.dakshana.totalCredits > 0)
-        _metricChip('Dakshana', '${status.dakshana.totalCredits} left'),
-    ];
-
-    if (chips.length == 1) {
-      chips.add(_metricChip('Access', 'Open'));
-    }
-
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: chips,
-    );
-  }
-
-  Widget _metricChip(String label, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F0A18).withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: _border.withValues(alpha: 0.8)),
-      ),
-      child: RichText(
-        text: TextSpan(
-          style: const TextStyle(fontSize: 11, height: 1.1),
-          children: [
-            TextSpan(
-              text: '$label ',
-              style: const TextStyle(
-                color: _dim,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            TextSpan(
-              text: value,
-              style: const TextStyle(
-                color: _ink,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -414,7 +466,7 @@ class _MonetizationPaywallPreviewState
           SizedBox(width: 9),
           Expanded(
             child: Text(
-              'RevenueCat products are still syncing. Cards stay visible, and purchase buttons unlock when offerings are returned.',
+              'Plans are still loading. Cards stay visible, and purchase buttons appear when Google Play returns options.',
               style: TextStyle(
                 color: _muted,
                 fontSize: 11.5,
@@ -427,12 +479,135 @@ class _MonetizationPaywallPreviewState
     );
   }
 
+  Widget _backendSyncNotice({String? detail}) {
+    final message = detail != null && detail.trim().isNotEmpty
+        ? 'Your purchase is confirmed, but we could not update your access yet. Tap Restore or Refresh and try again in a moment.'
+        : 'Your purchase is confirmed. We are updating your access. Tap Restore or Refresh if it does not appear soon.';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF171123).withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _gold.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.sync_problem_rounded,
+            size: 17,
+            color: _softGold,
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: _muted,
+                fontSize: 11.5,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<MonetizationStatus> _waitForSecureSync({
+    required bool expectPlus,
+    _PlusPlanKind? expectedPlusPlan,
+    required bool expectDakshana,
+  }) async {
+    var latest = await _syncSecureOrStatus();
+    if (_secureAccessSynced(
+      latest,
+      expectPlus: expectPlus,
+      expectedPlusPlan: expectedPlusPlan,
+      expectDakshana: expectDakshana,
+    )) {
+      return latest;
+    }
+
+    const retryDelays = [
+      Duration(milliseconds: 450),
+      Duration(milliseconds: 850),
+      Duration(milliseconds: 1400),
+      Duration(milliseconds: 2200),
+      Duration(milliseconds: 3200),
+    ];
+
+    for (final delay in retryDelays) {
+      await Future<void>.delayed(delay);
+      if (!mounted) return latest;
+
+      latest = await _syncSecureOrStatus();
+      if (_secureAccessSynced(
+        latest,
+        expectPlus: expectPlus,
+        expectedPlusPlan: expectedPlusPlan,
+        expectDakshana: expectDakshana,
+      )) {
+        return latest;
+      }
+    }
+
+    return latest;
+  }
+
+  bool _secureAccessSynced(
+    MonetizationStatus status, {
+    required bool expectPlus,
+    _PlusPlanKind? expectedPlusPlan,
+    required bool expectDakshana,
+  }) {
+    final plusSynced = !expectPlus ||
+        (status.plusActive &&
+            (expectedPlusPlan == null ||
+                _planKindForStatus(status.plan) == expectedPlusPlan));
+    final dakshanaSynced = !expectDakshana || status.dakshana.totalCredits > 0;
+    return plusSynced && dakshanaSynced;
+  }
+
+  String _purchaseResultMessage({
+    required MonetizationStatus? status,
+    required bool expectPlus,
+    _PlusPlanKind? expectedPlusPlan,
+    required bool expectDakshana,
+  }) {
+    if (status != null &&
+        _secureAccessSynced(
+          status,
+          expectPlus: expectPlus,
+          expectedPlusPlan: expectedPlusPlan,
+          expectDakshana: expectDakshana,
+        )) {
+      if (expectPlus) {
+        return '${_planLabel(status.plan)} Plus is active now.';
+      }
+
+      if (expectDakshana) {
+        return 'Dakshana is active now with ${status.dakshana.totalCredits} credits.';
+      }
+    }
+
+    return _secureSyncPendingMessage();
+  }
+
+  String _secureSyncPendingMessage({bool purchaseCompleted = true}) {
+    final prefix = purchaseCompleted
+        ? 'Purchase completed in Google Play.'
+        : 'Plus is active in Google Play.';
+    return '$prefix We are updating your access. Tap Restore if it does not appear soon.';
+  }
+
   Widget _planRow({
-    required IconData icon,
     required String title,
     required String subtitle,
     required String price,
     required Package? package,
+    _PlusPlanKind? plusPlan,
     required bool disabled,
     required String disabledLabel,
   }) {
@@ -441,7 +616,7 @@ class _MonetizationPaywallPreviewState
         package != null && _purchasingKey == _packageKey(package);
     final canTap = !pending && !disabled && _purchasingKey == null;
     final actionLabel = pending
-        ? 'Sync pending'
+        ? 'Loading'
         : disabled
             ? disabledLabel
             : 'Choose';
@@ -451,17 +626,6 @@ class _MonetizationPaywallPreviewState
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F0A18).withValues(alpha: 0.62),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _gold.withValues(alpha: 0.22)),
-            ),
-            child: Icon(icon, color: _softGold, size: 18),
-          ),
-          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -502,7 +666,8 @@ class _MonetizationPaywallPreviewState
           SizedBox(
             width: 98,
             child: ElevatedButton(
-              onPressed: canTap ? () => _purchase(package) : null,
+              onPressed:
+                  canTap ? () => _purchase(package, plusPlan: plusPlan) : null,
               style: ElevatedButton.styleFrom(
                 elevation: 0,
                 backgroundColor: _gold,
@@ -609,12 +774,23 @@ class _MonetizationPaywallPreviewState
   }
 
   String _friendlyError(Object error) {
+    if (error is FirebaseFunctionsException) {
+      return 'We could not update your plan right now. Please try again in a moment.';
+    }
+
     if (error is PlatformException) {
-      return error.message?.trim().isNotEmpty == true
+      final text = error.message?.trim().isNotEmpty == true
           ? error.message!
           : error.code;
+      return _truncateErrorText(text);
     }
-    return error.toString();
+    return 'Please try again in a moment.';
+  }
+
+  static String _truncateErrorText(String value) {
+    final text = value.trim();
+    if (text.length <= 180) return text;
+    return '${text.substring(0, 177)}...';
   }
 
   bool _isPurchaseCancelled(PlatformException error) {
@@ -635,9 +811,123 @@ class _MonetizationPaywallPreviewState
       }
     }
 
-    return offering.availablePackages.length == 1
-        ? offering.availablePackages.first
-        : null;
+    return null;
+  }
+
+  static Package? _packageForPlusPlan(
+    Offering? primaryOffering,
+    Offerings? offerings,
+    _PlusPlanKind plan,
+  ) {
+    final primaryMatch = _packageForPlusPlanInOffering(primaryOffering, plan);
+    if (primaryMatch != null) return primaryMatch;
+
+    if (offerings == null) return null;
+
+    for (final offering in offerings.all.values) {
+      final package = _packageForPlusPlanInOffering(offering, plan);
+      if (package != null) return package;
+    }
+
+    return null;
+  }
+
+  static Package? _packageForPlusPlanInOffering(
+    Offering? offering,
+    _PlusPlanKind plan,
+  ) {
+    if (offering == null || offering.availablePackages.isEmpty) return null;
+
+    for (final package in offering.availablePackages) {
+      if (_isPlusPackage(package) && _packageLooksLikePlan(package, plan)) {
+        return package;
+      }
+    }
+
+    return null;
+  }
+
+  static bool _isPlusPackage(Package package) {
+    return _matchesProductId(
+            package.storeProduct.identifier, bhriguPlusProductId) ||
+        _packageSignature(package).contains(bhriguPlusProductId);
+  }
+
+  static bool _packageLooksLikePlan(Package package, _PlusPlanKind plan) {
+    final signature = _packageSignature(package);
+    final hasYearlySignal = _containsAny(signature, const [
+      'annual',
+      'annually',
+      'yearly',
+      'year',
+      'p1y',
+      'p12m',
+      '1y',
+      '12m',
+      '12month',
+      '12 month',
+      '12 months',
+    ]);
+    final hasMonthlySignal = _containsAny(signature, const [
+      'monthly',
+      'month',
+      'p1m',
+      '1m',
+      '1 month',
+    ]);
+
+    switch (plan) {
+      case _PlusPlanKind.yearly:
+        return hasYearlySignal;
+      case _PlusPlanKind.monthly:
+        return hasMonthlySignal && !hasYearlySignal;
+    }
+  }
+
+  static String _packageSignature(Package package) {
+    return [
+      package.identifier,
+      package.packageType.toString(),
+      package.storeProduct.identifier,
+      package.presentedOfferingContext.offeringIdentifier,
+    ]
+        .map((value) => value.toString().trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .join(' ')
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .trim();
+  }
+
+  static bool _containsAny(String text, List<String> needles) {
+    final normalized = _normalizeSignalText(text);
+    final tokens = normalized.split(' ').where((token) => token.isNotEmpty);
+    final tokenSet = tokens.toSet();
+    final compact = normalized.replaceAll(' ', '');
+
+    return needles.any((needle) {
+      final normalizedNeedle = _normalizeSignalText(needle);
+      if (normalizedNeedle.isEmpty) return false;
+
+      final compactNeedle = normalizedNeedle.replaceAll(' ', '');
+      final compactNeedleCanBeEmbedded = RegExp(r'\d').hasMatch(compactNeedle);
+      if (normalizedNeedle.contains(' ')) {
+        return normalized == normalizedNeedle ||
+            normalized.contains(' $normalizedNeedle ') ||
+            (compactNeedleCanBeEmbedded && compact.contains(compactNeedle));
+      }
+
+      return tokenSet.contains(normalizedNeedle) ||
+          compact == compactNeedle ||
+          (compactNeedleCanBeEmbedded && compact.contains(compactNeedle));
+    });
+  }
+
+  static String _normalizeSignalText(String text) {
+    return text
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .trim();
   }
 
   static Package? _packageForProductInOfferings(
@@ -682,6 +972,18 @@ class _MonetizationPaywallPreviewState
         DateTime.now().isBefore(pendingUntil);
   }
 
+  static _PlusPlanKind? _planKindForStatus(String plan) {
+    switch (plan.trim().toLowerCase()) {
+      case 'monthly':
+        return _PlusPlanKind.monthly;
+      case 'yearly':
+      case 'annual':
+        return _PlusPlanKind.yearly;
+      default:
+        return null;
+    }
+  }
+
   static String _planLabel(String plan) {
     switch (plan.trim().toLowerCase()) {
       case 'monthly':
@@ -691,6 +993,22 @@ class _MonetizationPaywallPreviewState
         return 'Yearly';
       default:
         return 'Free';
+    }
+  }
+
+  static String _enforcementCopy(MonetizationStatus status) {
+    switch (status.mode.trim().toLowerCase()) {
+      case 'enforce':
+      case 'enforced':
+      case 'on':
+        return 'Subscriptions are managed by Google Play. Cancel anytime; access remains until the paid period ends.';
+      case 'audit':
+      case 'meter':
+        return 'Purchases are being prepared. Your free allowance still works.';
+      case 'unavailable':
+        return 'We could not check your plan right now. Try Refresh or Restore.';
+      default:
+        return 'Purchases are not available in this build.';
     }
   }
 }

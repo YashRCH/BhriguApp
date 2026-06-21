@@ -6,6 +6,7 @@ import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
 import '../models/chat_message.dart';
 import '../models/follow_up_context_model.dart';
+import '../utils/cloud_function_error_messages.dart';
 import 'firebase_session_service.dart';
 import 'user_profile_cache_service.dart';
 
@@ -110,14 +111,18 @@ class GroqService {
         );
       }
     } on FirebaseFunctionsException catch (e) {
-      debugPrint('Cloud Function error code: ${e.code}');
-      debugPrint('Cloud Function error message: ${e.message}');
-      debugPrint('Cloud Function error details: ${e.details}');
+      if (kDebugMode) {
+        debugPrint('Cloud Function error code: ${e.code}');
+        debugPrint('Cloud Function error message: ${e.message}');
+        debugPrint('Cloud Function error details: ${e.details}');
+      }
 
-      yield cosmicConnectionLostMessage;
+      yield functionErrorMessage(e);
     } catch (e, stack) {
-      debugPrint('Unknown Bhrigu chat error: $e');
-      debugPrint('Stack: $stack');
+      if (kDebugMode) {
+        debugPrint('Unknown Bhrigu chat error: $e');
+        debugPrint('Stack: $stack');
+      }
 
       yield cosmicConnectionLostMessage;
     }

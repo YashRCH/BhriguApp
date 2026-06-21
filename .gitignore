@@ -13,6 +13,11 @@
 migrate_working_dir/
 asset_backups/
 
+# Local diagnostics and review artifacts
+*.patch
+diff_*.txt
+logcat_history.txt
+
 # IntelliJ related
 *.iml
 *.ipr

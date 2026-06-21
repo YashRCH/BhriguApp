@@ -22,6 +22,7 @@ const DAILY_HOROSCOPE_WORKER_BATCH_SIZE = 12;
 const DAILY_HOROSCOPE_WORKER_CONCURRENCY = 4;
 const DAILY_HOROSCOPE_JOB_LOCK_TTL_MS = 10 * 60 * 1000;
 const DAILY_HOROSCOPE_JOB_MAX_ATTEMPTS = 3;
+const USER_SCAN_PAGE_SIZE = 400;
 const {
   buildDailyHoroscopePrompt,
   dailyHoroscopeRef,
@@ -60,29 +61,53 @@ async function removeInvalidTokens(db, tokenOwners, invalidTokens) {
 }
 
 async function getFcmTokenTargets(db) {
-  const usersSnapshot = await db.collection("users").get();
-
   const tokens = new Set();
   const tokenOwners = new Map();
-  usersSnapshot.forEach((doc) => {
-    const data = doc.data();
-    if (data.fcmTokens && Array.isArray(data.fcmTokens) && data.fcmTokens.length > 0) {
-      data.fcmTokens.forEach((token) => {
-        const cleanToken = typeof token === "string" ? token.trim() : "";
-        if (cleanToken) {
-          tokens.add(cleanToken);
-          const owners = tokenOwners.get(cleanToken) || new Set();
-          owners.add(doc.id);
-          tokenOwners.set(cleanToken, owners);
-        }
-      });
-    }
+
+  await forEachUserPage(db, USER_SCAN_PAGE_SIZE, async (docs) => {
+    docs.forEach((doc) => {
+      const data = doc.data();
+      if (data.fcmTokens && Array.isArray(data.fcmTokens) && data.fcmTokens.length > 0) {
+        data.fcmTokens.forEach((token) => {
+          const cleanToken = typeof token === "string" ? token.trim() : "";
+          if (cleanToken) {
+            tokens.add(cleanToken);
+            const owners = tokenOwners.get(cleanToken) || new Set();
+            owners.add(doc.id);
+            tokenOwners.set(cleanToken, owners);
+          }
+        });
+      }
+    });
   });
 
   return {
     tokenList: Array.from(tokens),
     tokenOwners,
   };
+}
+
+async function forEachUserPage(db, pageSize, handleDocs) {
+  let lastDoc = null;
+
+  while (true) {
+    let query = db
+      .collection("users")
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .limit(pageSize);
+
+    if (lastDoc) {
+      query = query.startAfter(lastDoc);
+    }
+
+    const snapshot = await query.get();
+    if (snapshot.empty) break;
+
+    await handleDocs(snapshot.docs);
+    lastDoc = snapshot.docs[snapshot.docs.length - 1];
+
+    if (snapshot.size < pageSize) break;
+  }
 }
 
 async function sendNotificationToTokens(db, tokenList, tokenOwners, message, logLabel) {
@@ -161,7 +186,6 @@ function timestampMillis(value) {
 }
 
 async function enqueueDailyHoroscopeJobs(db, dateKey) {
-  const usersSnapshot = await db.collection("users").get();
   let batch = db.batch();
   let pendingWrites = 0;
   let queued = 0;
@@ -174,45 +198,47 @@ async function enqueueDailyHoroscopeJobs(db, dateKey) {
     pendingWrites = 0;
   }
 
-  for (const doc of usersSnapshot.docs) {
-    const userData = doc.data() || {};
+  await forEachUserPage(db, USER_SCAN_PAGE_SIZE, async (docs) => {
+    for (const doc of docs) {
+      const userData = doc.data() || {};
 
-    if (!hasFcmTokens(userData) || !hasDailyHoroscopeProfile(userData)) {
-      skipped += 1;
-      continue;
+      if (!hasFcmTokens(userData) || !hasDailyHoroscopeProfile(userData)) {
+        skipped += 1;
+        continue;
+      }
+
+      const aiResponseLanguage = normalizeAiResponseLanguage(
+        userData.aiResponseLanguage
+      );
+      const jobRef = dailyHoroscopeJobsRef(db, dateKey).doc(
+        dailyHoroscopeJobId(doc.id, aiResponseLanguage)
+      );
+
+      batch.set(
+        jobRef,
+        {
+          uid: doc.id,
+          dateKey,
+          aiResponseLanguage,
+          contentVersion: HOME_HOROSCOPE_CONTENT_VERSION,
+          status: "queued",
+          attempts: 0,
+          generationLockOwner: null,
+          generationLockExpiresAt: null,
+          generationError: null,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      pendingWrites += 1;
+      queued += 1;
+
+      if (pendingWrites >= DAILY_HOROSCOPE_ENQUEUE_BATCH_SIZE) {
+        await commitPendingBatch();
+      }
     }
-
-    const aiResponseLanguage = normalizeAiResponseLanguage(
-      userData.aiResponseLanguage
-    );
-    const jobRef = dailyHoroscopeJobsRef(db, dateKey).doc(
-      dailyHoroscopeJobId(doc.id, aiResponseLanguage)
-    );
-
-    batch.set(
-      jobRef,
-      {
-        uid: doc.id,
-        dateKey,
-        aiResponseLanguage,
-        contentVersion: HOME_HOROSCOPE_CONTENT_VERSION,
-        status: "queued",
-        attempts: 0,
-        generationLockOwner: null,
-        generationLockExpiresAt: null,
-        generationError: null,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-    pendingWrites += 1;
-    queued += 1;
-
-    if (pendingWrites >= DAILY_HOROSCOPE_ENQUEUE_BATCH_SIZE) {
-      await commitPendingBatch();
-    }
-  }
+  });
 
   await commitPendingBatch();
   return { queued, skipped };

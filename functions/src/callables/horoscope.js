@@ -48,6 +48,9 @@ const {
   writeCachedReading,
   callableRuntimeOptions,
   requireCallableAuth,
+  requireRequestData,
+  boundedString,
+  boundedPlainObject,
   cleanMetricKey,
   recordUsageEvent,
   isTimeoutError,
@@ -898,31 +901,29 @@ const generateDailyHoroscopeLegacy = onCall(
     maxInstances: 10,
   }),
   async (request) => {
+    const data = requireRequestData(request, { maxBytes: 24000 });
     const auth = requireCallableAuth(request);
     const decodedToken = { uid: auth.uid };
 
-    let prompt = request.data.prompt;
+    let prompt = boundedString(data.prompt, {
+      field: "Prompt",
+      max: 14000,
+      required: true,
+    });
     const aiResponseLanguage = await resolveAiResponseLanguage(
       decodedToken.uid,
-      request.data.aiResponseLanguage
+      data.aiResponseLanguage
     );
 
-    if (!prompt || typeof prompt !== "string") {
-      throw new HttpsError("invalid-argument", "Prompt is required.");
-    }
-
-    if (prompt.length > 14000) {
-      throw new HttpsError("invalid-argument", "Prompt is too long.");
-    }
-
-    const dateKey = String(request.data.dateKey || "").trim();
+    const dateKey = boundedString(data.dateKey, {
+      field: "dateKey",
+      max: 32,
+      required: true,
+      trim: true,
+    });
     const horoscopeDocId =
       aiResponseLanguage === "hinglish" ? `${dateKey}_hinglish` : dateKey;
     const contentVersion = HOME_HOROSCOPE_CONTENT_VERSION;
-
-    if (!dateKey) {
-      throw new HttpsError("invalid-argument", "dateKey is required.");
-    }
 
     const horoscopeRef = admin
       .firestore()
@@ -1106,10 +1107,13 @@ You must actively fight repetition. Never use the same generic advice (like 'do 
 
     try {
       const text = await generateDailyHoroscopeText(prompt);
-      const horoscopeMeta = request.data.horoscopeMeta || {};
+      const horoscopeMeta = boundedPlainObject(data.horoscopeMeta, {
+        field: "horoscopeMeta",
+        maxBytes: 6000,
+      });
       const parsed = parseDailyHoroscopeText(text, {
-        moonPhaseLine: request.data.moonPhaseLine,
-        dailyEnergyLine: request.data.dailyEnergyLine,
+        moonPhaseLine: data.moonPhaseLine,
+        dailyEnergyLine: data.dailyEnergyLine,
       });
       const expandedParsed = {
         ...parsed,
@@ -1190,29 +1194,27 @@ exports.generateDailyHoroscope = onCall(
     maxInstances: 10,
   }),
   async (request) => {
+    const data = requireRequestData(request, { maxBytes: 24000 });
     const auth = requireCallableAuth(request);
     const decodedToken = { uid: auth.uid };
 
-    const prompt = request.data.prompt;
+    const prompt = boundedString(data.prompt, {
+      field: "Prompt",
+      max: 14000,
+      required: true,
+    });
     const aiResponseLanguage = await resolveAiResponseLanguage(
       decodedToken.uid,
-      request.data.aiResponseLanguage
+      data.aiResponseLanguage
     );
 
-    if (!prompt || typeof prompt !== "string") {
-      throw new HttpsError("invalid-argument", "Prompt is required.");
-    }
-
-    if (prompt.length > 14000) {
-      throw new HttpsError("invalid-argument", "Prompt is too long.");
-    }
-
-    const dateKey = String(request.data.dateKey || "").trim();
+    const dateKey = boundedString(data.dateKey, {
+      field: "dateKey",
+      max: 32,
+      required: true,
+      trim: true,
+    });
     const contentVersion = HOME_HOROSCOPE_CONTENT_VERSION;
-
-    if (!dateKey) {
-      throw new HttpsError("invalid-argument", "dateKey is required.");
-    }
 
     const horoscopeRef = dailyHoroscopeRef(
       decodedToken.uid,
@@ -1290,9 +1292,12 @@ exports.generateDailyHoroscope = onCall(
         aiResponseLanguage,
         prompt,
         horoscopeRef,
-        horoscopeMeta: request.data.horoscopeMeta || {},
-        moonPhaseLine: request.data.moonPhaseLine,
-        dailyEnergyLine: request.data.dailyEnergyLine,
+        horoscopeMeta: boundedPlainObject(data.horoscopeMeta, {
+          field: "horoscopeMeta",
+          maxBytes: 6000,
+        }),
+        moonPhaseLine: data.moonPhaseLine,
+        dailyEnergyLine: data.dailyEnergyLine,
         recordUsage: true,
         maskAiErrors: true,
       });

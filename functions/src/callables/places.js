@@ -45,6 +45,8 @@ const {
   writeCachedReading,
   callableRuntimeOptions,
   requireCallableAuth,
+  requireRequestData,
+  boundedString,
   cleanMetricKey,
   recordUsageEvent,
   isTimeoutError,
@@ -146,19 +148,19 @@ exports.searchBirthPlaces = onCall(
   }),
   async (request) => {
     try {
-      const data = request.data || {};
+      const data = requireRequestData(request, { maxBytes: 4000 });
       const auth = requireCallableAuth(request);
-      const query = String(data.query || "").trim();
+      const query = boundedString(data.query, {
+        field: "Search query",
+        max: 120,
+        trim: true,
+      });
 
       if (query.length < 2) {
         return {
           places: [],
           placeDetails: [],
         };
-      }
-
-      if (query.length > 120) {
-        throw new HttpsError("invalid-argument", "Search query is too long.");
       }
 
       const response = await fetch(

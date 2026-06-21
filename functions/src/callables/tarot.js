@@ -49,6 +49,8 @@ const {
   writeCachedReading,
   callableRuntimeOptions,
   requireCallableAuth,
+  requireRequestData,
+  boundedString,
   cleanMetricKey,
   recordUsageEvent,
   isTimeoutError,
@@ -143,85 +145,91 @@ const {
   readCompatibilityKnowledgeDocs,
   retrieveTarotKnowledge,
 } = require("../core");
+const {
+  requireMeteredFeature,
+  refundMeteredFeatureCharge,
+  REVENUECAT_SECRET_API_KEY,
+} = require("../monetization/quota");
 exports.generateTarotEmbedding = onCall(
   callableRuntimeOptions({
     secrets: [GEMINI_API_KEY],
     region: FUNCTION_REGION,
   }),
   async (request) => {
-    const auth = requireCallableAuth(request);
-    const decodedToken = { uid: auth.uid };
+    const data = requireRequestData(request, { maxBytes: 12000 });
+    requireCallableAuth(request);
 
-    const text = request.data.text;
+    boundedString(data.text, {
+      field: "Text",
+      max: 4000,
+      required: true,
+      trim: true,
+    });
 
-    if (!text || typeof text !== "string") {
-      throw new HttpsError("invalid-argument", "Text is required.");
-    }
-
-    if (text.length > 4000) {
-      throw new HttpsError("invalid-argument", "Text is too long.");
-    }
-
-    try {
-      const values = await generateGeminiEmbedding(text);
-
-      await recordUsageEvent(decodedToken.uid, {
-        feature: "tarot_embedding",
-        provider: "gemini",
-        model: "gemini-embedding-001",
-        cached: false,
-      });
-
-      return {
-        values: values,
-      };
-    } catch (error) {
-      console.error(
-        "Tarot Gemini embedding error:",
-        error.response?.data || error.message
-      );
-
-      throw new HttpsError(
-        "internal",
-        "Tarot embedding generation failed."
-      );
-    }
+    throw new HttpsError(
+      "failed-precondition",
+      "Tarot embedding generation is server-side only."
+    );
   }
 );
 
 exports.generateTarotReading = onCall(
   callableRuntimeOptions({
-    secrets: [GEMINI_API_KEY],
+    secrets: [GEMINI_API_KEY, REVENUECAT_SECRET_API_KEY],
     region: FUNCTION_REGION,
     timeoutSeconds: 120,
     memory: "1GiB",
   }),
   async (request) => {
+    const data = requireRequestData(request, { maxBytes: 70000 });
     const auth = requireCallableAuth(request);
     const decodedToken = { uid: auth.uid };
 
-    const birthData = request.data.birthData || "Birth data not available.";
+    const birthData = boundedString(data.birthData, {
+      field: "Birth data",
+      max: 2500,
+      fallback: "Birth data not available.",
+    });
     const aiResponseLanguage = await resolveAiResponseLanguage(
       decodedToken.uid,
-      request.data.aiResponseLanguage
+      data.aiResponseLanguage
     );
-    const question =
-      typeof request.data.question === "string"
-        ? request.data.question.trim()
-        : "";
+    const question = boundedString(data.question, {
+      field: "Question",
+      max: 1000,
+      trim: true,
+    });
     const enquiryText =
       question.length === 0
         ? "General tarot guidance. No specific enquiry was provided."
         : question;
-    const pastName = request.data.pastName || "";
-    const presentName = request.data.presentName || "";
-    const futureName = request.data.futureName || "";
-    const pastKnowledgeFallback = request.data.pastKnowledge || "";
-    const presentKnowledgeFallback = request.data.presentKnowledge || "";
-    const futureKnowledgeFallback = request.data.futureKnowledge || "";
-    const pastKeywords = request.data.pastKeywords || "";
-    const presentKeywords = request.data.presentKeywords || "";
-    const futureKeywords = request.data.futureKeywords || "";
+    const pastName = boundedString(data.pastName, { field: "Past card", max: 80 });
+    const presentName = boundedString(data.presentName, { field: "Present card", max: 80 });
+    const futureName = boundedString(data.futureName, { field: "Future card", max: 80 });
+    const pastKnowledgeFallback = boundedString(data.pastKnowledge, {
+      field: "Past knowledge",
+      max: 5000,
+    });
+    const presentKnowledgeFallback = boundedString(data.presentKnowledge, {
+      field: "Present knowledge",
+      max: 5000,
+    });
+    const futureKnowledgeFallback = boundedString(data.futureKnowledge, {
+      field: "Future knowledge",
+      max: 5000,
+    });
+    const pastKeywords = boundedString(data.pastKeywords, {
+      field: "Past keywords",
+      max: 500,
+    });
+    const presentKeywords = boundedString(data.presentKeywords, {
+      field: "Present keywords",
+      max: 500,
+    });
+    const futureKeywords = boundedString(data.futureKeywords, {
+      field: "Future keywords",
+      max: 500,
+    });
     const cacheKey = cacheKeyForReading("tarot", {
       version: TAROT_READING_CONTENT_VERSION,
       model: GEMINI_FLASH_LITE_MODEL,
@@ -238,57 +246,84 @@ exports.generateTarotReading = onCall(
       aiResponseLanguage,
     });
 
-    const cachedText = await readCachedReading(
-      decodedToken.uid,
-      cacheKey,
-      TAROT_READING_CONTENT_VERSION,
-      aiResponseLanguage
-    );
+    const meteringCharge = await requireMeteredFeature(decodedToken.uid, "tarot");
+    let cachedText;
 
-    if (cachedText) {
-      const safeCachedText = await ensureHinglishText({
-        text: cachedText,
-        aiResponseLanguage,
-        preserveFormatInstruction:
-          "Preserve PAST, PRESENT, FUTURE headings and all card names exactly.",
-        enquiryContext: `The user's original enquiry was: "${enquiryText}". CRITICAL: You must preserve every specific reference, noun, and detail related to this enquiry from the original text.`,
-        maxTokens: TAROT_MAX_OUTPUT_TOKENS,
-      });
-
-      if (safeCachedText !== cachedText) {
-        try {
-          await writeCachedReading(
-            decodedToken.uid,
-            cacheKey,
-            TAROT_READING_CONTENT_VERSION,
-            safeCachedText,
-            aiResponseLanguage
-          );
-        } catch (repairError) {
-          console.warn(
-            "Failed to persist repaired tarot cache text.",
-            repairError
-          );
-        }
+    try {
+      cachedText = await readCachedReading(
+        decodedToken.uid,
+        cacheKey,
+        TAROT_READING_CONTENT_VERSION,
+        aiResponseLanguage
+      );
+    } catch (error) {
+      try {
+        await refundMeteredFeatureCharge(decodedToken.uid, meteringCharge);
+      } catch (refundError) {
+        console.error("Tarot cache metering refund failed:", refundError);
       }
 
-      await recordUsageEvent(decodedToken.uid, {
-        feature: "tarot_reading",
-        provider: "firestore_cache",
-        model: "cached",
-        cached: true,
-      });
-
-      return {
-        text: safeCachedText,
-        cached: true,
-        deduped: true,
-        aiResponseLanguage,
-      };
+      throw error;
     }
 
-    const [pastKnowledge, presentKnowledge, futureKnowledge] =
-      await Promise.all([
+    if (cachedText) {
+      try {
+        const safeCachedText = await ensureHinglishText({
+          text: cachedText,
+          aiResponseLanguage,
+          preserveFormatInstruction:
+            "Preserve PAST, PRESENT, FUTURE headings and all card names exactly.",
+          enquiryContext: `The user's original enquiry was: "${enquiryText}". CRITICAL: You must preserve every specific reference, noun, and detail related to this enquiry from the original text.`,
+          maxTokens: TAROT_MAX_OUTPUT_TOKENS,
+        });
+
+        if (safeCachedText !== cachedText) {
+          try {
+            await writeCachedReading(
+              decodedToken.uid,
+              cacheKey,
+              TAROT_READING_CONTENT_VERSION,
+              safeCachedText,
+              aiResponseLanguage
+            );
+          } catch (repairError) {
+            console.warn(
+              "Failed to persist repaired tarot cache text.",
+              repairError
+            );
+          }
+        }
+
+        await recordUsageEvent(decodedToken.uid, {
+          feature: "tarot_reading",
+          provider: "firestore_cache",
+          model: "cached",
+          cached: true,
+        });
+
+        return {
+          text: safeCachedText,
+          cached: true,
+          deduped: true,
+          aiResponseLanguage,
+        };
+      } catch (error) {
+        try {
+          await refundMeteredFeatureCharge(decodedToken.uid, meteringCharge);
+        } catch (refundError) {
+          console.error("Tarot cached-reading metering refund failed:", refundError);
+        }
+
+        throw error;
+      }
+    }
+
+    let pastKnowledge;
+    let presentKnowledge;
+    let futureKnowledge;
+
+    try {
+      [pastKnowledge, presentKnowledge, futureKnowledge] = await Promise.all([
         retrieveTarotKnowledge({
           cardName: pastName,
           keywords: pastKeywords,
@@ -305,6 +340,23 @@ exports.generateTarotReading = onCall(
           fallback: futureKnowledgeFallback,
         }),
       ]);
+    } catch (error) {
+      console.error(
+        "Tarot knowledge retrieval error:",
+        error.response?.data || error.message
+      );
+
+      try {
+        await refundMeteredFeatureCharge(decodedToken.uid, meteringCharge);
+      } catch (refundError) {
+        console.error("Tarot metering refund failed:", refundError);
+      }
+
+      throw new HttpsError(
+        "internal",
+        "Tarot reading generation failed."
+      );
+    }
 
     const prompt = `
 You are Bhrigu, a Vedic sage and experienced tarot reader inside the BHR1GU app.
@@ -593,26 +645,24 @@ Hard constraints:
 
       console.error("Tarot Gemini error:", aiDetails);
 
+      try {
+        await refundMeteredFeatureCharge(decodedToken.uid, meteringCharge);
+      } catch (refundError) {
+        console.error("Tarot metering refund failed:", refundError);
+      }
+
       await recordUsageEvent(decodedToken.uid, {
-        feature: "tarot_reading_fallback",
-        provider: "local_fallback",
-        model: "fallback",
+        feature: "tarot_reading_failed",
+        provider: "gemini",
+        model: GEMINI_FLASH_LITE_MODEL,
         cached: false,
       });
 
-      return {
-        text: await ensureHinglishText({
-          text: buildFallbackText(),
-          aiResponseLanguage,
-          preserveFormatInstruction:
-            "Preserve PAST, PRESENT, FUTURE headings and all card names exactly.",
-          enquiryContext: `The user's original enquiry was: "${enquiryText}". CRITICAL: You must preserve every specific reference, noun, and detail related to this enquiry from the original text.`,
-          maxTokens: TAROT_MAX_OUTPUT_TOKENS,
-        }),
-        fallback: true,
-        timeout: isTimeoutError(error),
-        aiResponseLanguage,
-      };
+      throw new HttpsError(
+        isTimeoutError(error) ? "deadline-exceeded" : "internal",
+        "Tarot reading generation failed. Please try again.",
+        aiDetails
+      );
     }
   }
 );

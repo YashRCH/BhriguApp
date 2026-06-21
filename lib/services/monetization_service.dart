@@ -25,12 +25,35 @@ class MonetizationService {
       if (kDebugMode) {
         debugPrint('Monetization status unavailable: $e');
       }
-      return const MonetizationStatus.free();
+      return const MonetizationStatus.unavailable();
     }
   }
 
+  Future<MonetizationStatus> syncRevenueCatPurchases() async {
+    try {
+      final response =
+          await _functions.httpsCallable('syncRevenueCatPurchases').call();
+      final data = response.data;
+      final map = data is Map ? Map<String, dynamic>.from(data) : null;
+      final status = map?['status'];
+
+      return MonetizationStatus.fromMap(
+        status is Map ? Map<String, dynamic>.from(status) : null,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('RevenueCat secure sync unavailable: $e');
+      }
+      rethrow;
+    }
+  }
+
+  Future<CustomerInfo?> restorePurchasesInfo() async {
+    return RevenueCatService.instance.restorePurchases();
+  }
+
   Future<bool> restorePurchases() async {
-    final customerInfo = await RevenueCatService.instance.restorePurchases();
+    final customerInfo = await restorePurchasesInfo();
     return customerInfo != null;
   }
 
@@ -56,9 +79,12 @@ class MonetizationService {
     }
   }
 
+  Future<CustomerInfo?> purchasePackageInfo(Package package) async {
+    return RevenueCatService.instance.purchasePackage(package);
+  }
+
   Future<bool> purchasePackage(Package package) async {
-    final customerInfo =
-        await RevenueCatService.instance.purchasePackage(package);
+    final customerInfo = await purchasePackageInfo(package);
     return customerInfo != null;
   }
 

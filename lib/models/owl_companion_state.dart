@@ -7,7 +7,10 @@ class OwlCompanionState {
   final int petProgress;
   final String? lastPetDate;
   final bool rewardAvailable;
+  final String? rewardType;
+  final bool rewardReadingGranted;
   final int rewardClaimedCount;
+  final String? lastRewardClaimDate;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -16,7 +19,10 @@ class OwlCompanionState {
     this.petProgress = 0,
     this.lastPetDate,
     this.rewardAvailable = false,
+    this.rewardType,
+    this.rewardReadingGranted = false,
     this.rewardClaimedCount = 0,
+    this.lastRewardClaimDate,
     this.createdAt,
     this.updatedAt,
   });
@@ -26,7 +32,10 @@ class OwlCompanionState {
         petProgress = 0,
         lastPetDate = null,
         rewardAvailable = false,
+        rewardType = null,
+        rewardReadingGranted = false,
         rewardClaimedCount = 0,
+        lastRewardClaimDate = null,
         createdAt = null,
         updatedAt = null;
 
@@ -36,7 +45,10 @@ class OwlCompanionState {
       petProgress: _intFromValue(data['petProgress']),
       lastPetDate: data['lastPetDate'] as String?,
       rewardAvailable: data['rewardAvailable'] == true,
+      rewardType: _rewardTypeFromValue(data['rewardType']),
+      rewardReadingGranted: data['rewardReadingGranted'] == true,
       rewardClaimedCount: _intFromValue(data['rewardClaimedCount']),
+      lastRewardClaimDate: data['lastRewardClaimDate'] as String?,
       createdAt: _dateFromValue(data['createdAt']),
       updatedAt: _dateFromValue(data['updatedAt']),
     );
@@ -48,14 +60,20 @@ class OwlCompanionState {
       'petProgress': petProgress,
       'lastPetDate': lastPetDate,
       'rewardAvailable': rewardAvailable,
+      'rewardType': rewardType,
+      'rewardReadingGranted': rewardReadingGranted,
       'rewardClaimedCount': rewardClaimedCount,
-      'createdAt': createdAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
+      'lastRewardClaimDate': lastRewardClaimDate,
+      'createdAt':
+          createdAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
       'updatedAt': DateTime.now().toIso8601String(),
     };
   }
 
   bool isPettedToday() {
-    return lastPetDate == formatDateKey(DateTime.now());
+    final now = DateTime.now();
+    return lastPetDate == formatDateKey(now) ||
+        lastPetDate == formatDateKey(now.toUtc());
   }
 
   OwlCompanionState copyWith({
@@ -63,7 +81,10 @@ class OwlCompanionState {
     int? petProgress,
     String? lastPetDate,
     bool? rewardAvailable,
+    String? rewardType,
+    bool? rewardReadingGranted,
     int? rewardClaimedCount,
+    String? lastRewardClaimDate,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -72,7 +93,10 @@ class OwlCompanionState {
       petProgress: petProgress ?? this.petProgress,
       lastPetDate: lastPetDate ?? this.lastPetDate,
       rewardAvailable: rewardAvailable ?? this.rewardAvailable,
+      rewardType: rewardType ?? this.rewardType,
+      rewardReadingGranted: rewardReadingGranted ?? this.rewardReadingGranted,
       rewardClaimedCount: rewardClaimedCount ?? this.rewardClaimedCount,
+      lastRewardClaimDate: lastRewardClaimDate ?? this.lastRewardClaimDate,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -82,11 +106,35 @@ class OwlCompanionState {
 class PetResult {
   final OwlCompanionState state;
   final bool success;
+  final String? rewardType;
+  final int readingCreditsGranted;
   final String message;
 
   const PetResult({
     required this.state,
     required this.success,
+    this.rewardType,
+    this.readingCreditsGranted = 0,
+    required this.message,
+  });
+}
+
+class OwlRewardClaimResult {
+  final OwlCompanionState state;
+  final bool success;
+  final bool claimed;
+  final String? rewardType;
+  final int chatMessagesGranted;
+  final int readingCreditsGranted;
+  final String message;
+
+  const OwlRewardClaimResult({
+    required this.state,
+    required this.success,
+    required this.claimed,
+    required this.rewardType,
+    required this.chatMessagesGranted,
+    required this.readingCreditsGranted,
     required this.message,
   });
 }
@@ -98,8 +146,21 @@ int _intFromValue(dynamic value) {
   return 0;
 }
 
+String? _rewardTypeFromValue(dynamic value) {
+  if (value == 'tarot' || value == 'geomancy') return value as String;
+  return null;
+}
+
 DateTime? _dateFromValue(dynamic value) {
   if (value is DateTime) return value;
   if (value is String) return DateTime.tryParse(value);
+  if (value != null) {
+    try {
+      final date = value.toDate();
+      if (date is DateTime) return date;
+    } catch (_) {
+      return null;
+    }
+  }
   return null;
 }

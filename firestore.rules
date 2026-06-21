@@ -11,8 +11,7 @@ service cloud.firestore {
     }
 
     function verifiedEmail() {
-      // TODO: Revert this to `return request.auth.token.email_verified == true;` for production
-      return true;
+      return request.auth.token.email_verified == true;
     }
 
     function validAiResponseLanguage(value) {
@@ -59,6 +58,12 @@ service cloud.firestore {
 
     function validOptionalCoordinate(value, min, max) {
       return value == null || (value is number && value >= min && value <= max);
+    }
+
+    function validOwlName(value) {
+      return value is string
+        && value.size() > 0
+        && value.size() <= 24;
     }
 
     function validUserProfileCreate() {
@@ -332,7 +337,17 @@ service cloud.firestore {
     }
 
     match /users/{userId}/owlCompanion/{docId} {
-      allow read, create, update: if isOwner(userId);
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && docId == 'state'
+        && request.resource.data.keys().hasOnly(['owlName', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['owlName'])
+        && validOwlName(request.resource.data.owlName);
+      allow update: if isOwner(userId)
+        && docId == 'state'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['owlName', 'updatedAt'])
+        && validOwlName(request.resource.data.owlName);
       allow delete: if false;
     }
 

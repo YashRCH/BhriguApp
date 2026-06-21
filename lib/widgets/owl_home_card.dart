@@ -10,11 +10,40 @@ import 'owl_flight_overlay.dart';
 
 /// Cosmetic gift items the owl can bring.
 const _celestialGifts = [
-  {'name': 'Star Crystal', 'icon': '💎', 'lore': 'A shard of frozen starlight, said to amplify inner clarity.', 'benefit': '✦ Geomancy readings improved · Updated context'},
-  {'name': 'Lunar Feather', 'icon': '🪶', 'lore': 'A feather kissed by moonlight, carrying whispers of forgotten dreams.', 'benefit': '✦ Tarot insights deepened · Dream clarity enhanced'},
-  {'name': 'Cosmic Amulet', 'icon': '🔮', 'lore': 'An ancient charm that hums with the resonance of distant galaxies.', 'benefit': '✦ Compatibility reading refined · Cosmic bond strengthened'},
-  {'name': 'Astral Seed', 'icon': '✨', 'lore': 'A seed from the celestial garden, waiting to bloom in your spirit.', 'benefit': '✦ Daily horoscope precision boosted · Celestial alignment synced'},
-  {'name': 'Nebula Tear', 'icon': '🌌', 'lore': 'A drop of condensed cosmos, shimmering with infinite potential.', 'benefit': '✦ Natal chart depth expanded · Planetary influence attuned'},
+  {
+    'name': 'Star Crystal',
+    'icon': '💎',
+    'lore': 'A shard of frozen starlight, said to amplify inner clarity.',
+    'benefit': '✦ Geomancy readings improved · Updated context'
+  },
+  {
+    'name': 'Lunar Feather',
+    'icon': '🪶',
+    'lore':
+        'A feather kissed by moonlight, carrying whispers of forgotten dreams.',
+    'benefit': '✦ Tarot insights deepened · Dream clarity enhanced'
+  },
+  {
+    'name': 'Cosmic Amulet',
+    'icon': '🔮',
+    'lore':
+        'An ancient charm that hums with the resonance of distant galaxies.',
+    'benefit': '✦ Compatibility reading refined · Cosmic bond strengthened'
+  },
+  {
+    'name': 'Astral Seed',
+    'icon': '✨',
+    'lore':
+        'A seed from the celestial garden, waiting to bloom in your spirit.',
+    'benefit':
+        '✦ Daily horoscope precision boosted · Celestial alignment synced'
+  },
+  {
+    'name': 'Nebula Tear',
+    'icon': '🌌',
+    'lore': 'A drop of condensed cosmos, shimmering with infinite potential.',
+    'benefit': '✦ Natal chart depth expanded · Planetary influence attuned'
+  },
 ];
 
 /// Interactive Owl Companion card for the HomeScreen.
@@ -79,7 +108,7 @@ class _OwlHomeCardState extends State<OwlHomeCard>
       final rand = math.Random().nextDouble();
       OwlPose pose;
       int duration;
-      
+
       if (rand < 0.25) {
         pose = OwlPose.walking;
         duration = 1000;
@@ -138,7 +167,9 @@ class _OwlHomeCardState extends State<OwlHomeCard>
       if (!mounted) return;
 
       setState(() {
-        _state = result.state;
+        if (result.success) {
+          _state = result.state;
+        }
         _petting = false;
         _statusMessage = result.message;
       });
@@ -147,7 +178,9 @@ class _OwlHomeCardState extends State<OwlHomeCard>
         // Show happy animation briefly
         setState(() => _currentPose = OwlPose.alerted);
         Future.delayed(const Duration(milliseconds: 800), () {
-          if (mounted && !_isSleeping) setState(() => _currentPose = OwlPose.idle);
+          if (mounted && !_isSleeping) {
+            setState(() => _currentPose = OwlPose.idle);
+          }
         });
 
         // Trigger owl flight across screen!
@@ -175,15 +208,24 @@ class _OwlHomeCardState extends State<OwlHomeCard>
     setState(() => _claiming = true);
 
     try {
-      final updatedState = await _service.claimReward(widget.uid);
+      final result = await _service.claimReward(widget.uid);
       if (!mounted) return;
 
       setState(() {
-        _state = updatedState;
+        if (result.success) {
+          _state = result.state;
+        }
         _claiming = false;
+        _statusMessage = result.message;
       });
 
-      _showGiftDialog();
+      if (result.claimed) {
+        _showGiftDialog(result);
+      }
+
+      Future.delayed(const Duration(seconds: 4), () {
+        if (mounted) setState(() => _statusMessage = null);
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -193,8 +235,10 @@ class _OwlHomeCardState extends State<OwlHomeCard>
     }
   }
 
-  void _showGiftDialog() {
+  void _showGiftDialog(OwlRewardClaimResult result) {
     final gift = _celestialGifts[math.Random().nextInt(_celestialGifts.length)];
+    final rewardLabel = _readingRewardLabel(result.rewardType);
+    final hasReadingGrant = result.readingCreditsGranted > 0;
 
     showDialog(
       context: context,
@@ -208,18 +252,28 @@ class _OwlHomeCardState extends State<OwlHomeCard>
         ),
         title: Column(
           children: [
-            Text(
-              gift['icon']!,
-              style: const TextStyle(fontSize: 48),
+            const Icon(
+              Icons.card_giftcard_rounded,
+              size: 44,
+              color: Color(0xFFC7A867),
             ),
             const SizedBox(height: 8),
             Text(
-              gift['name']!,
+              'Owl Gift Opened',
               textAlign: TextAlign.center,
               style: GoogleFonts.cinzelDecorative(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: const Color(0xFFC7A867),
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              gift['name']!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 11,
+                color: Color(0xFF8B80A0),
               ),
             ),
           ],
@@ -228,7 +282,13 @@ class _OwlHomeCardState extends State<OwlHomeCard>
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              gift['lore']!,
+              hasReadingGrant
+                  ? 'Your owl added ${result.chatMessagesGranted} chat '
+                      'messages and ${result.readingCreditsGranted} '
+                      '$rewardLabel reading to your available credits.'
+                  : 'Your owl added ${result.chatMessagesGranted} chat '
+                      'messages. Your $rewardLabel reading was already added '
+                      'when Moon Bond filled.',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
@@ -247,7 +307,11 @@ class _OwlHomeCardState extends State<OwlHomeCard>
                 ),
               ),
               child: Text(
-                gift['benefit']!,
+                hasReadingGrant
+                    ? '+${result.chatMessagesGranted} chat messages | '
+                        '+${result.readingCreditsGranted} '
+                        '$rewardLabel reading'
+                    : '+${result.chatMessagesGranted} chat messages',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.cinzel(
                   fontSize: 11,
@@ -259,7 +323,7 @@ class _OwlHomeCardState extends State<OwlHomeCard>
             ),
             const SizedBox(height: 12),
             Text(
-              'Hoot! Your owl brought you a gift.',
+              'Moon Bond gifts can only be opened once after the bond is full.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 11,
@@ -337,7 +401,8 @@ class _OwlHomeCardState extends State<OwlHomeCard>
               final newName = controller.text.trim();
               if (newName.isNotEmpty && newName != _state.owlName) {
                 try {
-                  final updated = await _service.updateOwlName(widget.uid, newName);
+                  final updated =
+                      await _service.updateOwlName(widget.uid, newName);
                   if (mounted) setState(() => _state = updated);
                 } catch (_) {
                   // Silently fail
@@ -352,6 +417,10 @@ class _OwlHomeCardState extends State<OwlHomeCard>
         ],
       ),
     );
+  }
+
+  String _readingRewardLabel(String? rewardType) {
+    return rewardType == 'geomancy' ? 'geomancy' : 'tarot';
   }
 
   @override
@@ -421,7 +490,7 @@ class _OwlHomeCardState extends State<OwlHomeCard>
                 // Footer message
                 const Center(
                   child: Text(
-                    'Owl brings a gift when moon bond is filled or when he feels like it',
+                    'Fill the Moon Bond for a reading. Open the gift for messages.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 10,
@@ -513,7 +582,9 @@ class _OwlHomeCardState extends State<OwlHomeCard>
               ),
             ),
             child: Icon(
-              _isSleeping ? Icons.wb_sunny_outlined : Icons.nights_stay_outlined,
+              _isSleeping
+                  ? Icons.wb_sunny_outlined
+                  : Icons.nights_stay_outlined,
               size: 16,
               color: const Color(0xFFC7A867).withValues(alpha: 0.8),
             ),
@@ -528,6 +599,7 @@ class _OwlHomeCardState extends State<OwlHomeCard>
       children: [
         // Animated owl sprite
         GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: _petOwl,
           child: OwlSpriteAnimator(
             pose: _currentPose,
@@ -557,7 +629,9 @@ class _OwlHomeCardState extends State<OwlHomeCard>
               const SizedBox(height: 6),
               Text(
                 _state.rewardAvailable
-                    ? 'Your owl has a gift for you!'
+                    ? _state.rewardReadingGranted
+                        ? 'Gift ready: 5 messages. ${_readingRewardLabel(_state.rewardType)} reading added.'
+                        : 'Gift ready: 5 messages and 1 ${_readingRewardLabel(_state.rewardType)} reading'
                     : _state.isPettedToday()
                         ? 'Moon Bond filled for today ✓'
                         : 'Pet your owl to fill the Moon Bond',
@@ -583,7 +657,9 @@ class _OwlHomeCardState extends State<OwlHomeCard>
           animation: _glowController,
           builder: (context, _) {
             final glowIntensity = filled
-                ? 0.4 + math.sin(_glowController.value * math.pi * 2 + i * 0.5) * 0.2
+                ? 0.4 +
+                    math.sin(_glowController.value * math.pi * 2 + i * 0.5) *
+                        0.2
                 : 0.0;
             return Container(
               width: 22,
@@ -591,9 +667,8 @@ class _OwlHomeCardState extends State<OwlHomeCard>
               margin: const EdgeInsets.only(right: 6),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: filled
-                    ? const Color(0xFFC7A867)
-                    : const Color(0xFF2E2650),
+                color:
+                    filled ? const Color(0xFFC7A867) : const Color(0xFF2E2650),
                 border: Border.all(
                   color: filled
                       ? const Color(0xFFF59E0B)
@@ -603,7 +678,8 @@ class _OwlHomeCardState extends State<OwlHomeCard>
                 boxShadow: filled
                     ? [
                         BoxShadow(
-                          color: const Color(0xFFF59E0B).withValues(alpha: glowIntensity),
+                          color: const Color(0xFFF59E0B)
+                              .withValues(alpha: glowIntensity),
                           blurRadius: 8,
                           spreadRadius: 1,
                         ),
@@ -646,7 +722,10 @@ class _OwlHomeCardState extends State<OwlHomeCard>
                 gradient: LinearGradient(
                   colors: _state.rewardAvailable
                       ? const [Color(0xFFB58E34), Color(0xFFF59E0B)]
-                      : const [Color(0xFF5D4037), Color(0xFF3E2723)], // Branch-like brown
+                      : const [
+                          Color(0xFF5D4037),
+                          Color(0xFF3E2723)
+                        ], // Branch-like brown
                 ),
               ),
               child: Center(

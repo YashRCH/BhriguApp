@@ -14,6 +14,7 @@ import 'screens/circle_screen.dart';
 import 'screens/add_connection_screen.dart';
 import 'screens/connection_detail_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/plans_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/auth_service.dart';
@@ -163,6 +164,10 @@ final appRouter = GoRouter(
           builder: (ctx, state) => const ProfileScreen(),
         ),
       ],
+    ),
+    GoRoute(
+      path: '/plans',
+      builder: (ctx, state) => const PlansScreen(),
     ),
   ],
 );

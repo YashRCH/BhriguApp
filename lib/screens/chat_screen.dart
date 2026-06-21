@@ -15,6 +15,8 @@ import '../services/groq_service.dart';
 import '../services/follow_up_context_service.dart';
 import '../providers/chat_provider.dart';
 import '../widgets/ai_report_button.dart';
+import '../widgets/feature_quota_chip.dart';
+import '../widgets/plans_cta_button.dart';
 import 'cosmic_blueprint_screen.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -45,15 +47,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   bool _stickToBottom = true;
   bool _isArtGlowing = false;
   StreamSubscription<String>? _messageSubscription;
+  int _quotaRefreshTick = 0;
 
   Timer? _hintTimer;
   int _hintIndex = 0;
 
   static const String _ephemerisTrustLine = 'Powered by NASA/JPL Horizons Data';
   static const int _apiHistoryLimit = 5;
+  static const String _readingStatusText = 'Reading cosmic blueprint';
 
   late final AnimationController _pulseController;
-  late final AnimationController _dotController;
   late final AnimationController _rotationController;
   late final AnimationController _plasmaController;
   bool _showGuideText = true;
@@ -76,11 +79,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _rotationController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 8),
-    )..repeat();
-
-    _dotController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
     )..repeat();
 
     _plasmaController = AnimationController(
@@ -123,7 +121,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _messageSubscription?.cancel();
     _scrollController.removeListener(_handleScroll);
     _pulseController.dispose();
-    _dotController.dispose();
     _rotationController.dispose();
     _plasmaController.dispose();
     _controller.dispose();
@@ -286,6 +283,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
         setState(() {
           _isTyping = false;
+          _quotaRefreshTick++;
         });
 
         _messageSubscription = null;
@@ -464,7 +462,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         child: Padding(
           padding: const EdgeInsets.only(
               bottom: 80.0), // Padding to lift above floating router
-          child: _inputBar(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FeatureQuotaChip(
+                feature: FeatureQuotaKind.chat,
+                refreshKey: _quotaRefreshTick,
+                alignment: Alignment.center,
+              ),
+              const SizedBox(height: 4),
+              _inputBar(),
+            ],
+          ),
         ),
       ),
       body: Container(
@@ -860,6 +869,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                               ),
                             ),
                           ),
+                          if (isPlansRecoveryMessage(msg.content)) ...[
+                            const SizedBox(height: 8),
+                            PlansCtaButton(message: msg.content),
+                          ],
                           Align(
                             alignment: Alignment.centerRight,
                             child: AiReportButton(
@@ -965,38 +978,56 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             ),
             child: _animatedTeslaGlobe(size: 30),
           ),
-          _glassBubble(
-            child: AnimatedBuilder(
-              animation: _dotController,
-              builder: (_, __) {
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: List.generate(3, (i) {
-                    final t = ((_dotController.value - i * 0.2) % 1.0);
-                    final opacity = t < 0.5 ? t * 2 : (1 - t) * 2;
-
-                    return Container(
-                      margin: const EdgeInsets.only(right: 6),
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFF9D6FE8).withValues(
-                          alpha: 0.3 + 0.7 * opacity.clamp(0.0, 1.0),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF9D6FE8).withValues(
-                              alpha: opacity,
-                            ),
-                            blurRadius: 4,
-                          ),
+          Flexible(
+            child: _glassBubble(
+              child: AnimatedBuilder(
+                animation: _plasmaController,
+                builder: (context, child) {
+                  final shimmer = _plasmaController.value;
+                  return ShaderMask(
+                    blendMode: BlendMode.srcIn,
+                    shaderCallback: (bounds) {
+                      final sweep = bounds.width <= 0 ? 120.0 : bounds.width;
+                      return LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        stops: const [0.0, 0.42, 0.5, 0.58, 1.0],
+                        colors: [
+                          const Color(0xFFE2C77E).withValues(alpha: 0.5),
+                          const Color(0xFFE2C77E).withValues(alpha: 0.68),
+                          const Color(0xFFFFF1B8).withValues(alpha: 1.0),
+                          const Color(0xFFE2C77E).withValues(alpha: 0.68),
+                          const Color(0xFFE2C77E).withValues(alpha: 0.5),
                         ],
+                        transform: _SlidingGradientTransform(
+                          offset: (shimmer * 2.2 - 0.6) * sweep,
+                        ),
+                      ).createShader(bounds);
+                    },
+                    child: child!,
+                  );
+                },
+                child: Text(
+                  _readingStatusText,
+                  maxLines: 1,
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFFE6D2A8),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    fontStyle: FontStyle.italic,
+                    height: 1.35,
+                    letterSpacing: 0.1,
+                    shadows: [
+                      Shadow(
+                        color: const Color(0xFFC7A867).withValues(alpha: 0.38),
+                        blurRadius: 12,
                       ),
-                    );
-                  }),
-                );
-              },
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
         ],
@@ -1377,5 +1408,16 @@ class _TeslaGlobePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _TeslaGlobePainter oldDelegate) {
     return oldDelegate.progress != progress;
+  }
+}
+
+class _SlidingGradientTransform extends GradientTransform {
+  const _SlidingGradientTransform({required this.offset});
+
+  final double offset;
+
+  @override
+  Matrix4 transform(Rect bounds, {TextDirection? textDirection}) {
+    return Matrix4.translationValues(offset, 0, 0);
   }
 }

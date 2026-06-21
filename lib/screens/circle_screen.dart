@@ -157,6 +157,11 @@ class _CircleScreenState extends State<CircleScreen>
         ),
         actions: [
           IconButton(
+            tooltip: 'Manual Match',
+            onPressed: () => context.push('/bhrigu-match/manual'),
+            icon: const Icon(Icons.favorite_rounded),
+          ),
+          IconButton(
             tooltip: 'Add',
             onPressed: () => context.push('/bhrigu-match/add'),
             icon: const Icon(Icons.person_add_alt_1_rounded),
@@ -225,8 +230,7 @@ class _CircleScreenState extends State<CircleScreen>
                       snapshot.data ?? const <SocialConnection>[];
                   final active = connections
                       .where(
-                        (item) =>
-                            item.status == SocialConnectionStatus.active,
+                        (item) => item.status == SocialConnectionStatus.active,
                       )
                       .toList(growable: false);
                   final incoming = connections
@@ -272,8 +276,6 @@ class _CircleScreenState extends State<CircleScreen>
                               _requestTile(connection, incoming: false),
                         ),
                       ],
-                      const SizedBox(height: 22),
-                      _manualMatchCard(),
                     ],
                   );
                 },
@@ -324,7 +326,7 @@ class _CircleScreenState extends State<CircleScreen>
           ),
           SizedBox(height: 8),
           Text(
-            'Tap the add icon above to search a username, share an invite link, or enter a code.',
+            'Add a friend or a spouse in Circle to view their daily energy, relationship compatibility, and private guidance based on your birth chart and theirs in Bhrigu Chat.\n\nTap the add icon above to search a username, share an invite link, or enter a code.',
             style: TextStyle(color: Color(0xFFB8AEE0), height: 1.45),
           ),
         ],
@@ -422,32 +424,6 @@ class _CircleScreenState extends State<CircleScreen>
               child: const Text('Cancel'),
             ),
         ],
-      ),
-    );
-  }
-
-  Widget _manualMatchCard() {
-    return _softCard(
-      child: ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: const Icon(
-          Icons.favorite_rounded,
-          color: Color(0xFFFFD88A),
-        ),
-        title: const Text(
-          'Manual Match',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
-        ),
-        subtitle: const Text(
-          'Use the original private birth-detail match flow.',
-          style: TextStyle(color: Color(0xFFB8AEE0)),
-        ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios_rounded,
-          color: Color(0xFFFFD88A),
-          size: 16,
-        ),
-        onTap: () => context.push('/bhrigu-match/manual'),
       ),
     );
   }

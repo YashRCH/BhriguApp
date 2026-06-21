@@ -22,6 +22,7 @@ import 'package:astrology_guru_app/services/horoscope_service.dart';
 import 'package:astrology_guru_app/services/vedic_match_calculator.dart';
 import 'package:astrology_guru_app/utils/date_keys.dart';
 import 'package:astrology_guru_app/utils/similarity.dart';
+import 'package:astrology_guru_app/widgets/plans_cta_button.dart';
 
 void main() {
   test('chat hints remain separate, polished suggestions', () {
@@ -209,6 +210,10 @@ void main() {
         'chat': 12.0,
         'tarot': '3',
       },
+      'rewards': {
+        'chat': '5',
+        'geomancy': 1,
+      },
       'limits': {
         'chat': 1500,
         'chatDaily': '100',
@@ -226,7 +231,31 @@ void main() {
     expect(status.dakshana.totalCredits, 6);
     expect(status.canBuyDakshana, isFalse);
     expect(status.usage['chat'], 12);
+    expect(status.rewards['chat'], 5);
+    expect(status.rewards['geomancy'], 1);
     expect(status.limits['chatDaily'], 100);
+  });
+
+  test('quota and access messages route users toward plans', () {
+    expect(
+      isPlansRecoveryMessage(
+          'Quota exhausted. Tarot reading monthly limit reached.'),
+      isTrue,
+    );
+    expect(
+      isPlansRecoveryMessage('Manual match requires BHR1GU Plus.'),
+      isTrue,
+    );
+    expect(
+      isPlansRecoveryMessage('This feature needs Bhrigu Plus or Dakshana.'),
+      isTrue,
+    );
+    expect(
+      plansRecoverySummary(
+          'Quota exhausted. BHR1GU chat monthly limit reached.'),
+      "You have used this plan's allowance. See plans to continue.",
+    );
+    expect(isPlansRecoveryMessage('Copied to clipboard'), isFalse);
   });
 
   test('tarot reading flow tracks reveal and payment-ready states', () {
@@ -695,7 +724,9 @@ void main() {
       expect(state.petProgress, 0);
       expect(state.lastPetDate, isNull);
       expect(state.rewardAvailable, isFalse);
+      expect(state.rewardType, isNull);
       expect(state.rewardClaimedCount, 0);
+      expect(state.lastRewardClaimDate, isNull);
     });
 
     test('fromMap parses correct types', () {
@@ -704,7 +735,10 @@ void main() {
         'petProgress': 3,
         'lastPetDate': '2023-10-31',
         'rewardAvailable': true,
+        'rewardType': 'geomancy',
+        'rewardReadingGranted': true,
         'rewardClaimedCount': '5', // string number
+        'lastRewardClaimDate': '2023-11-04',
         'createdAt': '2023-10-01T12:00:00.000Z',
       };
 
@@ -714,8 +748,19 @@ void main() {
       expect(state.petProgress, 3);
       expect(state.lastPetDate, '2023-10-31');
       expect(state.rewardAvailable, true);
+      expect(state.rewardType, 'geomancy');
+      expect(state.rewardReadingGranted, isTrue);
       expect(state.rewardClaimedCount, 5); // parsed to int
+      expect(state.lastRewardClaimDate, '2023-11-04');
       expect(state.createdAt?.year, 2023);
+    });
+
+    test('isPettedToday accepts backend UTC date key', () {
+      final state = OwlCompanionState(
+        lastPetDate: formatDateKey(DateTime.now().toUtc()),
+      );
+
+      expect(state.isPettedToday(), isTrue);
     });
   });
 }

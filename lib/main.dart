@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +15,13 @@ import 'services/push_notification_service.dart';
 import 'services/revenue_cat_service.dart';
 
 const _enableAppCheck = bool.fromEnvironment('ENABLE_APP_CHECK');
+const _enableCrashlytics = bool.fromEnvironment(
+  'ENABLE_CRASHLYTICS',
+  defaultValue: true,
+);
+const _firebaseStartupTimeout = Duration(seconds: 12);
+bool _crashlyticsReady = false;
+final _pushNotificationService = PushNotificationService();
 
 void main() async {
   await runZonedGuarded(
@@ -30,19 +38,22 @@ void main() async {
         return true;
       };
 
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-      await _activateAppCheck();
-      await RevenueCatService.instance.configure();
-
       try {
-        final pushService = PushNotificationService();
-        await pushService.initialize();
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('Push Notification init failed: $e');
-        }
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        ).timeout(_firebaseStartupTimeout);
+      } catch (error, stack) {
+        _reportUncaughtError(error, stack);
+        runApp(const _StartupFailureApp());
+        return;
+      }
+
+      if (_enableAppCheck) {
+        await _runStartupTask(
+          'Firebase App Check',
+          _activateAppCheck,
+          timeout: const Duration(seconds: 8),
+        );
       }
 
       runApp(
@@ -50,9 +61,69 @@ void main() async {
           child: BhriguApp(),
         ),
       );
+
+      unawaited(_startDeferredStartupServices());
     },
     _reportUncaughtError,
   );
+}
+
+Future<void> _startDeferredStartupServices() async {
+  await Future<void>.delayed(Duration.zero);
+
+  final tasks = <Future<void>>[
+    _runStartupTask(
+      'Crashlytics',
+      _configureCrashlytics,
+      timeout: const Duration(seconds: 4),
+    ),
+    _runStartupTask(
+      'RevenueCat',
+      RevenueCatService.instance.configure,
+      timeout: const Duration(seconds: 8),
+    ),
+    _runStartupTask(
+      'Push notifications',
+      _pushNotificationService.initialize,
+      timeout: const Duration(seconds: 8),
+    ),
+  ];
+
+  await Future.wait<void>(tasks);
+}
+
+Future<void> _runStartupTask(
+  String label,
+  Future<void> Function() task, {
+  required Duration timeout,
+}) async {
+  try {
+    await task().timeout(timeout);
+  } catch (error, stack) {
+    _reportStartupWarning(
+      '$label startup failed or timed out after ${timeout.inSeconds}s',
+      error,
+      stack,
+    );
+  }
+}
+
+void _reportStartupWarning(String label, Object error, StackTrace stack) {
+  if (kDebugMode) {
+    debugPrint('$label: $error');
+    debugPrintStack(stackTrace: stack);
+  }
+
+  if (_crashlyticsReady && !kDebugMode) {
+    unawaited(
+      FirebaseCrashlytics.instance.recordError(
+        error,
+        stack,
+        reason: label,
+        fatal: false,
+      ),
+    );
+  }
 }
 
 void _reportUncaughtError(Object error, StackTrace? stack) {
@@ -62,6 +133,23 @@ void _reportUncaughtError(Object error, StackTrace? stack) {
       debugPrintStack(stackTrace: stack);
     }
   }
+
+  if (_crashlyticsReady && !kDebugMode) {
+    unawaited(
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true),
+    );
+  }
+}
+
+Future<void> _configureCrashlytics() async {
+  if (kIsWeb || !_enableCrashlytics) {
+    return;
+  }
+
+  await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
+    !kDebugMode,
+  );
+  _crashlyticsReady = true;
 }
 
 Future<void> _activateAppCheck() async {
@@ -79,17 +167,17 @@ Future<void> _activateAppCheck() async {
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         await FirebaseAppCheck.instance.activate(
-          androidProvider: kDebugMode
-              ? AndroidProvider.debug
-              : AndroidProvider.playIntegrity,
+          providerAndroid: kDebugMode
+              ? const AndroidDebugProvider()
+              : const AndroidPlayIntegrityProvider(),
         );
         return;
       case TargetPlatform.iOS:
       case TargetPlatform.macOS:
         await FirebaseAppCheck.instance.activate(
-          appleProvider: kDebugMode
-              ? AppleProvider.debug
-              : AppleProvider.appAttestWithDeviceCheckFallback,
+          providerApple: kDebugMode
+              ? const AppleDebugProvider()
+              : const AppleAppAttestWithDeviceCheckFallbackProvider(),
         );
         return;
       case TargetPlatform.fuchsia:
@@ -173,6 +261,58 @@ class BhriguApp extends StatelessWidget {
         unselectedItemColor: Color(0xFF6B6080),
         type: BottomNavigationBarType.fixed,
         elevation: 0,
+      ),
+    );
+  }
+}
+
+class _StartupFailureApp extends StatelessWidget {
+  const _StartupFailureApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Color(0xFF050408),
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.all(28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.error_outline_rounded,
+                    color: Color(0xFFC7A867),
+                    size: 34,
+                  ),
+                  SizedBox(height: 18),
+                  Text(
+                    'BHR1GU could not start',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFFE5D5F5),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Check your connection and open the app again.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFF8E83A8),
+                      fontSize: 13,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -34,9 +34,11 @@ const GEOMANCY_MAX_OUTPUT_TOKENS = 1200;
 const MYSTIC_READING_TEMPERATURE = 0.9;
 const TAROT_READING_TEMPERATURE = 0.55;
 const GEOMANCY_READING_TEMPERATURE = 0.55;
-// Keep client App Check active, but do not enforce it on callable functions
-// until debug/release builds are confirmed to send valid App Check tokens.
-const APP_CHECK_ENFORCEMENT_ENABLED = false;
+// Enable at deploy time only after release/debug App Check tokens are verified.
+const APP_CHECK_ENFORCEMENT_ENABLED =
+  String(process.env.APP_CHECK_ENFORCEMENT_ENABLED || "true")
+    .trim()
+    .toLowerCase() === "true";
 const KNOWLEDGE_CACHE_TTL_MS = 10 * 60 * 1000;
 const BHRIGU_CHAT_KNOWLEDGE_LIMIT = 5;
 
@@ -370,6 +372,103 @@ function requireCallableAuth(request) {
   }
 
   return auth;
+}
+
+function jsonByteLength(value) {
+  try {
+    return Buffer.byteLength(JSON.stringify(value), "utf8");
+  } catch (error) {
+    throw new HttpsError("invalid-argument", "Request payload is invalid.");
+  }
+}
+
+function assertJsonSize(value, field, maxBytes) {
+  if (jsonByteLength(value) > maxBytes) {
+    throw new HttpsError("invalid-argument", `${field} is too large.`);
+  }
+}
+
+function requireRequestData(request, { maxBytes = 60000 } = {}) {
+  const data = request.data || {};
+
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new HttpsError("invalid-argument", "Request payload must be an object.");
+  }
+
+  assertJsonSize(data, "Request payload", maxBytes);
+  return data;
+}
+
+function boundedString(value, {
+  field = "Value",
+  max = 1000,
+  required = false,
+  fallback = "",
+  trim = false,
+} = {}) {
+  if (value === null || value === undefined) {
+    if (required) {
+      throw new HttpsError("invalid-argument", `${field} is required.`);
+    }
+    return fallback;
+  }
+
+  if (typeof value !== "string") {
+    if (required) {
+      throw new HttpsError("invalid-argument", `${field} must be a string.`);
+    }
+    return fallback;
+  }
+
+  const text = trim ? value.trim() : value;
+  if (text.length > max) {
+    throw new HttpsError("invalid-argument", `${field} is too long.`);
+  }
+
+  if (required && !text) {
+    throw new HttpsError("invalid-argument", `${field} is required.`);
+  }
+
+  return text;
+}
+
+function boundedPlainObject(value, {
+  field = "Object",
+  maxBytes = 20000,
+  fallback = {},
+} = {}) {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new HttpsError("invalid-argument", `${field} must be an object.`);
+  }
+
+  assertJsonSize(value, field, maxBytes);
+  return value;
+}
+
+function boundedArray(value, {
+  field = "Array",
+  maxItems = 20,
+  maxBytes = 30000,
+  fallback = [],
+} = {}) {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new HttpsError("invalid-argument", `${field} must be an array.`);
+  }
+
+  if (value.length > maxItems) {
+    throw new HttpsError("invalid-argument", `${field} has too many items.`);
+  }
+
+  assertJsonSize(value, field, maxBytes);
+  return value;
 }
 
 function cleanMetricKey(value) {
@@ -2510,6 +2609,10 @@ module.exports = {
   writeCachedReading,
   callableRuntimeOptions,
   requireCallableAuth,
+  requireRequestData,
+  boundedString,
+  boundedPlainObject,
+  boundedArray,
   cleanMetricKey,
   recordUsageEvent,
   isTimeoutError,

@@ -10,8 +10,11 @@ import '../models/partner_match_flow.dart';
 import '../models/partner_match_model.dart';
 import '../services/partner_match_service.dart';
 import '../services/follow_up_context_service.dart';
+import '../utils/cloud_function_error_messages.dart';
 import '../widgets/ai_report_button.dart';
 import '../widgets/ai_disclaimer.dart';
+import '../widgets/feature_quota_chip.dart';
+import '../widgets/plans_cta_button.dart';
 import '../widgets/compatibility_metric_card.dart';
 import '../widgets/compatibility_score_ring.dart';
 import '../widgets/heart_signal_card.dart';
@@ -46,6 +49,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen>
 
   PartnerMatchFlow _flow = PartnerMatchFlow.initial();
   int _readingRequestId = 0;
+  int _quotaRefreshTick = 0;
 
   bool get _loading => _flow.loading;
   bool get _creatingFollowUp => _flow.creatingFollowUp;
@@ -67,6 +71,7 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen>
 
       setState(() {
         _flow = _flow.completeReading(reading);
+        _quotaRefreshTick++;
       });
     } catch (e) {
       if (!mounted || requestId != _readingRequestId) return;
@@ -75,12 +80,24 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen>
         _flow = PartnerMatchFlow.initial();
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not create this match reading. Try again.'),
+      if (e is FeatureAccessException && isPlansRecoveryMessage(e.message)) {
+        showPlansSnackBar(
+          context,
+          e.message,
           backgroundColor: _matchPanel,
-        ),
-      );
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is FeatureAccessException
+                  ? e.message
+                  : 'Could not create this match reading. Try again.',
+            ),
+            backgroundColor: _matchPanel,
+          ),
+        );
+      }
     }
   }
 
@@ -265,6 +282,12 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen>
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
               children: [
+                FeatureQuotaChip(
+                  feature: FeatureQuotaKind.manualMatch,
+                  refreshKey: _quotaRefreshTick,
+                  alignment: Alignment.center,
+                ),
+                const SizedBox(height: 14),
                 if (!_flow.isRevealed) ...[
                   _heroCard(),
                   const SizedBox(height: 24),

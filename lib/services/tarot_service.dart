@@ -6,6 +6,7 @@ import '../constants/app_messages.dart';
 import '../constants/ai_response_language.dart';
 import '../constants/firebase_constants.dart';
 import '../models/tarot_card.dart';
+import '../utils/cloud_function_error_messages.dart';
 import 'firebase_session_service.dart';
 import 'user_profile_cache_service.dart';
 
@@ -114,8 +115,20 @@ class TarotService {
         text: text.trim().isEmpty ? cosmicConnectionLostMessage : text.trim(),
         aiResponseLanguage: responseLanguage,
       );
+    } on FirebaseFunctionsException catch (e) {
+      if (kDebugMode) {
+        debugPrint('Tarot function code: ${e.code}');
+        debugPrint('Tarot function message: ${e.message}');
+        debugPrint('Tarot function details: ${e.details}');
+      }
+      return TarotInterpretationResult(
+        text: functionErrorMessage(e),
+        aiResponseLanguage: aiResponseLanguage,
+      );
     } catch (e) {
-      debugPrint('Tarot error: $e');
+      if (kDebugMode) {
+        debugPrint('Tarot error: $e');
+      }
       return TarotInterpretationResult(
         text: cosmicConnectionLostMessage,
         aiResponseLanguage: aiResponseLanguage,

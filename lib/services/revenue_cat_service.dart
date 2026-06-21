@@ -8,6 +8,7 @@ class RevenueCatService {
   RevenueCatService._();
 
   static final RevenueCatService instance = RevenueCatService._();
+  static const _configureTimeout = Duration(seconds: 8);
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
@@ -61,19 +62,33 @@ class RevenueCatService {
       _identifiedUid = uid;
     }
 
-    await Purchases.configure(configuration);
+    await Purchases.configure(configuration).timeout(_configureTimeout);
     _configured = true;
   }
 
   Future<void> identifyCurrentUser() async {
-    await configure();
+    try {
+      await configure();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('RevenueCat identify skipped: $e');
+      }
+      return;
+    }
+
     if (!_configured) return;
 
     final uid = _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty || uid == _identifiedUid) return;
 
-    await Purchases.logIn(uid);
-    _identifiedUid = uid;
+    try {
+      await Purchases.logIn(uid);
+      _identifiedUid = uid;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('RevenueCat login skipped: $e');
+      }
+    }
   }
 
   Future<void> logOut() async {
@@ -93,6 +108,7 @@ class RevenueCatService {
   Future<Offerings?> getOfferings() async {
     await configure();
     if (!_configured) return null;
+    await identifyCurrentUser();
 
     return Purchases.getOfferings();
   }
@@ -100,6 +116,7 @@ class RevenueCatService {
   Future<CustomerInfo?> restorePurchases() async {
     await configure();
     if (!_configured) return null;
+    await identifyCurrentUser();
 
     return Purchases.restorePurchases();
   }
@@ -107,6 +124,7 @@ class RevenueCatService {
   Future<CustomerInfo?> getCustomerInfo() async {
     await configure();
     if (!_configured) return null;
+    await identifyCurrentUser();
 
     return Purchases.getCustomerInfo();
   }
@@ -114,6 +132,7 @@ class RevenueCatService {
   Future<CustomerInfo?> purchasePackage(Package package) async {
     await configure();
     if (!_configured) return null;
+    await identifyCurrentUser();
 
     return Purchases.purchasePackage(package);
   }
