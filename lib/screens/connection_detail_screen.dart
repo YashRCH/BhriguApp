@@ -938,16 +938,16 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
   List<String> _questionsFor(SocialConnection connection) {
     if (connection.relationshipType == SocialRelationshipType.friend) {
       return const [
-        'How should I talk to this friend today?',
-        'What pattern should I avoid in this friendship?',
-        'What does this friendship teach me?',
+        'What is this friend not saying to me?',
+        'What quietly strains this friendship?',
+        'Where is this friendship really heading?',
       ];
     }
 
     return const [
-      'How should I support them today?',
-      'What should I avoid in this relationship right now?',
-      'What is the deeper lesson in this bond?',
+      'What are they not telling me right now?',
+      'What quietly pulls this bond off course?',
+      'What is this bond really building toward?',
     ];
   }
 

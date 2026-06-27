@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>BHR1GU — Get the App</title>
+  <meta name="description" content="Your cosmic companion. Tarot, geomancy, compatibility and a celestial owl who learns your stars. Download BHR1GU on Google Play.">
+  <meta name="theme-color" content="#050408">
+  <link rel="icon" href="assets/app_icon.png">
+  <link rel="apple-touch-icon" href="assets/app_icon.png">
+
+  <!-- Social share preview (Instagram / WhatsApp / X) -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="BHR1GU — Your cosmic companion">
+  <meta property="og:description" content="Tarot, geomancy, compatibility and a celestial owl who learns your stars. Now on Google Play.">
+  <meta property="og:image" content="https://astrology-guru-app.web.app/get/assets/app_icon.png">
+  <meta property="og:url" content="https://astrology-guru-app.web.app/get/">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="BHR1GU — Your cosmic companion">
+  <meta name="twitter:description" content="Tarot, geomancy, compatibility and a celestial owl who learns your stars.">
+  <meta name="twitter:image" content="https://astrology-guru-app.web.app/get/assets/app_icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg:        #050408;
+      --bg-2:      #0f0a18;
+      --violet:    #1e1430;
+      --violet-2:  #3a2d50;
+      --violet-lt: #9d6fe8;
+      --gold:      #c7a867;
+      --gold-lt:   #ffd88a;
+      --gold-dim:  #b58e34;
+      --text:      #f2e8ff;
+      --muted:     #b8aee0;
+      --hairline:  rgba(199, 168, 103, 0.28);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { height: 100%; }
+
+    body {
+      margin: 0;
+      min-height: 100svh;
+      display: grid;
+      place-items: center;
+      padding: clamp(20px, 6vw, 48px);
+      overflow: hidden;
+      background:
+        radial-gradient(120% 80% at 50% -8%, #21103d 0, var(--bg-2) 46%, var(--bg) 78%);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ---------- starfield ---------- */
+    .stars, .stars::before, .stars::after {
+      position: fixed;
+      inset: -50%;
+      content: "";
+      background-repeat: repeat;
+      pointer-events: none;
+    }
+    .stars {
+      z-index: 0;
+      background-image:
+        radial-gradient(1.5px 1.5px at 20% 30%, rgba(255,255,255,.9) 0, transparent 100%),
+        radial-gradient(1.5px 1.5px at 75% 18%, rgba(255,236,200,.8) 0, transparent 100%),
+        radial-gradient(1px 1px   at 42% 72%, rgba(255,255,255,.7) 0, transparent 100%),
+        radial-gradient(1px 1px   at 88% 60%, rgba(199,168,103,.8) 0, transparent 100%),
+        radial-gradient(1.5px 1.5px at 12% 82%, rgba(255,255,255,.65) 0, transparent 100%),
+        radial-gradient(1px 1px   at 62% 44%, rgba(255,255,255,.6) 0, transparent 100%);
+      background-size: 280px 280px, 320px 320px, 240px 240px, 360px 360px, 300px 300px, 200px 200px;
+      animation: twinkle 6s ease-in-out infinite alternate;
+    }
+    @keyframes twinkle { from { opacity: .55; } to { opacity: 1; } }
+
+    /* faint orbit ring behind the owl */
+    .aura {
+      position: fixed;
+      top: 50%; left: 50%;
+      width: min(78vw, 460px); aspect-ratio: 1;
+      transform: translate(-50%, -62%);
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(157,111,232,.20) 0, rgba(157,111,232,.06) 40%, transparent 66%);
+      filter: blur(6px);
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ---------- card ---------- */
+    main {
+      position: relative;
+      z-index: 1;
+      width: min(430px, 100%);
+      padding: clamp(30px, 7vw, 44px) clamp(24px, 6vw, 36px) clamp(26px, 6vw, 34px);
+      text-align: center;
+      border: 1px solid var(--hairline);
+      border-radius: 26px;
+      background:
+        linear-gradient(180deg, rgba(30,20,48,.72) 0, rgba(10,7,18,.82) 100%);
+      box-shadow:
+        0 30px 90px rgba(0,0,0,.55),
+        inset 0 1px 0 rgba(255,255,255,.05);
+      backdrop-filter: blur(14px) saturate(120%);
+      -webkit-backdrop-filter: blur(14px) saturate(120%);
+      animation: rise .9s cubic-bezier(.2,.8,.2,1) both;
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(16px) scale(.985); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    /* ---------- owl ---------- */
+    .stage {
+      position: relative;
+      height: 168px;
+      margin-bottom: 6px;
+      display: grid;
+      place-items: end center;
+    }
+    .halo {
+      position: absolute;
+      bottom: 6px; left: 50%;
+      width: 150px; height: 150px;
+      transform: translateX(-50%);
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,216,138,.28) 0, rgba(255,216,138,.05) 55%, transparent 72%);
+      filter: blur(2px);
+    }
+    .owl {
+      position: relative;
+      width: 132px; height: 132px;
+      image-rendering: pixelated;
+      filter: drop-shadow(0 14px 14px rgba(0,0,0,.45));
+      animation: bob 3.6s ease-in-out infinite;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    @keyframes bob {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-7px); }
+    }
+    /* glowing perch line */
+    .perch {
+      position: absolute;
+      bottom: 2px; left: 50%;
+      width: 132px; height: 1px;
+      transform: translateX(-50%);
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      opacity: .7;
+    }
+
+    /* ---------- type ---------- */
+    .kicker {
+      margin: 14px 0 0;
+      font-size: 11px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+    h1 {
+      margin: 8px 0 0;
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-weight: 600;
+      font-size: clamp(40px, 13vw, 54px);
+      line-height: 1;
+      letter-spacing: 8px;
+      text-indent: 8px; /* compensate trailing letter-spacing */
+      color: var(--gold-lt);
+      text-shadow: 0 0 26px rgba(255,216,138,.22);
+    }
+    .tagline {
+      margin: 14px auto 0;
+      max-width: 30ch;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+
+    /* ---------- CTA ---------- */
+    .cta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin: 26px 0 0;
+      padding: 15px 22px;
+      text-decoration: none;
+      border-radius: 15px;
+      border: 1px solid rgba(255,216,138,.55);
+      background: linear-gradient(180deg, #2a1a45 0, #160d28 100%);
+      box-shadow: 0 10px 30px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.06);
+      color: var(--gold-lt);
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+    .cta:hover {
+      transform: translateY(-2px);
+      border-color: var(--gold-lt);
+      box-shadow: 0 16px 40px rgba(157,111,232,.28), inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .cta:active { transform: translateY(0); }
+    .cta svg { width: 26px; height: 26px; flex: none; }
+    .cta .label { text-align: left; line-height: 1.1; }
+    .cta .label small {
+      display: block;
+      font-size: 9.5px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .cta .label b {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: .3px;
+      color: #fff7e6;
+    }
+
+    /* ---------- footer ---------- */
+    footer {
+      margin-top: 22px;
+      font-size: 12px;
+      color: rgba(184,174,224,.6);
+    }
+    footer a { color: rgba(199,168,103,.85); text-decoration: none; }
+    footer a:hover { color: var(--gold-lt); }
+    .dot { opacity: .4; margin: 0 8px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .owl, .stars, main { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stars" aria-hidden="true"></div>
+  <div class="aura" aria-hidden="true"></div>
+
+  <main>
+    <div class="stage">
+      <div class="halo" aria-hidden="true"></div>
+      <img id="owl" class="owl" src="assets/owl/idle/0.png" alt="Bhrigu, the celestial owl companion" width="132" height="132" draggable="false">
+      <div class="perch" aria-hidden="true"></div>
+    </div>
+
+    <p class="kicker">Your cosmic companion</p>
+    <h1>BHR1GU</h1>
+    <p class="tagline">Tarot, geomancy &amp; compatibility — guided by a celestial owl who learns your stars.</p>
+
+    <a class="cta" href="https://play.google.com/store/apps/details?id=com.bhr1gu.app"
+       target="_blank" rel="noopener" aria-label="Get BHR1GU on Google Play">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <defs>
+          <linearGradient id="play" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#ffd88a"/>
+            <stop offset="1" stop-color="#c7a867"/>
+          </linearGradient>
+        </defs>
+        <path fill="url(#play)" d="M6 3.2c0-1.27 1.38-2.05 2.47-1.4l11.3 6.8c1.05.63 1.05 2.17 0 2.8L8.47 18.2C7.38 18.85 6 18.07 6 16.8V3.2z" transform="translate(0 1)"/>
+      </svg>
+      <span class="label">
+        <small>Get it on</small>
+        <b>Google Play</b>
+      </span>
+    </a>
+
+    <footer>
+      <a href="../privacy.html">Privacy</a>
+      <span class="dot">·</span>
+      <a href="../terms.html">Terms</a>
+      <span class="dot">·</span>
+      <span>Made under the stars</span>
+    </footer>
+  </main>
+
+  <script>
+    (function () {
+      var owl = document.getElementById('owl');
+      var idle  = ['assets/owl/idle/0.png','assets/owl/idle/1.png','assets/owl/idle/2.png','assets/owl/idle/3.png'];
+      var fly   = ['assets/owl/flying/0.png','assets/owl/flying/1.png','assets/owl/flying/2.png','assets/owl/flying/3.png','assets/owl/flying/4.png','assets/owl/flying/5.png','assets/owl/flying/6.png'];
+      var groom = ['assets/owl/grooming/0.png','assets/owl/grooming/1.png','assets/owl/grooming/2.png','assets/owl/grooming/3.png','assets/owl/grooming/4.png','assets/owl/grooming/5.png','assets/owl/grooming/6.png'];
+
+      // preload every frame so swaps are instant
+      idle.concat(fly, groom).forEach(function (src) { var i = new Image(); i.src = src; });
+
+      var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (reduce) return; // keep a single static frame
+
+      function rand(a, b) { return a + Math.random() * (b - a); }
+
+      var POSES = { idle: idle, fly: fly, groom: groom };
+      var frame = 0, mode = 'idle';
+      var flyUntil = 0;
+      var groomCycles = 0, groomTarget = 1;
+      var nextGroomAt = Date.now() + 500; // first preen begins within the first second
+
+      setInterval(function () {
+        // every so often, an idle owl preens its feathers
+        if (mode === 'idle' && Date.now() >= nextGroomAt) {
+          mode = 'groom'; frame = 0; groomCycles = 0;
+          groomTarget = Math.random() < 0.5 ? 1 : 2; // one or two grooming passes
+        }
+
+        var frames = POSES[mode];
+        frame = (frame + 1) % frames.length;
+        owl.src = frames[frame];
+
+        if (frame === 0) { // a full cycle just completed — decide whether to settle
+          if (mode === 'fly' && Date.now() > flyUntil) {
+            mode = 'idle';
+          } else if (mode === 'groom' && ++groomCycles >= groomTarget) {
+            mode = 'idle';
+            nextGroomAt = Date.now() + rand(9000, 18000);
+          }
+        }
+      }, 180);
+
+      // tap / hover the owl to make it flap its wings (interrupts grooming)
+      function takeoff() {
+        if (mode === 'fly') { flyUntil = Date.now() + 1400; return; }
+        mode = 'fly'; frame = 0; flyUntil = Date.now() + 1400;
+        nextGroomAt = Date.now() + rand(9000, 18000); // don't preen right after landing
+      }
+      owl.addEventListener('click', takeoff);
+      owl.addEventListener('mouseenter', takeoff);
+    })();
+  </script>
+</body>
+</html>

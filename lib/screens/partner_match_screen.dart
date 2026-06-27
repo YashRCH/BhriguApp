@@ -946,9 +946,9 @@ class _PartnerMatchScreenState extends State<PartnerMatchScreen>
 
   Widget _followUpCard(PartnerMatchReading reading) {
     final questions = [
-      'Should I trust this connection?',
-      'What should I do next with this person?',
-      'What is the karmic lesson in this match?',
+      'What is this person not telling me?',
+      'Where is this connection actually headed?',
+      'What is the karmic lesson I keep missing?',
     ];
 
     return _glassCard(

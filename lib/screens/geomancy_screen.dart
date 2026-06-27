@@ -9,6 +9,7 @@ import '../models/geomancy_figure_model.dart';
 import '../models/geomancy_reading_flow.dart';
 import '../services/geomancy_service.dart';
 import '../services/follow_up_context_service.dart';
+import '../services/review_prompt_service.dart';
 import '../utils/cloud_function_error_messages.dart';
 import '../widgets/ai_report_button.dart';
 import '../widgets/ai_disclaimer.dart';
@@ -75,11 +76,11 @@ class _GeomancyScreenState extends State<GeomancyScreen>
   static const double _absoluteMaxLength = 160;
 
   static const List<String> _geomancyFollowUpQuestions = [
-    'What should I do next based on this shield?',
-    'What is the hidden lesson in this pattern?',
-    'Is this situation moving toward peace or delay?',
-    'What should I avoid after this reading?',
-    'What does the Judge reveal about my question?',
+    'What is the shield hiding beneath this answer?',
+    'Who or what is quietly blocking this?',
+    'Is this moving toward me or slipping away?',
+    'What am I refusing to see in this pattern?',
+    'When does the Judge say this finally turns?',
   ];
   bool _showGuideText = true;
 
@@ -323,6 +324,9 @@ class _GeomancyScreenState extends State<GeomancyScreen>
           e.message,
           backgroundColor: const Color(0xFF1A1630),
         );
+        // Free readings are used up — ask for a Play Store review (no reward
+        // attached; see ReviewPromptService).
+        ReviewPromptService.instance.maybePromptAfterReadingsExhausted();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

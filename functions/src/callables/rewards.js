@@ -73,8 +73,8 @@ function validOwlRewardType(value) {
   return OWL_REWARD_TYPES.has(value) ? value : null;
 }
 
-function nextOwlRewardType(rewardClaimedCount) {
-  return rewardClaimedCount % 2 === 0
+function nextOwlRewardType(readingGrantCount) {
+  return readingGrantCount % 2 === 0
     ? TAROT_REWARD_TYPE
     : GEOMANCY_REWARD_TYPE;
 }
@@ -90,8 +90,10 @@ function rewardQuotaFieldForType(rewardType) {
 function owlStateFromData(data = {}) {
   const serverManaged = data.serverManaged === true;
   const rawProgress = readInt(data.petProgress);
+  // The bond can sit at the target while a gift waits to be opened, so the
+  // progress is clamped to [0, target] rather than [0, target - 1].
   const petProgress = serverManaged
-    ? Math.min(OWL_MOON_BOND_TARGET - 1, Math.max(0, rawProgress))
+    ? Math.min(OWL_MOON_BOND_TARGET, Math.max(0, rawProgress))
     : 0;
 
   return {
@@ -105,9 +107,12 @@ function owlStateFromData(data = {}) {
         ? data.lastPetDate
         : null,
     rewardAvailable: serverManaged && data.rewardAvailable === true,
-    rewardType: serverManaged ? validOwlRewardType(data.rewardType) : null,
-    rewardReadingGranted:
-      serverManaged && data.rewardReadingGranted === true,
+    readingGrantCount: serverManaged
+      ? Math.max(0, readInt(data.readingGrantCount))
+      : 0,
+    lastReadingType: serverManaged
+      ? validOwlRewardType(data.lastReadingType)
+      : null,
     rewardClaimedCount: serverManaged
       ? Math.max(0, readInt(data.rewardClaimedCount))
       : 0,
@@ -124,8 +129,8 @@ function owlStatePayload(state) {
     petProgress: state.petProgress,
     lastPetDate: state.lastPetDate || null,
     rewardAvailable: state.rewardAvailable === true,
-    rewardType: validOwlRewardType(state.rewardType),
-    rewardReadingGranted: state.rewardReadingGranted === true,
+    readingGrantCount: Math.max(0, readInt(state.readingGrantCount)),
+    lastReadingType: validOwlRewardType(state.lastReadingType),
     rewardClaimedCount: Math.max(0, readInt(state.rewardClaimedCount)),
     lastRewardClaimDate: state.lastRewardClaimDate || null,
     serverManaged: true,
@@ -272,91 +277,86 @@ exports.petOwlCompanion = onCall(
     return admin.firestore().runTransaction(async (transaction) => {
       const doc = await transaction.get(ref);
       const state = owlStateFromData(doc.data() || {});
-      let petProgress = state.petProgress;
-      let rewardAvailable = state.rewardAvailable;
-      let rewardType = state.rewardType;
-      let rewardReadingGranted = state.rewardReadingGranted;
-      let readingCreditsGranted = 0;
-      let progressed = false;
-      let unlockedReward = false;
-      let shouldGrantReading = false;
-      let message = "Hoot.";
 
-      if (state.rewardAvailable) {
-        if (!state.rewardReadingGranted) {
-          rewardType = state.rewardType ||
-            nextOwlRewardType(state.rewardClaimedCount);
-          rewardReadingGranted = true;
-          readingCreditsGranted = 1;
-          shouldGrantReading = true;
-          message =
-            `Your ${readingRewardLabel(rewardType)} reading has been added. ` +
-            `Open the gift for +${OWL_GIFT_CHAT_MESSAGES} chat messages.`;
-        } else {
-          message = "Open your owl gift first.";
+      // Spam petting is allowed, but a reading is granted at most once per UTC
+      // day. Repeat pets on the same day are cosmetic only.
+      if (state.lastPetDate === today) {
+        const write = {
+          ...owlStatePayload(state),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+        if (!doc.exists) {
+          write.createdAt = admin.firestore.FieldValue.serverTimestamp();
         }
-      } else if (state.lastPetDate === today) {
-        message = "Moon Bond is already filled for today.";
-      } else {
-        progressed = true;
-        petProgress += 1;
+        transaction.set(ref, write, { merge: true });
 
-        if (petProgress >= OWL_MOON_BOND_TARGET) {
-          petProgress = 0;
-          rewardAvailable = true;
-          rewardType = nextOwlRewardType(state.rewardClaimedCount);
-          rewardReadingGranted = true;
-          readingCreditsGranted = 1;
-          shouldGrantReading = true;
-          unlockedReward = true;
-          message =
-            `Moon Bond filled. +1 ${readingRewardLabel(rewardType)} ` +
-            `reading added. Open the gift for +${OWL_GIFT_CHAT_MESSAGES} ` +
-            "chat messages.";
-        } else {
-          message = `Moon Bond ${petProgress}/${OWL_MOON_BOND_TARGET}.`;
-        }
+        return {
+          state: owlStatePayload(state),
+          success: true,
+          progressed: false,
+          unlockedReward: false,
+          rewardType: null,
+          readingCreditsGranted: 0,
+          message: state.rewardAvailable
+            ? "Your owl gift is ready. Open it for chat messages."
+            : "You have already bonded with your owl today. Come back " +
+              "tomorrow for another reading.",
+        };
       }
+
+      // First pet of the day: grant one reading and advance the Moon Bond.
+      const rewardType = nextOwlRewardType(state.readingGrantCount);
+      const readingGrantCount = state.readingGrantCount + 1;
+      const petProgress = Math.min(
+        OWL_MOON_BOND_TARGET,
+        state.petProgress + 1
+      );
+      const rewardAvailable =
+        state.rewardAvailable || petProgress >= OWL_MOON_BOND_TARGET;
+      const unlockedReward = rewardAvailable && !state.rewardAvailable;
 
       const updatedState = {
         ...state,
         petProgress,
         lastPetDate: today,
         rewardAvailable,
-        rewardType,
-        rewardReadingGranted,
+        readingGrantCount,
+        lastReadingType: rewardType,
       };
       const write = {
         ...owlStatePayload(updatedState),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
-
       if (!doc.exists) {
         write.createdAt = admin.firestore.FieldValue.serverTimestamp();
       }
-
       transaction.set(ref, write, { merge: true });
 
-      if (shouldGrantReading) {
-        transaction.set(
-          userQuotaRef,
-          {
-            [rewardQuotaFieldForType(rewardType)]:
-              admin.firestore.FieldValue.increment(1),
-            owlBondReadingGranted: admin.firestore.FieldValue.increment(1),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-      }
+      transaction.set(
+        userQuotaRef,
+        {
+          [rewardQuotaFieldForType(rewardType)]:
+            admin.firestore.FieldValue.increment(1),
+          owlBondReadingGranted: admin.firestore.FieldValue.increment(1),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      const message = unlockedReward
+        ? `+1 ${readingRewardLabel(rewardType)} reading added. Moon Bond ` +
+          `filled — open the gift for +${OWL_GIFT_CHAT_MESSAGES} chat ` +
+          "messages."
+        : `+1 ${readingRewardLabel(rewardType)} reading added. Moon Bond ` +
+          `${petProgress}/${OWL_MOON_BOND_TARGET}.`;
 
       return {
         state: owlStatePayload(updatedState),
         success: true,
-        progressed,
+        progressed: true,
         unlockedReward,
-        rewardType: shouldGrantReading ? rewardType : null,
-        readingCreditsGranted,
+        rewardType,
+        readingCreditsGranted: 1,
         message,
       };
     });
@@ -388,39 +388,29 @@ exports.claimOwlMoonReward = onCall(
         };
       }
 
-      const rewardType =
-        state.rewardType || nextOwlRewardType(state.rewardClaimedCount);
-      const shouldGrantMissingReading = state.rewardReadingGranted !== true;
+      // Readings are granted daily on pet; the gift only grants chat messages
+      // and resets the Moon Bond so a new cycle can begin.
       const rewardClaimedCount = state.rewardClaimedCount + 1;
       const updatedState = {
         ...state,
+        petProgress: 0,
         rewardAvailable: false,
-        rewardType: null,
-        rewardReadingGranted: false,
         rewardClaimedCount,
         lastRewardClaimDate: today,
       };
       const serverTime = admin.firestore.FieldValue.serverTimestamp();
-      const quotaUpdate = {
-        rewardChat: admin.firestore.FieldValue.increment(
-          OWL_GIFT_CHAT_MESSAGES
-        ),
-        owlGiftChatGranted: admin.firestore.FieldValue.increment(
-          OWL_GIFT_CHAT_MESSAGES
-        ),
-        updatedAt: serverTime,
-      };
-
-      if (shouldGrantMissingReading) {
-        quotaUpdate[rewardQuotaFieldForType(rewardType)] =
-          admin.firestore.FieldValue.increment(1);
-        quotaUpdate.owlBondReadingGranted =
-          admin.firestore.FieldValue.increment(1);
-      }
 
       transaction.set(
         userQuotaRef,
-        quotaUpdate,
+        {
+          rewardChat: admin.firestore.FieldValue.increment(
+            OWL_GIFT_CHAT_MESSAGES
+          ),
+          owlGiftChatGranted: admin.firestore.FieldValue.increment(
+            OWL_GIFT_CHAT_MESSAGES
+          ),
+          updatedAt: serverTime,
+        },
         { merge: true }
       );
 
@@ -428,9 +418,7 @@ exports.claimOwlMoonReward = onCall(
         stateRef,
         {
           ...owlStatePayload(updatedState),
-          lastRewardType: rewardType,
           lastRewardChatMessagesGranted: OWL_GIFT_CHAT_MESSAGES,
-          lastRewardReadingCreditsGranted: shouldGrantMissingReading ? 1 : 0,
           updatedAt: serverTime,
         },
         { merge: true }
@@ -439,9 +427,8 @@ exports.claimOwlMoonReward = onCall(
       transaction.set(
         owlClaimRef(auth.uid, today, rewardClaimedCount),
         {
-          rewardType,
           chatMessagesGranted: OWL_GIFT_CHAT_MESSAGES,
-          readingCreditsGranted: shouldGrantMissingReading ? 1 : 0,
+          readingCreditsGranted: 0,
           claimedAt: serverTime,
         }
       );
@@ -449,14 +436,10 @@ exports.claimOwlMoonReward = onCall(
       return {
         state: owlStatePayload(updatedState),
         claimed: true,
-        rewardType,
+        rewardType: null,
         chatMessagesGranted: OWL_GIFT_CHAT_MESSAGES,
-        readingCreditsGranted: shouldGrantMissingReading ? 1 : 0,
-        message: shouldGrantMissingReading
-          ? `Gift opened: +${OWL_GIFT_CHAT_MESSAGES} chat messages and ` +
-            `+1 ${readingRewardLabel(rewardType)} reading.`
-          : `Gift opened: +${OWL_GIFT_CHAT_MESSAGES} chat messages. ` +
-            `Your ${readingRewardLabel(rewardType)} reading was already added.`,
+        readingCreditsGranted: 0,
+        message: `Gift opened: +${OWL_GIFT_CHAT_MESSAGES} chat messages.`,
       };
     });
   }

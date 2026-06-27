@@ -7,8 +7,8 @@ class OwlCompanionState {
   final int petProgress;
   final String? lastPetDate;
   final bool rewardAvailable;
-  final String? rewardType;
-  final bool rewardReadingGranted;
+  final String? lastReadingType;
+  final int readingGrantCount;
   final int rewardClaimedCount;
   final String? lastRewardClaimDate;
   final DateTime? createdAt;
@@ -19,8 +19,8 @@ class OwlCompanionState {
     this.petProgress = 0,
     this.lastPetDate,
     this.rewardAvailable = false,
-    this.rewardType,
-    this.rewardReadingGranted = false,
+    this.lastReadingType,
+    this.readingGrantCount = 0,
     this.rewardClaimedCount = 0,
     this.lastRewardClaimDate,
     this.createdAt,
@@ -32,8 +32,8 @@ class OwlCompanionState {
         petProgress = 0,
         lastPetDate = null,
         rewardAvailable = false,
-        rewardType = null,
-        rewardReadingGranted = false,
+        lastReadingType = null,
+        readingGrantCount = 0,
         rewardClaimedCount = 0,
         lastRewardClaimDate = null,
         createdAt = null,
@@ -45,8 +45,8 @@ class OwlCompanionState {
       petProgress: _intFromValue(data['petProgress']),
       lastPetDate: data['lastPetDate'] as String?,
       rewardAvailable: data['rewardAvailable'] == true,
-      rewardType: _rewardTypeFromValue(data['rewardType']),
-      rewardReadingGranted: data['rewardReadingGranted'] == true,
+      lastReadingType: _rewardTypeFromValue(data['lastReadingType']),
+      readingGrantCount: _intFromValue(data['readingGrantCount']),
       rewardClaimedCount: _intFromValue(data['rewardClaimedCount']),
       lastRewardClaimDate: data['lastRewardClaimDate'] as String?,
       createdAt: _dateFromValue(data['createdAt']),
@@ -60,8 +60,8 @@ class OwlCompanionState {
       'petProgress': petProgress,
       'lastPetDate': lastPetDate,
       'rewardAvailable': rewardAvailable,
-      'rewardType': rewardType,
-      'rewardReadingGranted': rewardReadingGranted,
+      'lastReadingType': lastReadingType,
+      'readingGrantCount': readingGrantCount,
       'rewardClaimedCount': rewardClaimedCount,
       'lastRewardClaimDate': lastRewardClaimDate,
       'createdAt':
@@ -81,8 +81,8 @@ class OwlCompanionState {
     int? petProgress,
     String? lastPetDate,
     bool? rewardAvailable,
-    String? rewardType,
-    bool? rewardReadingGranted,
+    String? lastReadingType,
+    int? readingGrantCount,
     int? rewardClaimedCount,
     String? lastRewardClaimDate,
     DateTime? createdAt,
@@ -93,8 +93,8 @@ class OwlCompanionState {
       petProgress: petProgress ?? this.petProgress,
       lastPetDate: lastPetDate ?? this.lastPetDate,
       rewardAvailable: rewardAvailable ?? this.rewardAvailable,
-      rewardType: rewardType ?? this.rewardType,
-      rewardReadingGranted: rewardReadingGranted ?? this.rewardReadingGranted,
+      lastReadingType: lastReadingType ?? this.lastReadingType,
+      readingGrantCount: readingGrantCount ?? this.readingGrantCount,
       rewardClaimedCount: rewardClaimedCount ?? this.rewardClaimedCount,
       lastRewardClaimDate: lastRewardClaimDate ?? this.lastRewardClaimDate,
       createdAt: createdAt ?? this.createdAt,

@@ -214,6 +214,58 @@ service cloud.firestore {
         );
     }
 
+    function validChatFeedback() {
+      return request.resource.data.keys().hasOnly([
+          'userId',
+          'feature',
+          'question',
+          'answer',
+          'vote',
+          'aiResponseLanguage',
+          'createdAt',
+          'updatedAt',
+          'platform',
+          'appVersion',
+        ])
+        && request.resource.data.keys().hasAll([
+          'userId',
+          'feature',
+          'question',
+          'answer',
+          'vote',
+          'aiResponseLanguage',
+          'createdAt',
+          'updatedAt',
+          'platform',
+        ])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.feature == 'chat'
+        && request.resource.data.question is string
+        && request.resource.data.question.size() <= 4100
+        && request.resource.data.answer is string
+        && request.resource.data.answer.size() > 0
+        && request.resource.data.answer.size() <= 4100
+        && request.resource.data.vote in ['up', 'down']
+        && validAiResponseLanguage(request.resource.data.aiResponseLanguage)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.platform in [
+          'android',
+          'ios',
+          'macos',
+          'windows',
+          'linux',
+          'fuchsia',
+        ]
+        && (
+          !request.resource.data.keys().hasAny(['appVersion'])
+          || (
+            request.resource.data.appVersion is string
+            && request.resource.data.appVersion.size() <= 80
+          )
+        );
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId);
       allow create: if isOwner(userId) && verifiedEmail() && validUserProfileCreate();
@@ -358,6 +410,20 @@ service cloud.firestore {
     match /aiReports/{reportId} {
       allow create: if signedIn() && verifiedEmail() && validAiReport();
       allow read, update, delete: if false;
+    }
+
+    match /chatFeedback/{feedbackId} {
+      allow create: if signedIn() && verifiedEmail() && validChatFeedback();
+      allow update: if signedIn() && verifiedEmail()
+        && resource.data.userId == request.auth.uid
+        && validChatFeedback();
+      allow read, delete: if false;
+    }
+
+    // Server-only (admin SDK): per-user liked-answer RAG exemplars.
+    match /liked_answer_knowledge/{docId} {
+      allow read: if false;
+      allow write: if false;
     }
 
     match /book_knowledge/{docId} {

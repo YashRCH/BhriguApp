@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../constants/monetization_constants.dart';
 import '../models/monetization_status.dart';
 import '../services/monetization_service.dart';
 
@@ -94,93 +93,45 @@ class _FeatureQuotaChipState extends State<FeatureQuotaChip> {
   String _quotaText(MonetizationStatus? status) {
     if (status == null) return 'Remaining unavailable';
 
-    final field = _quotaField;
-    final limit = status.limits[field] ?? 0;
-    final used = status.usage[field] ?? 0;
-    final rewardCredits = _rewardCredits(status);
-    final dakshana = _dakshanaCredits(status);
-    final includedRemaining = math.max(0, limit - used);
     final mode = status.mode.trim().toLowerCase();
-    final openTesting = mode == 'off';
-
     if (mode == 'unavailable') {
       return 'Remaining unavailable';
     }
-
-    if (openTesting) {
+    if (mode == 'off') {
       return '$_nounPluralTitle open for testing';
     }
 
-    if (status.plusActive) {
-      if (_isYearlyPlan(status.plan)) {
-        return '$_nounPluralTitle unlimited';
-      }
+    final isManualMatch = widget.feature == FeatureQuotaKind.manualMatch;
 
-      if (widget.feature == FeatureQuotaKind.manualMatch) {
-        return 'Manual matches unlocked';
-      }
-
-      if (limit > 0) {
-        return _meteredQuotaText(
-          limit: limit,
-          includedRemaining: includedRemaining,
-          rewardCredits: rewardCredits,
-          dakshanaCredits: dakshana,
-        );
-      }
+    // Plus subscribers on a yearly/annual plan have no metering.
+    if (status.plusActive && _isYearlyPlan(status.plan)) {
+      return isManualMatch
+          ? 'Manual matches unlocked'
+          : '$_nounPluralTitle unlimited';
+    }
+    if (status.plusActive && isManualMatch) {
+      return 'Manual matches unlocked';
     }
 
-    if (limit > 0) {
-      return _meteredQuotaText(
-        limit: limit,
-        includedRemaining: includedRemaining,
-        rewardCredits: rewardCredits,
-        dakshanaCredits: dakshana,
-      );
+    // Total credits the user can actually spend right now: included quota plus
+    // owl/streak reward credits plus dakshana wallet credits. This is the sum
+    // of every source the server may charge, so it is correct regardless of the
+    // charge order (free users spend rewards first; paid plans spend the plan
+    // allowance first and keep rewards for after it runs out).
+    final field = _quotaField;
+    final limit = status.limits[field] ?? 0;
+    final used = status.usage[field] ?? 0;
+    final includedRemaining = math.max(0, limit - used);
+    final totalRemaining =
+        includedRemaining + _rewardCredits(status) + _dakshanaCredits(status);
+
+    if (isManualMatch) {
+      return totalRemaining > 0
+          ? '$_nounPluralTitle $totalRemaining remaining'
+          : 'Manual matches locked';
     }
 
-    if (rewardCredits > 0) {
-      return '$_nounPluralTitle $rewardCredits remaining';
-    }
-
-    if (dakshana > 0) {
-      final dakshanaTotal = _dakshanaTotalCredits;
-      return dakshanaTotal > 0
-          ? '$_nounPluralTitle $dakshana/$dakshanaTotal remaining'
-          : '$_nounPluralTitle $dakshana remaining';
-    }
-
-    if (widget.feature == FeatureQuotaKind.manualMatch) {
-      return 'Manual matches locked';
-    }
-
-    return '$_nounPluralTitle 0 remaining';
-  }
-
-  String _meteredQuotaText({
-    required int limit,
-    required int includedRemaining,
-    required int rewardCredits,
-    required int dakshanaCredits,
-  }) {
-    if (rewardCredits > 0) {
-      return includedRemaining > 0
-          ? '$_nounPluralTitle $rewardCredits bonus + $includedRemaining/$limit included'
-          : '$_nounPluralTitle $rewardCredits bonus remaining';
-    }
-
-    if (includedRemaining > 0) {
-      return '$_nounPluralTitle $includedRemaining/$limit remaining';
-    }
-
-    if (dakshanaCredits > 0) {
-      final dakshanaTotal = _dakshanaTotalCredits;
-      return dakshanaTotal > 0
-          ? '$_nounPluralTitle $dakshanaCredits/$dakshanaTotal remaining'
-          : '$_nounPluralTitle $dakshanaCredits remaining';
-    }
-
-    return '$_nounPluralTitle 0/$limit remaining';
+    return '$_nounPluralTitle $totalRemaining remaining';
   }
 
   String get _quotaField {
@@ -205,19 +156,6 @@ class _FeatureQuotaChipState extends State<FeatureQuotaChip> {
         return 'Readings';
       case FeatureQuotaKind.manualMatch:
         return 'Matches';
-    }
-  }
-
-  int get _dakshanaTotalCredits {
-    switch (widget.feature) {
-      case FeatureQuotaKind.chat:
-        return dakshanaChatCredits;
-      case FeatureQuotaKind.tarot:
-        return dakshanaTarotCredits;
-      case FeatureQuotaKind.geomancy:
-        return dakshanaGeomancyCredits;
-      case FeatureQuotaKind.manualMatch:
-        return 0;
     }
   }
 

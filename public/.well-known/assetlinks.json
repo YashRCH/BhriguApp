@@ -7,7 +7,8 @@
       "namespace": "android_app",
       "package_name": "com.bhr1gu.app",
       "sha256_cert_fingerprints": [
-        "8C:71:92:2C:E1:D4:65:95:F3:31:06:25:97:2B:B4:CA:B9:BC:46:FE:6C:AF:23:BB:C9:50:83:92:E0:8E:1B:E8"
+        "8C:71:92:2C:E1:D4:65:95:F3:31:06:25:97:2B:B4:CA:B9:BC:46:FE:6C:AF:23:BB:C9:50:83:92:E0:8E:1B:E8",
+        "8C:71:92:2C:E1:D4:65:95:F3:31:06:25:97:2B:B4:CA:B9:BC:46:FE:6C:AF:23:BB:C9:50:83:92:E8:8E:1B:E8"
       ]
     }
   }

@@ -2086,6 +2086,90 @@ async function retrieveBhriguChatKnowledge({
     .join("\n\n");
 }
 
+// Retrieves the asking user's OWN previously up-voted answers, scored by
+// semantic similarity to the current message. Per-user only, so the examples
+// are grounded in this same user's chart and safe to build on directly.
+async function retrieveLikedAnswerExamples({ uid, message, limit = 3 }) {
+  if (!uid) {
+    return "";
+  }
+
+  let snap;
+
+  try {
+    snap = await admin
+      .firestore()
+      .collection("liked_answer_knowledge")
+      .where("userId", "==", uid)
+      .limit(50)
+      .get();
+  } catch (error) {
+    console.error("Liked answer retrieval error:", error.message);
+    return "";
+  }
+
+  if (snap.empty) {
+    return "";
+  }
+
+  const docs = [];
+  snap.forEach((doc) => {
+    const data = doc.data() || {};
+    if (data.question || data.answer) {
+      docs.push(data);
+    }
+  });
+
+  if (!docs.length) {
+    return "";
+  }
+
+  let queryEmbedding = [];
+
+  if (docs.some((data) => Array.isArray(data.embedding) && data.embedding.length)) {
+    try {
+      queryEmbedding = await generateGeminiEmbedding(String(message || "").trim());
+    } catch (error) {
+      console.error(
+        "Liked answer RAG embedding error:",
+        error.response?.data || error.message
+      );
+    }
+  }
+
+  const scored = docs.map((data) => {
+    let score = 0;
+
+    if (queryEmbedding.length > 0 && Array.isArray(data.embedding)) {
+      score = cosineSimilarity(queryEmbedding, data.embedding);
+    }
+
+    return { data, score };
+  });
+
+  // When no embeddings are available all scores tie at 0; fall back to most
+  // recently liked so the section is still useful.
+  scored.sort((a, b) => {
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+
+    const aTime = a.data.createdAt?.toMillis ? a.data.createdAt.toMillis() : 0;
+    const bTime = b.data.createdAt?.toMillis ? b.data.createdAt.toMillis() : 0;
+    return bTime - aTime;
+  });
+
+  return scored
+    .slice(0, limit)
+    .map(({ data }, index) => {
+      const question = String(data.question || "").trim() || "(not recorded)";
+      const answer = String(data.answer || "").trim();
+      return `Example ${index + 1}\nUser asked: ${question}\nAnswer the user loved: ${answer}`;
+    })
+    .filter((chunk) => chunk.includes("Answer the user loved:"))
+    .join("\n\n");
+}
+
 function cleanGeneratedLine(value) {
   return String(value || "")
     .replace(/\*\*/g, "")
@@ -2680,6 +2764,7 @@ module.exports = {
   bhriguBookKnowledgeDocsPromise,
   readBhriguBookKnowledgeDocs,
   retrieveBhriguChatKnowledge,
+  retrieveLikedAnswerExamples,
   cleanGeneratedLine,
   firstSentence,
   terminalPunctuation,

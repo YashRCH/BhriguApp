@@ -16,8 +16,71 @@ const REWARD_QUOTA_FIELDS = {
   geomancy: "rewardGeomancy",
 };
 
+// Plan-consumption counters that should start fresh when a user upgrades from
+// free to a paid plan. Earned bonus credits (rewardChat/rewardTarot/
+// rewardGeomancy) and owl-bond tracking are intentionally excluded so they are
+// preserved across the upgrade.
+const PLAN_UPGRADE_USAGE_FIELDS = [
+  "chat",
+  "chatDaily",
+  "tarot",
+  "geomancy",
+  "manualMatch",
+];
+
 function monthKey(date = new Date()) {
   return date.toISOString().slice(0, 7).replace("-", "");
+}
+
+function planUpgradeResetMarker(expiresAtMillis) {
+  return Number.isFinite(expiresAtMillis) && expiresAtMillis > 0
+    ? expiresAtMillis
+    : null;
+}
+
+// Zeroes the current month's plan-consumption counters so a freshly purchased
+// plan starts with its full allowance. Pass this into an existing transaction
+// (e.g. the RevenueCat webhook) as a blind merge write; callers gate it on a
+// genuine free -> paid transition so it never wipes usage accrued on a plan.
+function planUpgradeUsageResetPayload(expiresAtMillis) {
+  const payload = {
+    planUpgradeUsageResetAt: admin.firestore.FieldValue.serverTimestamp(),
+    planUpgradeResetForExpiresAtMs: planUpgradeResetMarker(expiresAtMillis),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  for (const field of PLAN_UPGRADE_USAGE_FIELDS) {
+    payload[field] = 0;
+  }
+  return payload;
+}
+
+// Idempotent reset used by the non-transactional sync paths. The
+// planUpgradeResetForExpiresAtMs marker guarantees we only reset once per
+// billing period even if several requests sync the same activation at once.
+async function resetMonthlyUsageForPlanUpgrade(uid, expiresAtMillis) {
+  const quotaRef = admin
+    .firestore()
+    .collection("users")
+    .doc(uid)
+    .collection("quota")
+    .doc(monthKey());
+  const marker = planUpgradeResetMarker(expiresAtMillis);
+
+  await admin.firestore().runTransaction(async (transaction) => {
+    const quotaDoc = await transaction.get(quotaRef);
+    const quota = quotaDoc.data() || {};
+
+    if (
+      quota.planUpgradeResetForExpiresAtMs !== undefined &&
+      quota.planUpgradeResetForExpiresAtMs === marker
+    ) {
+      return;
+    }
+
+    transaction.set(quotaRef, planUpgradeUsageResetPayload(marker), {
+      merge: true,
+    });
+  });
 }
 
 function readInt(value) {
@@ -330,6 +393,7 @@ async function syncActiveRevenueCatPlus(uid) {
     .doc(BHRIGU_PLUS_ENTITLEMENT);
   const existingEntitlementDoc = await entitlementRef.get();
   const existingEntitlement = existingEntitlementDoc.data() || {};
+  const becameActive = !entitlementIsActive(existingEntitlement);
   const detectedPlan = planFromRevenueCatPurchase(subscription || entitlement);
   const plan = resolvePlusPlan(detectedPlan, existingEntitlement.plan);
 
@@ -356,6 +420,15 @@ async function syncActiveRevenueCatPlus(uid) {
       },
       { merge: true }
     );
+
+  // Free -> paid upgrade: clear free-period usage so the new plan starts with
+  // its full allowance. The marker inside the reset keeps this idempotent.
+  if (becameActive) {
+    await resetMonthlyUsageForPlanUpgrade(
+      uid,
+      millisFromRevenueCatDate(entitlement.expires_date)
+    );
+  }
 
   return true;
 }
@@ -474,7 +547,7 @@ async function requireMeteredFeature(uid, featureKey) {
       return { allowed: true, mode, charged: true, source: "plus", featureKey };
     }
 
-    if (rewardQuotaField && rewardCredits > 0) {
+    const chargeRewardCredit = () => {
       transaction.set(
         quotaRef,
         {
@@ -490,9 +563,9 @@ async function requireMeteredFeature(uid, featureKey) {
         source: "reward",
         featureKey,
       };
-    }
+    };
 
-    if (quotaLimit > 0 && currentUsage < quotaLimit) {
+    const chargePlanQuota = () => {
       transaction.set(
         quotaRef,
         {
@@ -508,6 +581,20 @@ async function requireMeteredFeature(uid, featureKey) {
         source: plusActive ? "plus" : "free",
         featureKey,
       };
+    };
+
+    const rewardAvailable = Boolean(rewardQuotaField) && rewardCredits > 0;
+    const planQuotaAvailable = quotaLimit > 0 && currentUsage < quotaLimit;
+
+    if (plusActive) {
+      // Paid plans spend their included allowance first so earned bonus
+      // (owl/streak) readings are preserved until the plan quota runs out.
+      if (planQuotaAvailable) return chargePlanQuota();
+      if (rewardAvailable) return chargeRewardCredit();
+    } else {
+      // Free users spend earned bonus readings first, then the free allowance.
+      if (rewardAvailable) return chargeRewardCredit();
+      if (planQuotaAvailable) return chargePlanQuota();
     }
 
     if (mode === "audit") {
@@ -639,5 +726,7 @@ module.exports = {
   getMonetizationStatusForUid,
   requireMeteredFeature,
   refundMeteredFeatureCharge,
+  resetMonthlyUsageForPlanUpgrade,
+  planUpgradeUsageResetPayload,
   REVENUECAT_SECRET_API_KEY,
 };

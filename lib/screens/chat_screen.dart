@@ -15,6 +15,7 @@ import '../services/groq_service.dart';
 import '../services/follow_up_context_service.dart';
 import '../providers/chat_provider.dart';
 import '../widgets/ai_report_button.dart';
+import '../widgets/chat_feedback_buttons.dart';
 import '../widgets/feature_quota_chip.dart';
 import '../widgets/plans_cta_button.dart';
 import 'cosmic_blueprint_screen.dart';
@@ -545,7 +546,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                   return _buildStreamingMessage(msg);
                                 }
 
-                                return _buildMessage(msg);
+                                return _buildMessage(
+                                  msg,
+                                  precedingQuestion:
+                                      _precedingUserQuestion(messages, i),
+                                );
                               },
                             ),
                           ),
@@ -641,27 +646,42 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 children: [
                   GestureDetector(
                     onTap: _openCosmicBlueprint,
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      margin: const EdgeInsets.only(right: 4),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFF1A1630).withValues(alpha: 0.72),
-                        border: Border.all(
-                          color: const Color(0xFFB58E34).withValues(alpha: 0.5),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color:
-                                const Color(0xFFB58E34).withValues(alpha: 0.16),
-                            blurRadius: 14,
-                            spreadRadius: 1,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(0xFF1A1630).withValues(alpha: 0.72),
+                              border: Border.all(
+                                color: const Color(0xFFB58E34).withValues(alpha: 0.5),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      const Color(0xFFB58E34).withValues(alpha: 0.16),
+                                  blurRadius: 14,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            child: Center(
+                              child: _cosmicBlueprintIcon(size: 27),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Tap',
+                            style: GoogleFonts.inter(
+                              fontSize: 9,
+                              color: Colors.white54,
+                            ),
                           ),
                         ],
-                      ),
-                      child: Center(
-                        child: _cosmicBlueprintIcon(size: 27),
                       ),
                     ),
                   ),
@@ -812,7 +832,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
   }
 
-  Widget _buildMessage(ChatMessage msg) {
+  /// Nearest user message before the assistant message at [index] — the
+  /// question that produced this answer, used for feedback/RAG context.
+  String _precedingUserQuestion(List<ChatMessage> messages, int index) {
+    for (var i = index - 1; i >= 0; i--) {
+      if (messages[i].role == 'user') {
+        return messages[i].content;
+      }
+    }
+    return '';
+  }
+
+  Widget _buildMessage(ChatMessage msg, {String precedingQuestion = ''}) {
     final isUser = msg.role == 'user';
 
     return RepaintBoundary(
@@ -873,15 +904,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                             const SizedBox(height: 8),
                             PlansCtaButton(message: msg.content),
                           ],
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: AiReportButton(
-                              feature: 'chat',
-                              contentId:
-                                  'chat_${msg.timestamp.toIso8601String()}',
-                              contentText: msg.content,
-                              label: 'Report',
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              ChatFeedbackButtons(
+                                question: precedingQuestion,
+                                answer: msg.content,
+                                aiResponseLanguage: msg.aiResponseLanguage,
+                              ),
+                              AiReportButton(
+                                feature: 'chat',
+                                contentId:
+                                    'chat_${msg.timestamp.toIso8601String()}',
+                                contentText: msg.content,
+                                label: 'Report',
+                              ),
+                            ],
                           ),
                         ],
                       ),

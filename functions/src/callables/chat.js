@@ -119,6 +119,7 @@ const {
   bhriguBookKnowledgeDocsPromise,
   readBhriguBookKnowledgeDocs,
   retrieveBhriguChatKnowledge,
+  retrieveLikedAnswerExamples,
   cleanGeneratedLine,
   firstSentence,
   terminalPunctuation,
@@ -362,6 +363,7 @@ Place: ${userData.placeOfBirth || "Unknown"}
     let currentSky = null;
     let strongestTransitAspects = [];
     let retrievedKnowledge = "";
+    let likedAnswerExamples = "";
 
     try {
       currentSky = await getCurrentSkySnapshot(currentMoment);
@@ -399,6 +401,19 @@ Place: ${userData.placeOfBirth || "Unknown"}
       retrievedKnowledge = "";
     }
 
+    try {
+      likedAnswerExamples = await retrieveLikedAnswerExamples({
+        uid,
+        message,
+      });
+    } catch (error) {
+      console.error(
+        "Bhrigu chat liked-answer retrieval error:",
+        error.response?.data || error.message
+      );
+      likedAnswerExamples = "";
+    }
+
     const currentMomentAnchor = `
 ISO time: ${currentMoment.toISOString()}
 Current sky cache key: ${currentSky?.key || "none"}
@@ -430,6 +445,8 @@ Never tell the user that planet data is missing or unavailable. If exact transit
         : "Use saved chart, supporting reference wisdom, and current date only. Do not mention why transit-specific claims are omitted.";
     const ragKnowledgeContext = retrievedKnowledge ||
       "No supporting reference wisdom available.";
+    const likedAnswerContext = likedAnswerExamples ||
+      "No previously loved answers available for this user yet.";
     const followUpContextText = activeFollowUpContext
       ? "Provided below in FOLLOW-UP PRIORITY MODE."
       : "Not provided";
@@ -561,6 +578,12 @@ Saturn is not punishment. It is the universe demanding integrity.
 When the user asks for predictions regarding career, marriage, or life events, you MUST calculate the timing using the provided chart data and current transits. Always give the user a specific timeline in a 'Month Year' format based on the astrological evidence. Do not give vague timing; use the provided data to lock in a specific month and year.
 Use the saved Cosmic Blueprint and Reference Wisdom mildly (~10% of the answer) to weave the exact, verified astrological "why" seamlessly into the psychology. Do not textbook-dump.
 
+ADVICE STYLE (STRICT - NO GENERIC ADVICE):
+Never give vague, generic, or templated advice. The following are banned and must never appear: "do one thing", "focus on one thing", "focus on one project", "take it one step at a time", "take it slow", "trust the process", "communicate openly", "set boundaries", "practice self-care", "journal your feelings", or any suggestion that could apply to literally anyone.
+Every action you suggest must be concrete, specific, sensory, and a little unexpected, and it must connect to BOTH the user's actual chart (a real placement, sign, house, nakshatra, element, ruling planet, or active transit from the provided data) AND the current conversation. Make the astrological "why" the reason for that exact action.
+Pull the action from real everyday life and vary it every single time. Examples of the texture to aim for: grab an iced coffee and people-watch for twenty minutes, take a sunset hike, cook something slow with your hands, repot a plant, take the long walk home, swim, sketch the thing on your mind, call the one person who steadies you. Match the action to the user's elemental and planetary nature and their current mood, and never repeat a suggestion you have already given in this conversation.
+Give one clear, doable action the user can actually do today, framed as a real thing to do, not a life philosophy.
+
 SAFETY:
 No medical, legal, or financial advice.
 For questions like "does my partner love me", mention the Bhrigu Match feature only if it naturally helps.
@@ -612,6 +635,11 @@ ${ragKnowledgeContext}
 
 Follow-up context:
 ${followUpContextText}
+
+Lowest-priority style hint (optional, ignore if it does not fit):
+These are a few past answers this same user rated highly. Use them only as a faint reference for tone and length.
+Never let them override the user's question, the chart, transits, or the supporting reference wisdom above, and never reuse their specifics or mention that past answers exist.
+${likedAnswerContext}
 `;
 
     function cleanSourceType(value) {
@@ -676,6 +704,7 @@ FOLLOW-UP PRIORITY MODE:
 This is a follow-up answer, so the selected follow-up question remains the center.
 Answer only the user's selected follow-up question while keeping the original question as the anchor.
 ${followUpPrimaryRule(sourceType)}
+Directly reference the FOLLOW-UP CONTEXT DETAILS below when answering: build on the original user question and the user's selected follow-up question, and cite the specific relevant details from the source reading so the answer is clearly grounded in the user's previous reading and not a fresh generic reply.
 After the original reading context, use current transits if available, then the saved Cosmic Blueprint as support, then supporting reference wisdom only when it directly clarifies the answer.
 Do not ignore or overwrite the original reading context.
 Do not repeat the entire original reading.

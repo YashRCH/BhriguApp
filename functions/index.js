@@ -11,5 +11,6 @@ Object.assign(
   require("./src/callables/account"),
   require("./src/callables/monetization"),
   require("./src/callables/rewards"),
-  require("./src/scheduled/notifications")
+  require("./src/scheduled/notifications"),
+  require("./src/triggers/chat_feedback")
 );

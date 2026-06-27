@@ -11,8 +11,8 @@ const DAKSHANA_CREDITS = {
 const PLAN_LIMITS = {
   free: {
     chat: 5,
-    tarot: 5,
-    geomancy: 5,
+    tarot: 2,
+    geomancy: 2,
   },
   monthly: {
     chat: 50,

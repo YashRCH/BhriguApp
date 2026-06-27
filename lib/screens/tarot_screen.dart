@@ -9,6 +9,7 @@ import '../constants/tarot_hints.dart';
 import '../models/tarot_card.dart';
 import '../models/tarot_reading_flow.dart';
 import '../services/follow_up_context_service.dart';
+import '../services/review_prompt_service.dart';
 import '../services/tarot_service.dart';
 import '../widgets/ai_report_button.dart';
 import '../widgets/ai_disclaimer.dart';
@@ -182,6 +183,13 @@ class _TarotScreenState extends State<TarotScreen>
       );
       _quotaRefreshTick++;
     });
+
+    // They've used up their free readings — a good moment to ask for a Play
+    // Store review. No reward is attached (Google Play policy + the in-app
+    // review API can't confirm a review happened anyway).
+    if (isPlansRecoveryMessage(result.text)) {
+      ReviewPromptService.instance.maybePromptAfterReadingsExhausted();
+    }
   }
 
   Future<void> _openHistory() async {
@@ -878,10 +886,10 @@ class _TarotScreenState extends State<TarotScreen>
 
   Widget _followUpCard() {
     final questions = [
-      'What should I do next?',
-      'What pattern am I repeating?',
-      'What is the hidden warning?',
-      'How does this connect to my birth chart?',
+      'What are the cards not saying out loud?',
+      'What pattern do I keep repeating here?',
+      'When does this actually shift for me?',
+      'What am I avoiding that my chart already knows?',
     ];
 
     return Container(

@@ -22,6 +22,8 @@ const {
 } = require("../monetization/catalog");
 const {
   getMonetizationStatusForUid,
+  monthKey,
+  planUpgradeUsageResetPayload,
 } = require("../monetization/quota");
 
 const REVENUECAT_WEBHOOK_AUTH = defineSecret("REVENUECAT_WEBHOOK_AUTH");
@@ -542,6 +544,15 @@ function dakshanaWalletRef(uid) {
     .doc("dakshana");
 }
 
+function userMonthlyQuotaRef(uid) {
+  return admin
+    .firestore()
+    .collection("users")
+    .doc(uid)
+    .collection("quota")
+    .doc(monthKey());
+}
+
 function userPurchaseRef(uid, eventRef) {
   return admin
     .firestore()
@@ -595,6 +606,8 @@ function applyPlusEvent(transaction, uid, event, eventRef, entitlementDoc) {
     event,
     expiresAt
   );
+  const becameActive =
+    !stale && active === true && existingEntitlement.active !== true;
 
   if (!stale) {
     transaction.set(
@@ -613,6 +626,18 @@ function applyPlusEvent(transaction, uid, event, eventRef, entitlementDoc) {
         lastRevenueCatEventTimestampMs: incomingEventTimestampMs,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
+      { merge: true }
+    );
+  }
+
+  // Free -> paid upgrade: reset this month's plan-consumption counters so the
+  // new subscription starts with its full allowance instead of inheriting the
+  // free-period usage. Gated on the activation transition so renewals never
+  // wipe legitimately accrued usage.
+  if (becameActive) {
+    transaction.set(
+      userMonthlyQuotaRef(uid),
+      planUpgradeUsageResetPayload(expiresAt ? expiresAt.toMillis() : null),
       { merge: true }
     );
   }
@@ -983,6 +1008,7 @@ async function syncRevenueCatSubscriberToFirestore(uid, subscriber) {
         rawPlusEntitlement
       );
       const existingEntitlement = entitlementDoc?.data() || {};
+      const becameActive = active && existingEntitlement.active !== true;
       const plan = resolvePlusPlan(detectedPlan, existingEntitlement.plan, {
         active,
       });
@@ -1005,6 +1031,16 @@ async function syncRevenueCatSubscriberToFirestore(uid, subscriber) {
         },
         { merge: true }
       );
+
+      // Free -> paid upgrade: start the new plan with its full allowance by
+      // clearing the free-period usage counters once, on the transition.
+      if (becameActive) {
+        transaction.set(
+          userMonthlyQuotaRef(uid),
+          planUpgradeUsageResetPayload(expiresAt ? expiresAt.toMillis() : null),
+          { merge: true }
+        );
+      }
 
       result.plusActive = active;
       result.plan = active ? plan : "free";

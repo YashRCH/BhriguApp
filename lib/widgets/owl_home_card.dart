@@ -187,6 +187,13 @@ class _OwlHomeCardState extends State<OwlHomeCard>
         if (mounted) {
           OwlFlightOverlay.trigger(context);
         }
+
+        // Dedicated notice when the owl gifts a daily reading.
+        if (mounted &&
+            result.readingCreditsGranted > 0 &&
+            result.rewardType != null) {
+          _showReadingGrantedDialog(result.rewardType!);
+        }
       }
 
       // Clear status after a delay
@@ -235,10 +242,93 @@ class _OwlHomeCardState extends State<OwlHomeCard>
     }
   }
 
+  void _showReadingGrantedDialog(String rewardType) {
+    final isGeomancy = rewardType == 'geomancy';
+    final title = isGeomancy
+        ? 'Geomancy Reading Granted'
+        : 'Tarot Reading Granted';
+    final icon = isGeomancy ? '🌑' : '🔮';
+    final body = isGeomancy
+        ? 'Your owl filled the Moon Bond and gifted you 1 free Geomancy '
+            'reading. Find it waiting in the Geo tab.'
+        : 'Your owl filled the Moon Bond and gifted you 1 free Tarot '
+            'reading. Find it waiting in the Tarot tab.';
+    final tag = isGeomancy ? '+1 Geomancy reading' : '+1 Tarot reading';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1630),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: const Color(0xFFB58E34).withValues(alpha: 0.5),
+          ),
+        ),
+        title: Column(
+          children: [
+            Text(icon, style: const TextStyle(fontSize: 40)),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.cinzelDecorative(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFC7A867),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              body,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.5,
+                color: Color(0xFFE5D5F5),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                color: const Color(0xFF2E1065).withValues(alpha: 0.6),
+                border: Border.all(
+                  color: const Color(0xFFC7A867).withValues(alpha: 0.25),
+                ),
+              ),
+              child: Text(
+                tag,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.cinzel(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFFC7A867),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text(
+              'Wonderful',
+              style: TextStyle(color: Color(0xFFC7A867)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showGiftDialog(OwlRewardClaimResult result) {
     final gift = _celestialGifts[math.Random().nextInt(_celestialGifts.length)];
-    final rewardLabel = _readingRewardLabel(result.rewardType);
-    final hasReadingGrant = result.readingCreditsGranted > 0;
 
     showDialog(
       context: context,
@@ -282,13 +372,9 @@ class _OwlHomeCardState extends State<OwlHomeCard>
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              hasReadingGrant
-                  ? 'Your owl added ${result.chatMessagesGranted} chat '
-                      'messages and ${result.readingCreditsGranted} '
-                      '$rewardLabel reading to your available credits.'
-                  : 'Your owl added ${result.chatMessagesGranted} chat '
-                      'messages. Your $rewardLabel reading was already added '
-                      'when Moon Bond filled.',
+              'Your owl added ${result.chatMessagesGranted} chat messages to '
+              'your available credits. Your daily readings were already added '
+              'each time you filled the Moon Bond.',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
@@ -307,11 +393,7 @@ class _OwlHomeCardState extends State<OwlHomeCard>
                 ),
               ),
               child: Text(
-                hasReadingGrant
-                    ? '+${result.chatMessagesGranted} chat messages | '
-                        '+${result.readingCreditsGranted} '
-                        '$rewardLabel reading'
-                    : '+${result.chatMessagesGranted} chat messages',
+                '+${result.chatMessagesGranted} chat messages',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.cinzel(
                   fontSize: 11,
@@ -419,10 +501,6 @@ class _OwlHomeCardState extends State<OwlHomeCard>
     );
   }
 
-  String _readingRewardLabel(String? rewardType) {
-    return rewardType == 'geomancy' ? 'geomancy' : 'tarot';
-  }
-
   @override
   Widget build(BuildContext context) {
     if (widget.uid.isEmpty) return const SizedBox.shrink();
@@ -490,7 +568,7 @@ class _OwlHomeCardState extends State<OwlHomeCard>
                 // Footer message
                 const Center(
                   child: Text(
-                    'Fill the Moon Bond for a reading. Open the gift for messages.',
+                    'Pet daily for a tarot or geomancy reading. Fill the Moon Bond over 4 days to open a gift of chat messages.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 10,
@@ -629,12 +707,10 @@ class _OwlHomeCardState extends State<OwlHomeCard>
               const SizedBox(height: 6),
               Text(
                 _state.rewardAvailable
-                    ? _state.rewardReadingGranted
-                        ? 'Gift ready: 5 messages. ${_readingRewardLabel(_state.rewardType)} reading added.'
-                        : 'Gift ready: 5 messages and 1 ${_readingRewardLabel(_state.rewardType)} reading'
+                    ? 'Gift ready: open for 5 chat messages'
                     : _state.isPettedToday()
-                        ? 'Moon Bond filled for today ✓'
-                        : 'Pet your owl to fill the Moon Bond',
+                        ? "Today's reading added ✓ Come back tomorrow"
+                        : 'Pet your owl for a daily reading',
                 style: const TextStyle(
                   fontSize: 11,
                   color: Color(0xFFE5D5F5),

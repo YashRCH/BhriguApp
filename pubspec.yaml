@@ -1,7 +1,7 @@
 name: astrology_guru_app
 description: BHR1GU - AI-powered Vedic and Western astrology guru
 publish_to: 'none'
-version: 1.0.3+15
+version: 1.0.3+18
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -88,6 +88,7 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   url_launcher: 6.2.5
   purchases_flutter: ^8.11.0
+  in_app_review: ^2.0.9
 
 dev_dependencies:
   flutter_test:
