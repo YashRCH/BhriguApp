@@ -36,6 +36,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     with TickerProviderStateMixin {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
+  final _activeQuestionKey = GlobalKey();
   final _groq = GroqService();
   final _followUpService = FollowUpContextService();
 
@@ -215,7 +216,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     if (text.isEmpty || _isTyping || _loadingFollowUpContext) return;
 
-    _stickToBottom = true;
     final language =
         await ref.read(chatProvider.notifier).ensureActiveLanguage();
     if (!mounted) return;
@@ -233,7 +233,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
 
     _controller.clear();
-    _scrollToBottom(force: true);
 
     ref.read(chatProvider.notifier).addMessage(
           ChatMessage(
@@ -243,7 +242,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           ),
         );
 
-    _scrollToBottom(force: true);
+    // Anchor the question near the top so the answer has a full screen to grow
+    // into, instead of pinning the view to the bottom and yanking it up on
+    // every streamed word.
+    _anchorQuestionToTop();
 
     final history = ref.read(chatProvider).sublist(
           0,
@@ -389,6 +391,42 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       final maxScrollExtent = _scrollController.position.maxScrollExtent;
 
       _scrollController.jumpTo(maxScrollExtent);
+    });
+  }
+
+  /// Scrolls the in-flight question to the top of the list so the streaming
+  /// answer fills the space below it. Auto-follow stays off (so the view does
+  /// not chase the typing) until the user scrolls back down to the bottom.
+  void _anchorQuestionToTop() {
+    _stickToBottom = false;
+    _scheduleAnchorToTop(retriesLeft: 2);
+  }
+
+  void _scheduleAnchorToTop({required int retriesLeft}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final keyContext = _activeQuestionKey.currentContext;
+
+      if (keyContext != null) {
+        Scrollable.ensureVisible(
+          keyContext,
+          alignment: 0.0,
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeOutCubic,
+        );
+        return;
+      }
+
+      if (retriesLeft <= 0) return;
+
+      // The question is not built yet (off-screen). Nudge to the bottom so the
+      // trailing items render, then retry the anchor on the next frame.
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+
+      _scheduleAnchorToTop(retriesLeft: retriesLeft - 1);
     });
   }
 
@@ -546,10 +584,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                   return _buildStreamingMessage(msg);
                                 }
 
+                                final isActiveQuestion = _isTyping &&
+                                    msg.role == 'user' &&
+                                    i == messages.length - 2;
+
                                 return _buildMessage(
                                   msg,
                                   precedingQuestion:
                                       _precedingUserQuestion(messages, i),
+                                  anchorKey: isActiveQuestion
+                                      ? _activeQuestionKey
+                                      : null,
                                 );
                               },
                             ),
@@ -843,10 +888,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     return '';
   }
 
-  Widget _buildMessage(ChatMessage msg, {String precedingQuestion = ''}) {
+  Widget _buildMessage(
+    ChatMessage msg, {
+    String precedingQuestion = '',
+    Key? anchorKey,
+  }) {
     final isUser = msg.role == 'user';
 
     return RepaintBoundary(
+      key: anchorKey,
       child: Padding(
         padding: const EdgeInsets.only(bottom: 20),
         child: Row(

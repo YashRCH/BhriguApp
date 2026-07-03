@@ -809,7 +809,10 @@ If the user asks for "more", "tell me more", "continue", or similar, expand the 
     let providerUsed = "gemini";
     let modelUsed = BHRIGU_TUNED_MODEL;
     let text = "";
-    const meteringCharge = await requireMeteredFeature(uid, "chat");
+    // Verify the allowance without charging; the real charge happens only
+    // once a reply is ready, so a failed or undelivered generation never
+    // consumes one of the user's messages.
+    await requireMeteredFeature(uid, "chat", { dryRun: true });
 
     try {
       const baseChatPrompt = buildChatPrompt();
@@ -827,12 +830,6 @@ If the user asks for "more", "tell me more", "continue", or similar, expand the 
       providerUsed = generation.provider;
       modelUsed = generation.model;
     } catch (error) {
-      try {
-        await refundMeteredFeatureCharge(uid, meteringCharge);
-      } catch (refundError) {
-        console.error("Bhrigu chat metering refund failed:", refundError);
-      }
-
       const aiError = error.response?.data || error.responseData || {};
       const aiDetails = {
         status: error.response?.status || null,
@@ -871,7 +868,29 @@ If the user asks for "more", "tell me more", "continue", or similar, expand the 
         enquiryContext: `The user's original message was: "${message}". CRITICAL: You must preserve every specific reference, noun, and detail related to this message from the original text.`,
         maxTokens: 700,
       });
+    } catch (error) {
+      console.error("Bhrigu chat post-processing failed:", error);
+      throw new HttpsError(
+        "internal",
+        "Bhrigu connection failed. Please try again."
+      );
+    }
 
+    if (!text.trim()) {
+      console.error("Bhrigu chat produced an empty reply; not charging.");
+      throw new HttpsError(
+        "internal",
+        "Bhrigu connection failed. Please try again."
+      );
+    }
+
+    // The reply is ready to deliver — charge now. The dry run above already
+    // synced the RevenueCat entitlement for this request.
+    const meteringCharge = await requireMeteredFeature(uid, "chat", {
+      skipRevenueCatSync: true,
+    });
+
+    try {
       await recordUsageEvent(uid, {
         feature: isDeepFollowUp ? "chat_follow_up" : "bhrigu_chat",
         provider: providerUsed,
@@ -882,10 +901,10 @@ If the user asks for "more", "tell me more", "continue", or similar, expand the 
       try {
         await refundMeteredFeatureCharge(uid, meteringCharge);
       } catch (refundError) {
-        console.error("Bhrigu chat post-processing refund failed:", refundError);
+        console.error("Bhrigu chat metering refund failed:", refundError);
       }
 
-      console.error("Bhrigu chat post-processing failed:", error);
+      console.error("Bhrigu chat usage logging failed:", error);
       throw new HttpsError(
         "internal",
         "Bhrigu connection failed. Please try again."

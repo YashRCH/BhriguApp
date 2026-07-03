@@ -81,6 +81,12 @@ class GroqService {
     try {
       final callable = _functions.httpsCallable(
         'generateBhriguChat',
+        // The function runs up to 120s server-side; the SDK default of 70s
+        // made the client report a lost connection while the server finished
+        // (and charged) anyway.
+        options: HttpsCallableOptions(
+          timeout: const Duration(seconds: 180),
+        ),
       );
 
       debugPrint('Calling Bhrigu chat function.');
@@ -99,16 +105,26 @@ class GroqService {
         return;
       }
 
+      // Reveal word-by-word rather than character-by-character so the text is
+      // easier to read and triggers far fewer scroll updates on screen. The
+      // regex keeps each word together with its trailing whitespace, so blank
+      // lines and paragraph breaks in the response are preserved.
       final buffer = StringBuffer();
 
-      for (int i = 0; i < text.length; i++) {
-        buffer.write(text[i]);
+      for (final match in RegExp(r'\S+\s*').allMatches(text)) {
+        buffer.write(match.group(0));
 
         yield buffer.toString();
 
         await Future.delayed(
-          const Duration(milliseconds: 20),
+          const Duration(milliseconds: 30),
         );
+      }
+
+      // Safety net: if anything was missed (e.g. leading whitespace), make sure
+      // the final yielded value is the complete text.
+      if (buffer.toString() != text) {
+        yield text;
       }
     } on FirebaseFunctionsException catch (e) {
       if (kDebugMode) {

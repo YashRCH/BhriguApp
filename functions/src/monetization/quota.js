@@ -475,7 +475,13 @@ async function getMonetizationStatusForUid(uid) {
   };
 }
 
-async function requireMeteredFeature(uid, featureKey) {
+// dryRun verifies the user could be charged (same eligibility rules and
+// errors) without writing anything, so callers can gate expensive work up
+// front and only charge once the result is ready to deliver.
+// skipRevenueCatSync avoids repeating the entitlement preflight when a
+// dry-run call already performed it moments earlier in the same request.
+async function requireMeteredFeature(uid, featureKey, options = {}) {
+  const { dryRun = false, skipRevenueCatSync = false } = options;
   const feature = METERED_FEATURES[featureKey];
   if (!feature) {
     throw new HttpsError("internal", "Unknown monetized feature.");
@@ -494,10 +500,12 @@ async function requireMeteredFeature(uid, featureKey) {
   const walletRef = userRef.collection("wallet").doc("dakshana");
   const quotaRef = userRef.collection("quota").doc(monthKey());
 
-  const preflightEntitlementDoc = await entitlementRef.get();
-  const preflightEntitlement = preflightEntitlementDoc.data() || {};
-  if (!entitlementIsActive(preflightEntitlement)) {
-    await syncActiveRevenueCatPlus(uid);
+  if (!skipRevenueCatSync) {
+    const preflightEntitlementDoc = await entitlementRef.get();
+    const preflightEntitlement = preflightEntitlementDoc.data() || {};
+    if (!entitlementIsActive(preflightEntitlement)) {
+      await syncActiveRevenueCatPlus(uid);
+    }
   }
 
   return db.runTransaction(async (transaction) => {
@@ -536,48 +544,60 @@ async function requireMeteredFeature(uid, featureKey) {
     }
 
     if (plusActive && unlimitedPlans.includes(plan)) {
-      transaction.set(
-        quotaRef,
-        {
-          [quotaField]: increment,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-      return { allowed: true, mode, charged: true, source: "plus", featureKey };
-    }
-
-    const chargeRewardCredit = () => {
-      transaction.set(
-        quotaRef,
-        {
-          [rewardQuotaField]: admin.firestore.FieldValue.increment(-1),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+      if (!dryRun) {
+        transaction.set(
+          quotaRef,
+          {
+            [quotaField]: increment,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
       return {
         allowed: true,
         mode,
-        charged: true,
+        charged: !dryRun,
+        source: "plus",
+        featureKey,
+      };
+    }
+
+    const chargeRewardCredit = () => {
+      if (!dryRun) {
+        transaction.set(
+          quotaRef,
+          {
+            [rewardQuotaField]: admin.firestore.FieldValue.increment(-1),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+      return {
+        allowed: true,
+        mode,
+        charged: !dryRun,
         source: "reward",
         featureKey,
       };
     };
 
     const chargePlanQuota = () => {
-      transaction.set(
-        quotaRef,
-        {
-          [quotaField]: increment,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+      if (!dryRun) {
+        transaction.set(
+          quotaRef,
+          {
+            [quotaField]: increment,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
       return {
         allowed: true,
         mode,
-        charged: true,
+        charged: !dryRun,
         source: plusActive ? "plus" : "free",
         featureKey,
       };
@@ -598,31 +618,35 @@ async function requireMeteredFeature(uid, featureKey) {
     }
 
     if (mode === "audit") {
-      transaction.set(
-        quotaRef,
-        {
-          [quotaField]: increment,
-          auditOnly: true,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+      if (!dryRun) {
+        transaction.set(
+          quotaRef,
+          {
+            [quotaField]: increment,
+            auditOnly: true,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
       return { allowed: true, mode, charged: false, source: "audit", featureKey };
     }
 
     if (dakshanaField && wallet.active === true && walletCredits > 0) {
-      transaction.set(
-        walletRef,
-        {
-          [dakshanaField]: admin.firestore.FieldValue.increment(-1),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+      if (!dryRun) {
+        transaction.set(
+          walletRef,
+          {
+            [dakshanaField]: admin.firestore.FieldValue.increment(-1),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
       return {
         allowed: true,
         mode,
-        charged: true,
+        charged: !dryRun,
         source: "dakshana",
         featureKey,
       };

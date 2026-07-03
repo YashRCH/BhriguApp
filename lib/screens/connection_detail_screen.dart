@@ -16,6 +16,7 @@ import '../widgets/compatibility_score_ring.dart';
 import '../widgets/cosmic_screen_background.dart';
 import '../widgets/heart_signal_card.dart';
 import '../widgets/ai_disclaimer.dart';
+import '../widgets/revealing_text.dart';
 
 class ConnectionDetailScreen extends StatefulWidget {
   final String connectionId;
@@ -43,6 +44,12 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
   bool _creatingFollowUp = false;
   bool _switchingType = false;
 
+  // Set when the user taps a Generate button, so only a freshly produced
+  // reading types in word-by-word. Existing readings shown on open or tab
+  // switch render instantly. Reset after the first animated build consumes it.
+  bool _revealEnergyPending = false;
+  bool _revealCompatibilityPending = false;
+
   @override
   void initState() {
     super.initState();
@@ -62,6 +69,26 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
   void _refreshConnection() {
     setState(() {
       _connectionFuture = _connectionService.getConnection(widget.connectionId);
+    });
+  }
+
+  /// Clears a reveal flag after the freshly generated reading has mounted, so a
+  /// later rebuild or tab switch shows it instantly instead of re-typing.
+  void _consumeRevealFlag({required bool energy}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final stillPending =
+          energy ? _revealEnergyPending : _revealCompatibilityPending;
+      if (!stillPending) return;
+
+      setState(() {
+        if (energy) {
+          _revealEnergyPending = false;
+        } else {
+          _revealCompatibilityPending = false;
+        }
+      });
     });
   }
 
@@ -87,6 +114,7 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
         connectionId: widget.connectionId,
         heartSignal: heartSignal,
       );
+      _revealCompatibilityPending = true;
     } catch (e, stack) {
       _logError('Generate connection compatibility failed', e, stack);
       _showError('Could not generate compatibility right now.');
@@ -104,6 +132,7 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
 
     try {
       await _dailyEnergyService.generateToday(widget.connectionId);
+      _revealEnergyPending = true;
     } catch (e, stack) {
       _logError('Generate connection daily energy failed', e, stack);
       _showError('Could not generate daily energy right now.');
@@ -584,13 +613,19 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
       builder: (context, snapshot) {
         final energy = snapshot.data;
         final personEnergy = energy?.members[connection.otherUid];
+        final hasReading = energy != null && personEnergy != null;
+        final reveal = hasReading && _revealEnergyPending;
+
+        if (reveal) {
+          _consumeRevealFlag(energy: true);
+        }
 
         return ListView(
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 110),
           children: [
             _profileHeader(connection),
             const SizedBox(height: 18),
-            if (energy == null || personEnergy == null)
+            if (!hasReading)
               _emptyGeneratedCard(
                 title: 'Generate today\'s energy',
                 body:
@@ -600,7 +635,12 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
                 onPressed: _generateEnergy,
               )
             else
-              ..._generatedEnergyCards(connection, energy, personEnergy),
+              ..._generatedEnergyCards(
+                connection,
+                energy,
+                personEnergy,
+                animate: reveal,
+              ),
           ],
         );
       },
@@ -610,8 +650,9 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
   List<Widget> _generatedEnergyCards(
     SocialConnection connection,
     ConnectionDailyEnergy energy,
-    PersonDailyEnergy personEnergy,
-  ) {
+    PersonDailyEnergy personEnergy, {
+    bool animate = false,
+  }) {
     return [
       _card(
         child: Column(
@@ -629,8 +670,9 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
               ),
             ),
             const SizedBox(height: 14),
-            Text(
+            RevealingText(
               personEnergy.energy,
+              animate: animate,
               style: const TextStyle(
                 color: Color(0xFFE5D5F5),
                 fontSize: 15,
@@ -639,8 +681,9 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
             ),
             if (energy.bondSignal.trim().isNotEmpty) ...[
               const SizedBox(height: 16),
-              Text(
+              RevealingText(
                 energy.bondSignal,
+                animate: animate,
                 style: const TextStyle(
                   color: Color(0xFFB8AEE0),
                   fontSize: 13,
@@ -657,6 +700,7 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
         _twoColumnActionCards(
           doText: personEnergy.doText,
           avoidText: personEnergy.avoidText,
+          animate: animate,
         ),
       ],
       if (personEnergy.bestApproach.isNotEmpty) ...[
@@ -664,6 +708,7 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
         _textCard(
           label: 'BEST APPROACH',
           text: personEnergy.bestApproach,
+          animate: animate,
         ),
       ],
     ];
@@ -680,6 +725,11 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
       builder: (context, snapshot) {
         final readings = snapshot.data ?? const [];
         final reading = readings.isEmpty ? null : readings.first;
+        final reveal = reading != null && _revealCompatibilityPending;
+
+        if (reveal) {
+          _consumeRevealFlag(energy: false);
+        }
 
         return ListView(
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 110),
@@ -700,10 +750,10 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
             else if (connection.relationshipType ==
                     SocialRelationshipType.partner &&
                 reading.partnerMatchReading != null)
-              _partnerMatchResult(reading.partnerMatchReading!)
+              _partnerMatchResult(reading.partnerMatchReading!, animate: reveal)
             else if (connection.relationshipType ==
                 SocialRelationshipType.friend)
-              _friendMatchResult(connection, reading)
+              _friendMatchResult(connection, reading, animate: reveal)
             else ...[
               _scoreGrid(reading.scores),
               const SizedBox(height: 14),
@@ -711,12 +761,29 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
                 title: 'Bond Signal',
                 body: reading.dailyBondSignal,
                 footer: connection.relationshipType.label,
+                animate: reveal,
               ),
               const SizedBox(height: 14),
-              _textCard(label: 'READING', text: reading.summary),
-              _textCard(label: 'STRENGTHS', text: reading.strengths),
-              _textCard(label: 'TENSIONS', text: reading.tensions),
-              _textCard(label: 'BHRIGU GUIDANCE', text: reading.advice),
+              _textCard(
+                label: 'READING',
+                text: reading.summary,
+                animate: reveal,
+              ),
+              _textCard(
+                label: 'STRENGTHS',
+                text: reading.strengths,
+                animate: reveal,
+              ),
+              _textCard(
+                label: 'TENSIONS',
+                text: reading.tensions,
+                animate: reveal,
+              ),
+              _textCard(
+                label: 'BHRIGU GUIDANCE',
+                text: reading.advice,
+                animate: reveal,
+              ),
             ],
             const SizedBox(height: 18),
             const AiDisclaimer(),
@@ -729,8 +796,9 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
 
   Widget _friendMatchResult(
     SocialConnection connection,
-    ConnectionCompatibilityReading reading,
-  ) {
+    ConnectionCompatibilityReading reading, {
+    bool animate = false,
+  }) {
     final scores = reading.scores;
     final safeOverallScore = _friendOverallScore(scores);
     final verdict = reading.verdict.trim().isEmpty
@@ -794,6 +862,7 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
               ? 'This friendship needs clarity before assumption.'
               : reading.dailyBondSignal.trim(),
           footer: connectionType,
+          animate: animate,
         ),
         const SizedBox(height: 14),
         CompatibilityMetricCard(
@@ -855,7 +924,7 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
           icon: Icons.celebration_outlined,
         ),
         const SizedBox(height: 14),
-        _friendVerdictCard(reading),
+        _friendVerdictCard(reading, animate: animate),
       ],
     );
   }
@@ -1077,7 +1146,10 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
     return 'Challenging friendship pattern';
   }
 
-  Widget _friendVerdictCard(ConnectionCompatibilityReading reading) {
+  Widget _friendVerdictCard(
+    ConnectionCompatibilityReading reading, {
+    bool animate = false,
+  }) {
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1096,16 +1168,24 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
             reading.summary.trim().isEmpty
                 ? 'Bhrigu is still reading this friendship pattern.'
                 : reading.summary.trim(),
+            animate: animate,
           ),
-          _friendVerdictSection('WHAT WORKS', reading.strengths),
-          _friendVerdictSection('WHERE IT GETS MESSY', reading.tensions),
-          _friendVerdictSection('BHRIGU GUIDANCE', reading.advice),
+          _friendVerdictSection('WHAT WORKS', reading.strengths,
+              animate: animate),
+          _friendVerdictSection('WHERE IT GETS MESSY', reading.tensions,
+              animate: animate),
+          _friendVerdictSection('BHRIGU GUIDANCE', reading.advice,
+              animate: animate),
         ],
       ),
     );
   }
 
-  Widget _friendVerdictSection(String label, String text) {
+  Widget _friendVerdictSection(
+    String label,
+    String text, {
+    bool animate = false,
+  }) {
     final cleanText = text.trim();
     if (cleanText.isEmpty) return const SizedBox.shrink();
 
@@ -1124,8 +1204,9 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
             ),
           ),
           const SizedBox(height: 6),
-          Text(
+          RevealingText(
             cleanText,
+            animate: animate,
             style: const TextStyle(
               color: Color(0xFFE5D5F5),
               fontSize: 14.5,
@@ -1202,7 +1283,10 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
     );
   }
 
-  Widget _partnerMatchResult(PartnerMatchReading reading) {
+  Widget _partnerMatchResult(
+    PartnerMatchReading reading, {
+    bool animate = false,
+  }) {
     final scores = reading.scores;
     final safeOverallScore = scores.overall.clamp(60, 95).toInt();
 
@@ -1294,15 +1378,15 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
         ),
         if (reading.marriageGunaMatch.items.isNotEmpty) ...[
           const SizedBox(height: 14),
-          _partnerGunaCard(reading.marriageGunaMatch),
+          _partnerGunaCard(reading.marriageGunaMatch, animate: animate),
         ],
         const SizedBox(height: 14),
-        _partnerVerdictCard(reading.summary),
+        _partnerVerdictCard(reading.summary, animate: animate),
       ],
     );
   }
 
-  Widget _partnerGunaCard(MarriageGunaMatch marriage) {
+  Widget _partnerGunaCard(MarriageGunaMatch marriage, {bool animate = false}) {
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1326,8 +1410,9 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
             ),
           ),
           const SizedBox(height: 8),
-          Text(
+          RevealingText(
             marriage.summary,
+            animate: animate,
             style: const TextStyle(
               color: Color(0xFFE5D5F5),
               height: 1.45,
@@ -1338,7 +1423,9 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
     );
   }
 
-  Widget _partnerVerdictCard(String summary) {
+  Widget _partnerVerdictCard(String summary, {bool animate = false}) {
+    final cleanSummary = summary.trim();
+
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1352,10 +1439,11 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
             ),
           ),
           const SizedBox(height: 14),
-          Text(
-            summary.trim().isEmpty
+          RevealingText(
+            cleanSummary.isEmpty
                 ? 'Bhrigu is still reading this pattern.'
-                : summary.trim(),
+                : cleanSummary,
+            animate: animate && cleanSummary.isNotEmpty,
             style: const TextStyle(
               color: Color(0xFFE5D5F5),
               fontSize: 14.5,
@@ -1371,6 +1459,7 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
     required String title,
     required String body,
     required String footer,
+    bool animate = false,
   }) {
     return _card(
       child: Column(
@@ -1386,8 +1475,9 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
             ),
           ),
           const SizedBox(height: 12),
-          Text(
+          RevealingText(
             body.isEmpty ? 'The signal is still forming.' : body,
+            animate: animate && body.isNotEmpty,
             style: GoogleFonts.cormorantGaramond(
               color: Colors.white,
               fontSize: 24,
@@ -1411,6 +1501,7 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
   Widget _twoColumnActionCards({
     required String doText,
     required String avoidText,
+    bool animate = false,
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1420,9 +1511,14 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
           // FIXED: Column path uses plain _textCard without Expanded wrappers.
           return Column(
             children: [
-              _textCard(label: 'DO', text: doText, compact: true),
+              _textCard(
+                  label: 'DO', text: doText, compact: true, animate: animate),
               const SizedBox(height: 10),
-              _textCard(label: 'AVOID', text: avoidText, compact: true),
+              _textCard(
+                  label: 'AVOID',
+                  text: avoidText,
+                  compact: true,
+                  animate: animate),
             ],
           );
         }
@@ -1432,10 +1528,18 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-                child: _textCard(label: 'DO', text: doText, compact: true)),
+                child: _textCard(
+                    label: 'DO',
+                    text: doText,
+                    compact: true,
+                    animate: animate)),
             const SizedBox(width: 10),
             Expanded(
-              child: _textCard(label: 'AVOID', text: avoidText, compact: true),
+              child: _textCard(
+                  label: 'AVOID',
+                  text: avoidText,
+                  compact: true,
+                  animate: animate),
             ),
           ],
         );
@@ -1447,7 +1551,10 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
     required String label,
     required String text,
     bool compact = false,
+    bool animate = false,
   }) {
+    final hasText = text.isNotEmpty;
+
     return Padding(
       padding: EdgeInsets.only(bottom: compact ? 0 : 12),
       child: _card(
@@ -1464,8 +1571,9 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
               ),
             ),
             const SizedBox(height: 10),
-            Text(
-              text.isEmpty ? 'BHRIGU is still reading this pattern.' : text,
+            RevealingText(
+              hasText ? text : 'BHRIGU is still reading this pattern.',
+              animate: animate && hasText,
               style: const TextStyle(
                 color: Color(0xFFE5D5F5),
                 fontSize: 14,
@@ -1515,7 +1623,7 @@ class _ConnectionDetailScreenState extends State<ConnectionDetailScreen>
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.auto_awesome_rounded),
-              label: const Text('Generate'),
+              label: const Text('Reveal'),
             ),
           ],
         ],
@@ -1654,7 +1762,7 @@ class _HeartSignalDialogState extends State<_HeartSignalDialog> {
         TextButton(
           onPressed: _submit,
           child: const Text(
-            'Generate',
+            'Reveal',
             style: TextStyle(color: Color(0xFFFFD88A)),
           ),
         ),
