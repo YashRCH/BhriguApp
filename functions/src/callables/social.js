@@ -17,9 +17,12 @@ const {
   generateGeminiReadingText,
   recordUsageEvent,
 } = require("../core");
+const {
+  retrieveCompatibilityKnowledgeForMatch,
+} = require("./compatibility");
 
-const SOCIAL_COMPATIBILITY_CONTENT_VERSION = "connection_compatibility_v4";
-const CONNECTION_DAILY_ENERGY_CONTENT_VERSION = "connection_daily_energy_v9_base_gemini";
+const SOCIAL_COMPATIBILITY_CONTENT_VERSION = "connection_compatibility_v5";
+const CONNECTION_DAILY_ENERGY_CONTENT_VERSION = "connection_daily_energy_v10_base_gemini";
 const FRIEND_SCORE_ALGORITHM_VERSION = "friend_blueprint_math_v1";
 const PARTNER_SCORE_ALGORITHM_VERSION = "partner_blueprint_math_v1";
 const CIRCLE_SAFETY_POLICY_VERSION = "circle_safety_v1";
@@ -881,39 +884,6 @@ function scoreExtreme(scores, highest) {
       ? next[1] > current[1] ? next : current
       : next[1] < current[1] ? next : current;
   })[0];
-}
-
-function friendScoreExtreme(scores, highest) {
-  const areas = {
-    "emotional support": scores.emotional_support,
-    communication: scores.communication,
-    trust: scores.trust,
-    loyalty: scores.loyalty,
-    "conflict repair": scores.conflict_repair,
-    "shared rhythm": scores.shared_rhythm,
-    "growth potential": scores.growth_potential,
-    "fun energy": scores.fun_energy,
-  };
-  return Object.entries(areas).reduce((current, next) => {
-    return highest
-      ? next[1] > current[1] ? next : current
-      : next[1] < current[1] ? next : current;
-  })[0];
-}
-
-function fallbackFriendSections({ profileA, profileB, scores, connectionType, verdict }) {
-  const nameA = String(profileA.displayName || "one friend");
-  const nameB = String(profileB.displayName || "the other friend");
-  const strongest = friendScoreExtreme(scores, true);
-  const softest = friendScoreExtreme(scores, false);
-
-  return {
-    summary: `${nameA} and ${nameB} show ${verdict} through a ${connectionType} pattern. This friendship works best when it stays honest, simple, and pressure-free.`,
-    strengths: `The strongest area is ${strongest}. That is where the friendship feels easiest without anyone performing.`,
-    tensions: `The softest area is ${softest}. That is where assumptions, silence, or mismatched effort can start to show.`,
-    advice: "Keep the friendship direct and low-drama. Say the real thing early instead of testing each other through distance.",
-    dailyBondSignal: "This friendship needs clarity before assumption.",
-  };
 }
 
 function partnerProfileFromUserData(userData, fallbackProfile, heartSignal) {
@@ -2163,19 +2133,20 @@ exports.generateConnectionCompatibility = onCall(
     const scores = calculateFriendBaseScores(friendA, friendB);
     const connectionType = friendConnectionTypeFor(scores);
     const verdict = friendVerdictForScore(scores.overall);
-    const fallback = fallbackFriendSections({
-      profileA,
-      profileB,
-      scores,
-      connectionType,
-      verdict,
-    });
+    const compatibilityKnowledge = await retrieveCompatibilityKnowledgeForMatch(
+      auth.uid,
+      `Platonic friendship compatibility. Type: ${connectionType}. Verdict: ${verdict}. ` +
+        `Person A: Sun ${userA.westernChart?.sunSign || "unknown"}, Moon ${userA.westernChart?.moonSign || "unknown"}. ` +
+        `Person B: Sun ${userB.westernChart?.sunSign || "unknown"}, Moon ${userB.westernChart?.moonSign || "unknown"}. ` +
+        `Trust, effort, communication, loyalty, repair.`,
+      4
+    );
     const labels = ["SUMMARY", "STRENGTHS", "TENSIONS", "ADVICE", "DAILY_BOND_SIGNAL"];
     const prompt = `
-You are BHR1GU, a social astrology guide with a blunt, poetic, app-native voice.
+You are BHR1GU, a social astrology guide inside the BHR1GU app.
 
 Create a shared friendship compatibility reading for two connected users.
-The style should feel intimate, minimal, psychologically sharp, and slightly uncanny.
+You are not explaining charts. You are looking through them: write as someone who perceives how these two people actually work together.
 Do not imitate or name any existing astrology app or brand.
 Use their saved cosmic blueprints, but never reveal exact birth date, birth time, birthplace, coordinates, database fields, or backend details.
 
@@ -2198,26 +2169,30 @@ ${verdict}
 Friendship type:
 ${connectionType}
 
+Supporting compatibility wisdom (use lightly to sharpen the "why"; never dump it):
+${compatibilityKnowledge}
+
 Rules:
 This is strictly platonic friendship compatibility.
 Do not mention attraction, chemistry, romance, dating, love, marriage, sexuality, spouse, couple dynamics, partner dynamics, or romantic long-term commitment.
 Use the words friendship, friend, trust, effort, repair, loyalty, timing, respect, and boundaries.
 Do not invent percentages beyond the provided scores.
 Voice rules:
-- Write like a social astrology app, not a horoscope article.
-- Be brief, direct, and quotable.
+- STRICT: speak normally, like a real human in 2026 - casual, warm, direct, contractions everywhere. No performance, no forced slang, no theatrical mysticism, no horoscope-article tone.
+- Somewhere in the reading, name one true-feeling thing about how these two work together that both would recognize. Deliver it as something the charts revealed, never as a compliment. It must feel discovered, not given.
+- Let the charts decide where the weight goes: one section may carry the real story while another stays light. Never force the same shape onto every section, and never balance every strength with a tension out of habit.
+- Every sentence must be about these two specific people - a line that would survive unchanged for a different pair does not belong.
 - Prefer second person: "you two", "this friendship", "they", "you".
-- Make each sentence carry one sharp insight.
 - Use concrete relational behavior, not vague advice.
 - Avoid generic lines like "communicate openly", "be patient", "trust the process", or "balance is important".
+- STRICT: no stock filler. Words like "journey", "embrace", "align", "manifest", "crossroads", "chapter", "energy shift" may appear at most once in the whole reading; vary word choice so two readings never sound alike.
 - Avoid therapy jargon, disclaimers, moralizing, and long explanations.
-- Keep mysticism clean and modern, not ornate.
 
 Respond in this exact format:
-SUMMARY: [2-3 short sentences. Use the friendship verdict and friendship type. Make it feel like the core truth of the friendship.]
-STRENGTHS: [2 short sentences. Name what works in the friendship without sounding sweet or generic.]
-TENSIONS: [2 short sentences. Name the friendship friction bluntly but fairly.]
-ADVICE: [2 short practical sentences. Tell them exactly what to do differently as friends.]
+SUMMARY: [2 to 4 short sentences. Use the friendship verdict and friendship type. The core truth of this friendship, said plainly.]
+STRENGTHS: [1 to 3 short sentences. What actually works between them, without sounding sweet or generic.]
+TENSIONS: [1 to 3 short sentences. The real friction, named honestly but fairly - framed as something these two can handle.]
+ADVICE: [1 to 3 short sentences. Point to the direction and the opening, not a step-by-step fix. Concrete, doable, and hopeful.]
 DAILY_BOND_SIGNAL: [1 sharp shareable sentence, max 14 words]
 ${languageInstruction(aiResponseLanguage)}
 `;
@@ -2225,29 +2200,34 @@ ${languageInstruction(aiResponseLanguage)}
     let parsed;
     try {
       const text = await generateGeminiReadingText({
-        systemInstruction: `Return only the requested labels. Use a terse, original BHR1GU friendship-astrology voice. Do not imitate any existing brand. Do not use romantic, partner, attraction, marriage, or couple language. ${languageInstruction(aiResponseLanguage)}`,
+        systemInstruction: `Return only the requested labels. Plain modern spoken English in the BHR1GU friendship voice - casual, direct, specific. Do not imitate any existing brand. Do not use romantic, partner, attraction, marriage, or couple language. ${languageInstruction(aiResponseLanguage)}`,
         prompt,
         maxTokens: 620,
-        temperature: 0.58,
+        temperature: 0.7,
         model: GEMINI_FLASH_LITE_MODEL,
       });
       const aiParsed = parseSections(text, labels);
-      parsed = {
-        SUMMARY: aiParsed.SUMMARY || fallback.summary,
-        STRENGTHS: aiParsed.STRENGTHS || fallback.strengths,
-        TENSIONS: aiParsed.TENSIONS || fallback.tensions,
-        ADVICE: aiParsed.ADVICE || fallback.advice,
-        DAILY_BOND_SIGNAL: aiParsed.DAILY_BOND_SIGNAL || fallback.dailyBondSignal,
-      };
+      const missing = labels.filter(
+        (label) => !String(aiParsed[label] || "").trim()
+      );
+
+      if (missing.length) {
+        throw new Error(`Friend reading sections missing: ${missing.join(", ")}`);
+      }
+
+      parsed = aiParsed;
     } catch (error) {
-      console.error("Friend connection reading generation failed:", error.response?.data || error.message);
-      parsed = {
-        SUMMARY: fallback.summary,
-        STRENGTHS: fallback.strengths,
-        TENSIONS: fallback.tensions,
-        ADVICE: fallback.advice,
-        DAILY_BOND_SIGNAL: fallback.dailyBondSignal,
-      };
+      console.error(
+        "Friend connection reading generation failed:",
+        error.response?.data || error.message
+      );
+
+      // No generic fallback reading: a templated reading persisted under the
+      // 10-day cooldown hurts trust far more than asking the user to retry.
+      throw new HttpsError(
+        "internal",
+        "Friendship reading generation failed. Please try again."
+      );
     }
 
     // Delete any older readings before writing the new one.
@@ -2259,11 +2239,11 @@ ${languageInstruction(aiResponseLanguage)}
     writeBatch.set(readingRef, {
       type: relationshipType,
       scores,
-      summary: parsed.SUMMARY || fallback.summary,
-      strengths: parsed.STRENGTHS || "",
-      tensions: parsed.TENSIONS || "",
-      advice: parsed.ADVICE || "",
-      dailyBondSignal: parsed.DAILY_BOND_SIGNAL || "",
+      summary: parsed.SUMMARY,
+      strengths: parsed.STRENGTHS,
+      tensions: parsed.TENSIONS,
+      advice: parsed.ADVICE,
+      dailyBondSignal: parsed.DAILY_BOND_SIGNAL,
       connectionType,
       verdict,
       contentVersion: SOCIAL_COMPATIBILITY_CONTENT_VERSION,
@@ -2366,27 +2346,25 @@ Do not reveal birth date, birth time, birthplace, coordinates, backend details, 
 Friend mode must avoid romantic and partner language.
 Voice rules:
 - Write 2-3 short, punchy sentences per section. No long paragraphs.
-- Use the voice of a dramatic, no-nonsense TikTok/Reels tarot reader. It should sound like an intense, hyper-specific personal call-out ("listen to me carefully," "this is exactly what's happening," "I need you to hear this").
-- Drop the heavy mystical/cosmic astrology jargon; keep it snappy, modern, and highly dramatic.
-- Each answer should sound like a direct, intense warning or revelation spoken directly to the camera.
+- STRICT: speak normally, like a real human in 2026 - casual, warm, direct, contractions everywhere. No performance, no forced slang, no theatrical drama, no heavy mystical jargon.
+- Write like a perceptive friend who reads energy: describe what you sense around each person today ("there's a heaviness on them today", "their patience is running thinner than usual").
 - Be specific about tone, timing, pressure, silence, attention, or repair.
-- Say the uncomfortable thing when the chart suggests friction, using bold, striking, "tea-spilling" words.
-- Avoid cushioning every warning with positivity; give it to them straight.
+- Say the uncomfortable thing when the chart suggests friction - straight, not cruel - and always leave the reader one workable opening for today. Honest, never a dead end.
 - Avoid generic advice like "be supportive" or "listen more". Tell them exactly how to move.
-- Keep the language emotionally sharp, punchy, and fiercely honest.
+- STRICT: no stock filler. Words like "journey", "embrace", "align", "manifest", "energy shift" may appear at most once across the whole output, and sections must not open with the same sentence pattern - today's guidance must never read like yesterday's with new nouns.
 - CRITICAL PRONOUN RULE: You are writing notes that each person will read about the OTHER person.
 - When writing the A_... sections (A_FEELING), write it as if Person B is reading it. Describe Person A in the THIRD PERSON ("They are feeling...", "${profileA.displayName} is..."). In A_DO, A_AVOID, A_BEST_APPROACH, speak directly to Person B ("You should do this...", "Avoid doing...").
 - When writing the B_... sections (B_FEELING), write it as if Person A is reading it. Describe Person B in the THIRD PERSON ("They are feeling...", "${profileB.displayName} is..."). In B_DO, B_AVOID, B_BEST_APPROACH, speak directly to Person A ("You should do this...", "Avoid doing...").
 - NEVER describe the energy using "You" or "Your" (e.g. "Your Moon is..."). Always describe their energy using "They", "Their", or their name (e.g. "Their Moon is...").
 
 Respond exactly:
-A_HEADING: [1 catchy, highly dramatic heading summarizing Person A's vibe today (max 6 words)]
-A_FEELING: [2 dramatic, tea-spilling paragraphs about what Person A is currently feeling or experiencing. Accurately reference at least one specific detail from their cosmic blueprint (e.g., their Moon, Sun, or Rising sign) and transits. Use THIRD PERSON ("They/Their").]
+A_HEADING: [1 catchy heading summarizing Person A's vibe today (max 6 words)]
+A_FEELING: [2 short paragraphs about what Person A is currently feeling or experiencing, written as perceived energy. Accurately reference at least one specific detail from their cosmic blueprint (e.g., their Moon, Sun, or Rising sign) and transits. Use THIRD PERSON ("They/Their").]
 A_DO: [2-3 direct, detailed sentences on what the reader (Person B) should actively DO with Person A today. Use "You" for the reader.]
 A_AVOID: [2-3 specific, detailed sentences on what behaviors the reader (Person B) should strictly AVOID with Person A today. Use "You".]
 A_BEST_APPROACH: [2-3 plain sentences on the best tone or timing the reader (Person B) should use.]
-B_HEADING: [1 catchy, highly dramatic heading summarizing Person B's vibe today (max 6 words)]
-B_FEELING: [2 dramatic, tea-spilling paragraphs about what Person B is currently feeling or experiencing. Accurately reference at least one specific detail from their cosmic blueprint (e.g., their Moon, Sun, or Rising sign) and transits. Use THIRD PERSON ("They/Their").]
+B_HEADING: [1 catchy heading summarizing Person B's vibe today (max 6 words)]
+B_FEELING: [2 short paragraphs about what Person B is currently feeling or experiencing, written as perceived energy. Accurately reference at least one specific detail from their cosmic blueprint (e.g., their Moon, Sun, or Rising sign) and transits. Use THIRD PERSON ("They/Their").]
 B_DO: [2-3 direct, detailed sentences on what the reader (Person A) should actively DO with Person B today. Use "You" for the reader.]
 B_AVOID: [2-3 specific, detailed sentences on what behaviors the reader (Person A) should strictly AVOID with Person B today. Use "You".]
 B_BEST_APPROACH: [2-3 plain sentences on the best tone or timing the reader (Person A) should use.]
@@ -2395,7 +2373,7 @@ ${languageInstruction(aiResponseLanguage)}
 `;
 
     const text = await generateGeminiReadingText({
-      systemInstruction: `Return only the requested labels. Use the highly dramatic, direct, call-out voice of a viral TikTok/Reels tarot reader. Do not imitate any existing brand. ${languageInstruction(aiResponseLanguage)}`,
+      systemInstruction: `Return only the requested labels. Plain modern spoken English - direct, warm, specific, no theatrical drama. Do not imitate any existing brand. ${languageInstruction(aiResponseLanguage)}`,
       prompt,
       maxTokens: 800,
       temperature: 0.7,

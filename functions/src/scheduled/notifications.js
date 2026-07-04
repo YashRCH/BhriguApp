@@ -528,6 +528,110 @@ exports.sendDailyHoroscopeNotifications = onSchedule(
   }
 );
 
+// Cosmic-event engagement pushes. Dates are IST calendar days (the app's
+// notification timezone). Extend this map as new years are added; a day with
+// no entry simply sends nothing.
+const COSMIC_EVENT_CALENDAR = {
+  "2026-07-23": {
+    title: "Mercury goes direct today",
+    body: "Three weeks of fog lift tonight. Ask Bhrigu what clears up for you.",
+  },
+  "2026-07-29": {
+    title: "Full Moon tonight",
+    body: "Full moons surface what you have been avoiding. Ask Bhrigu what this one stirs up.",
+  },
+  "2026-08-12": {
+    title: "Total Solar Eclipse today",
+    body: "Eclipses close one door and force another open. See what shifts in your chart today.",
+  },
+  "2026-08-28": {
+    title: "Lunar Eclipse Full Moon",
+    body: "A rare eclipse moon in Pisces. Bhrigu can read what it is pulling out of you.",
+  },
+  "2026-09-26": {
+    title: "Full Moon in Aries",
+    body: "Tonight favors bold questions. Ask Bhrigu the one you have been sitting on.",
+  },
+  "2026-10-24": {
+    title: "Mercury retrograde begins",
+    body: "Three weeks of crossed wires start now. Ask Bhrigu how to move through it.",
+  },
+  "2026-10-26": {
+    title: "Full Moon tonight",
+    body: "The Taurus moon tests what feels secure. See what your chart says holds firm.",
+  },
+  "2026-11-13": {
+    title: "Mercury goes direct",
+    body: "Stalled plans start moving again today. Ask Bhrigu which one to push first.",
+  },
+  "2026-11-24": {
+    title: "Full Moon in Gemini",
+    body: "Conversations come to a head under this moon. Ask Bhrigu which one matters.",
+  },
+  "2026-12-24": {
+    title: "Full Moon in Cancer",
+    body: "The last full moon of the year turns everything inward. Close it with a reading.",
+  },
+};
+
+exports.sendCosmicEventNotifications = onSchedule(
+  {
+    schedule: "30 7 * * *", // 7:30 AM IST daily; exits quietly on non-event days.
+    timeZone: notificationTimeZone,
+    memory: "512MiB",
+  },
+  async (event) => {
+    const dateKey = getScheduledDateKey(event);
+    const cosmicEvent = COSMIC_EVENT_CALENDAR[dateKey];
+
+    if (!cosmicEvent) {
+      return;
+    }
+
+    const db = admin.firestore();
+    const { tokenList, tokenOwners } = await getFcmTokenTargets(db);
+
+    if (tokenList.length === 0) {
+      console.log("No FCM tokens found for cosmic event notification.");
+      return;
+    }
+
+    console.log(
+      `Sending cosmic event notification (${dateKey}: ${cosmicEvent.title}) to ${tokenList.length} devices.`
+    );
+
+    const message = {
+      notification: {
+        title: cosmicEvent.title,
+        body: cosmicEvent.body,
+      },
+      data: {
+        type: "cosmic_event",
+        dateKey,
+      },
+      android: {
+        notification: {
+          channelId: "high_importance_channel",
+          clickAction: "FLUTTER_NOTIFICATION_CLICK",
+        },
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: "default",
+          },
+        },
+      },
+    };
+
+    try {
+      await sendNotificationToTokens(db, tokenList, tokenOwners, message, "cosmic event");
+    } catch (error) {
+      console.error("Error sending cosmic event notifications:", error);
+    }
+  }
+);
+
 exports.precomputeDailyTransits = onSchedule(
   {
     schedule: "5 0 * * *",

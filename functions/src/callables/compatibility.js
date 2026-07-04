@@ -189,6 +189,7 @@ function formatCompatibilityKnowledgeChunk(chunk) {
     .trim();
 }
 
+// Also used by the circle connection readings in social.js.
 async function retrieveCompatibilityKnowledgeForMatch(uid, query, limit = 5) {
   try {
     const queryEmbedding = await generateGeminiEmbedding(query);
@@ -652,3 +653,5 @@ ${languageInstruction(aiResponseLanguage)}
     }
   }
 );
+
+exports.retrieveCompatibilityKnowledgeForMatch = retrieveCompatibilityKnowledgeForMatch;

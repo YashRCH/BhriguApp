@@ -21,6 +21,7 @@ class GroqService {
   Stream<String> streamMessage(
     List<ChatMessage> history, {
     FollowUpContext? followUpContext,
+    void Function(String message)? onFeatureAccessBlocked,
   }) async* {
     final user = await _session.currentUserOrWait();
 
@@ -131,6 +132,10 @@ class GroqService {
         debugPrint('Cloud Function error code: ${e.code}');
         debugPrint('Cloud Function error message: ${e.message}');
         debugPrint('Cloud Function error details: ${e.details}');
+      }
+
+      if (isFeatureAccessException(e)) {
+        onFeatureAccessBlocked?.call(functionErrorMessage(e));
       }
 
       yield functionErrorMessage(e);

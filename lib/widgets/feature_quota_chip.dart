@@ -1,9 +1,11 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../models/monetization_status.dart';
 import '../services/monetization_service.dart';
+import 'plans_cta_button.dart';
 
 enum FeatureQuotaKind {
   chat,
@@ -33,6 +35,11 @@ class _FeatureQuotaChipState extends State<FeatureQuotaChip> {
   late Future<MonetizationStatus> _future;
 
   static const _muted = Color(0xFF8E83A8);
+  static const _lowAmber = Color(0xFFE0A83C);
+
+  // Loss-aversion nudge: at or below this many spendable credits the chip
+  // turns amber and taps through to plans instead of refreshing.
+  static const _lowThreshold = 2;
 
   @override
   void initState() {
@@ -62,21 +69,28 @@ class _FeatureQuotaChipState extends State<FeatureQuotaChip> {
       child: FutureBuilder<MonetizationStatus>(
         future: _future,
         builder: (context, snapshot) {
-          final quota = _quotaText(snapshot.data);
           final loading = snapshot.connectionState == ConnectionState.waiting;
+          final low = !loading && _isRunningLow(snapshot.data);
+          final quota = _quotaText(snapshot.data);
 
           return GestureDetector(
             behavior: HitTestBehavior.translucent,
-            onTap: _refresh,
+            onTap: low ? () => context.push(plansRoute) : _refresh,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
               child: Text(
-                loading ? 'Checking remaining...' : quota,
+                loading
+                    ? 'Checking remaining...'
+                    : low
+                        ? '$quota · Get more'
+                        : quota,
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
                 textAlign: _textAlignForAlignment(),
                 style: TextStyle(
-                  color: _muted.withValues(alpha: 0.72),
+                  color: low
+                      ? _lowAmber.withValues(alpha: 0.92)
+                      : _muted.withValues(alpha: 0.72),
                   fontSize: 10.5,
                   height: 1.15,
                   fontWeight: FontWeight.w600,
@@ -88,6 +102,28 @@ class _FeatureQuotaChipState extends State<FeatureQuotaChip> {
         },
       ),
     );
+  }
+
+  bool _isRunningLow(MonetizationStatus? status) {
+    if (status == null) return false;
+
+    final mode = status.mode.trim().toLowerCase();
+    final enforcing = mode == 'enforce' || mode == 'enforced' || mode == 'on';
+    if (!enforcing) return false;
+
+    if (status.plusActive && _isYearlyPlan(status.plan)) return false;
+    if (status.plusActive && widget.feature == FeatureQuotaKind.manualMatch) {
+      return false;
+    }
+
+    final field = _quotaField;
+    final limit = status.limits[field] ?? 0;
+    final used = status.usage[field] ?? 0;
+    final includedRemaining = math.max(0, limit - used);
+    final totalRemaining =
+        includedRemaining + _rewardCredits(status) + _dakshanaCredits(status);
+
+    return totalRemaining <= _lowThreshold;
   }
 
   String _quotaText(MonetizationStatus? status) {

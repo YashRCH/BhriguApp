@@ -27,13 +27,13 @@ const BHRIGU_TUNED_MODEL = "endpoints/6058371191452729344";
 const GROQ_PARTNER_MATCH_MODEL = "llama-3.3-70b-versatile";
 const GROQ_BHRIGU_CHAT_MODEL = "llama-3.3-70b-versatile";
 
-const TAROT_READING_CONTENT_VERSION = "tarot_flash_lite_json_v1";
-const GEOMANCY_READING_CONTENT_VERSION = "geomancy_gemini25_lite_v3";
+const TAROT_READING_CONTENT_VERSION = "tarot_flash_lite_json_v2";
+const GEOMANCY_READING_CONTENT_VERSION = "geomancy_gemini25_lite_v5";
 const TAROT_MAX_OUTPUT_TOKENS = 1400;
 const GEOMANCY_MAX_OUTPUT_TOKENS = 1200;
 const MYSTIC_READING_TEMPERATURE = 0.9;
-const TAROT_READING_TEMPERATURE = 0.55;
-const GEOMANCY_READING_TEMPERATURE = 0.55;
+const TAROT_READING_TEMPERATURE = 0.7;
+const GEOMANCY_READING_TEMPERATURE = 0.7;
 // Enable at deploy time only after release/debug App Check tokens are verified.
 const APP_CHECK_ENFORCEMENT_ENABLED =
   String(process.env.APP_CHECK_ENFORCEMENT_ENABLED || "true")
@@ -2481,6 +2481,9 @@ const tarotKnowledgeByCardCache = new Map();
 let compatibilityKnowledgeDocsCache = null;
 let compatibilityKnowledgeDocsCacheAt = 0;
 let compatibilityKnowledgeDocsPromise = null;
+let geomancyKnowledgeDocsCache = null;
+let geomancyKnowledgeDocsCacheAt = 0;
+let geomancyKnowledgeDocsPromise = null;
 
 async function readExactTarotKnowledge(cleanCardName) {
   const cacheKey = cleanCardName.toLowerCase();
@@ -2570,6 +2573,89 @@ async function readCompatibilityKnowledgeDocs() {
     });
 
   return compatibilityKnowledgeDocsPromise;
+}
+
+async function readGeomancyKnowledgeDocs() {
+  const now = Date.now();
+
+  if (
+    geomancyKnowledgeDocsCache &&
+    now - geomancyKnowledgeDocsCacheAt < KNOWLEDGE_CACHE_TTL_MS
+  ) {
+    return geomancyKnowledgeDocsCache;
+  }
+
+  if (geomancyKnowledgeDocsPromise) {
+    return geomancyKnowledgeDocsPromise;
+  }
+
+  geomancyKnowledgeDocsPromise = admin
+    .firestore()
+    .collection("geomancy_knowledge")
+    .get()
+    .then((snap) => {
+      const docs = [];
+      snap.forEach((doc) => {
+        docs.push(doc.data() || {});
+      });
+      geomancyKnowledgeDocsCache = docs;
+      geomancyKnowledgeDocsCacheAt = Date.now();
+      return docs;
+    })
+    .finally(() => {
+      geomancyKnowledgeDocsPromise = null;
+    });
+
+  return geomancyKnowledgeDocsPromise;
+}
+
+function formatGeomancyKnowledge(doc, role) {
+  const domains = doc.domains || {};
+  const roleText =
+    role === "judge"
+      ? doc.as_judge
+      : role === "reconciler"
+        ? doc.as_reconciler
+        : doc.as_witness;
+
+  return [
+    `${doc.figure} (${doc.latin}) - ${doc.planet}, ${doc.zodiac}, ${doc.element}.`,
+    String(doc.favorability || "").trim(),
+    String(doc.core || "").trim(),
+    String(roleText || "").trim(),
+    `In love: ${String(domains.love || "").trim()}`,
+    `In career: ${String(domains.career || "").trim()}`,
+    `In money: ${String(domains.money || "").trim()}`,
+    `In health: ${String(domains.health || "").trim()}`,
+    `Timing: ${String(domains.timing || "").trim()}`,
+  ]
+    .filter((line) => line && !/^In \w+:\s*$/.test(line) && line !== "Timing:")
+    .join("\n");
+}
+
+// Strict retrieval: the geomancy reading must be grounded in the seeded
+// knowledge base, so a missing figure throws instead of degrading to a
+// generic hardcoded meaning.
+async function retrieveGeomancyKnowledge({ figureName, role }) {
+  const cleanFigureName = String(figureName || "").trim().toLowerCase();
+
+  if (!cleanFigureName) {
+    throw new Error("Geomancy figure name missing for knowledge retrieval.");
+  }
+
+  const docs = await readGeomancyKnowledgeDocs();
+  const match = docs.find(
+    (doc) =>
+      String(doc.figure || "").trim().toLowerCase() === cleanFigureName
+  );
+
+  if (!match) {
+    throw new Error(
+      `Geomancy knowledge missing for figure: ${figureName}. Seed the geomancy_knowledge collection.`
+    );
+  }
+
+  return formatGeomancyKnowledge(match, role);
 }
 
 async function retrieveTarotKnowledge({
@@ -2791,4 +2877,6 @@ module.exports = {
   readTarotKnowledgeDocs,
   readCompatibilityKnowledgeDocs,
   retrieveTarotKnowledge,
+  readGeomancyKnowledgeDocs,
+  retrieveGeomancyKnowledge,
 };

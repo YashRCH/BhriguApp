@@ -18,6 +18,7 @@ import '../widgets/ai_report_button.dart';
 import '../widgets/chat_feedback_buttons.dart';
 import '../widgets/feature_quota_chip.dart';
 import '../widgets/plans_cta_button.dart';
+import '../widgets/reading_paywall_sheet.dart';
 import 'cosmic_blueprint_screen.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -256,11 +257,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         ? history.sublist(history.length - _apiHistoryLimit)
         : history;
 
+    // Snapshot the context so the paywall sheet describes the reading this
+    // send actually belonged to, even if the context changes afterwards.
+    final sendFollowUpContext = _activeFollowUpContext;
+    var quotaBlocked = false;
+
     await _messageSubscription?.cancel();
     _messageSubscription = _groq
         .streamMessage(
       limitedHistory,
       followUpContext: _activeFollowUpContext,
+      onFeatureAccessBlocked: (_) {
+        quotaBlocked = true;
+      },
     )
         .listen(
       (streamed) {
@@ -291,6 +300,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
         _messageSubscription = null;
         _scrollToBottom();
+
+        if (quotaBlocked && mounted) {
+          showReadingPaywallSheet(
+            context,
+            followUpContext: sendFollowUpContext,
+          );
+        }
       },
       onError: (_) {
         if (!mounted) return;
