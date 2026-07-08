@@ -17,6 +17,12 @@ asset_backups/
 *.patch
 diff_*.txt
 logcat_history.txt
+logcat_dump.txt
+user_history.txt
+
+# Internal marketing workspace (local only; not for the public repo)
+marketing/
+.claude/skills/astro-content/
 
 # IntelliJ related
 *.iml
