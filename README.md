@@ -136,6 +136,10 @@ Firebase config is generated into `lib/firebase_options.dart`. All provider cred
 
 See [docs/production_release_checklist.md](docs/production_release_checklist.md). In short: secrets configured in Secret Manager, `android/key.properties` created from the example with the keystore kept out of version control, release signing SHA registered for `com.bhr1gu.app`, and the analyze/test/syntax gates above run from a clean workspace before building store artifacts.
 
+## License
+
+Source-available for portfolio review; all rights reserved — see [LICENSE](LICENSE). BHR1GU is a live commercial product, so the code may be read but not reused.
+
 ---
 
 *The app currently prioritizes preserving the shipped UI and product flow; refactors are kept small, feature-scoped, and covered by checks where possible.*

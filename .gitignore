@@ -19,10 +19,20 @@ diff_*.txt
 logcat_history.txt
 logcat_dump.txt
 user_history.txt
+lib_overview.txt
+
+# Local scratch tooling (asset extraction, one-off analysis)
+analyze_lib.py
+check_sizes.py
+extract_*.py
 
 # Internal marketing workspace (local only; not for the public repo)
 marketing/
 .claude/skills/astro-content/
+
+# Licensed source material and derived RAG corpus (never publish)
+assets/*.pdf
+scripts/book_chunks.json
 
 # IntelliJ related
 *.iml
