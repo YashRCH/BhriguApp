@@ -33,6 +33,7 @@ marketing/
 # Licensed source material and derived RAG corpus (never publish)
 assets/*.pdf
 scripts/book_chunks.json
+scripts/chunk_and_upload_book.py
 
 # IntelliJ related
 *.iml
