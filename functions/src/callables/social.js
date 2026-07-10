@@ -21,8 +21,8 @@ const {
   retrieveCompatibilityKnowledgeForMatch,
 } = require("./compatibility");
 
-const SOCIAL_COMPATIBILITY_CONTENT_VERSION = "connection_compatibility_v5";
-const CONNECTION_DAILY_ENERGY_CONTENT_VERSION = "connection_daily_energy_v10_base_gemini";
+const SOCIAL_COMPATIBILITY_CONTENT_VERSION = "connection_compatibility_v6";
+const CONNECTION_DAILY_ENERGY_CONTENT_VERSION = "connection_daily_energy_v11_base_gemini";
 const FRIEND_SCORE_ALGORITHM_VERSION = "friend_blueprint_math_v1";
 const PARTNER_SCORE_ALGORITHM_VERSION = "partner_blueprint_math_v1";
 const CIRCLE_SAFETY_POLICY_VERSION = "circle_safety_v1";
@@ -1092,7 +1092,10 @@ ${languageInstruction(aiResponseLanguage)}
       systemInstruction: `Follow the compatibility reading format exactly with every requested section label once and in order. Do not use markdown. Do not write percentage numbers. ${languageInstruction(aiResponseLanguage)}`,
       prompt,
       maxTokens: 1050,
-      temperature: 0.35,
+      // 0.35 made every partner reading fill the template with near-identical
+      // phrasing across different pairs; 0.7 matches the friend reading. The
+      // section format is held by the system instruction, not the low temp.
+      temperature: 0.7,
       model: GEMINI_FLASH_LITE_MODEL,
     });
   } catch (error) {
@@ -2290,12 +2293,28 @@ exports.generateConnectionDailyEnergy = onCall(
     const memberIds = memberPairFromConnection(data);
     const relationshipType = cleanRelationshipType(data.relationshipType);
     const [uidA, uidB] = memberIds;
-    const [userADoc, userBDoc, profileA, profileB] = await Promise.all([
-      admin.firestore().collection("users").doc(uidA).get(),
-      admin.firestore().collection("users").doc(uidB).get(),
-      readPublicProfile(uidA),
-      readPublicProfile(uidB),
-    ]);
+    const yesterdayKey = dateKeyFromDate(new Date(Date.now() - 86400000));
+    const [userADoc, userBDoc, profileA, profileB, yesterdayDoc] =
+      await Promise.all([
+        admin.firestore().collection("users").doc(uidA).get(),
+        admin.firestore().collection("users").doc(uidB).get(),
+        readPublicProfile(uidA),
+        readPublicProfile(uidB),
+        admin
+          .firestore()
+          .collection("connections")
+          .doc(connectionId)
+          .collection("daily_energy")
+          .doc(yesterdayKey)
+          .get()
+          .catch((error) => {
+            console.warn(
+              "Daily energy yesterday lookup failed:",
+              error.message
+            );
+            return null;
+          }),
+      ]);
     const userA = userADoc.data() || {};
     const userB = userBDoc.data() || {};
     const aiResponseLanguage = await resolveAiResponseLanguage(auth.uid, requestData.aiResponseLanguage);
@@ -2323,6 +2342,41 @@ exports.generateConnectionDailyEnergy = onCall(
       return { dateKey, cached: true };
     }
 
+    // Opening lines from yesterday's guidance, fed into the prompt as
+    // phrasing the model must not echo, so today never reads like yesterday
+    // with new nouns.
+    let yesterdayGuidance = "";
+
+    if (yesterdayDoc && yesterdayDoc.exists) {
+      const previous = yesterdayDoc.data() || {};
+      const lines = [];
+
+      Object.values(previous.members || {}).forEach((member) => {
+        [
+          member.heading,
+          member.energy,
+          member.doText,
+          member.avoidText,
+          member.bestApproach,
+        ].forEach((value) => {
+          const sentence =
+            (String(value || "").match(/[^.!?\n]+[.!?]?/) || [""])[0].trim();
+
+          if (sentence) {
+            lines.push(sentence);
+          }
+        });
+      });
+
+      const bondSignal = String(previous.bondSignal || "").trim();
+
+      if (bondSignal) {
+        lines.push(bondSignal);
+      }
+
+      yesterdayGuidance = lines.slice(0, 11).join("\n");
+    }
+
     const prompt = `
 You are BHR1GU, creating today's social astrology guidance for a ${relationshipType} connection.
 The style must be blunt, honest, straightforward, compact, and useful.
@@ -2338,7 +2392,11 @@ Person B:
 ${JSON.stringify(profileB)}
 Blueprint for interpretation only:
 ${JSON.stringify({ westernChart: userB.westernChart || null, vedicChart: userB.vedicChart || null })}
-
+${yesterdayGuidance ? `
+Yesterday's guidance for this connection (already read by both people):
+Do not reuse these sentence patterns, images, headings, or phrases anywhere in today's output:
+${yesterdayGuidance}
+` : ""}
 Rules:
 Frame everything as astrology-informed guidance, not certainty about someone's mind.
 Write advice for how the other person should approach them today.
@@ -2347,7 +2405,7 @@ Friend mode must avoid romantic and partner language.
 Voice rules:
 - Write 2-3 short, punchy sentences per section. No long paragraphs.
 - STRICT: speak normally, like a real human in 2026 - casual, warm, direct, contractions everywhere. No performance, no forced slang, no theatrical drama, no heavy mystical jargon.
-- Write like a perceptive friend who reads energy: describe what you sense around each person today ("there's a heaviness on them today", "their patience is running thinner than usual").
+- Write like a perceptive friend who reads energy: describe what you actually sense around each person today, in words you invent fresh each day - never a stock phrase about heaviness, patience, or energy levels.
 - Be specific about tone, timing, pressure, silence, attention, or repair.
 - Say the uncomfortable thing when the chart suggests friction - straight, not cruel - and always leave the reader one workable opening for today. Honest, never a dead end.
 - Avoid generic advice like "be supportive" or "listen more". Tell them exactly how to move.
@@ -2380,6 +2438,22 @@ ${languageInstruction(aiResponseLanguage)}
       model: GEMINI_FLASH_LITE_MODEL,
     });
     const parsed = parseSections(text, labels);
+    const missingLabels = labels.filter(
+      (label) => !String(parsed[label] || "").trim()
+    );
+
+    // Never cache a malformed generation: an empty section written here
+    // would be served as today's guidance until midnight.
+    if (missingLabels.length) {
+      console.error(
+        "Daily energy sections missing:",
+        missingLabels.join(", ")
+      );
+      throw new HttpsError(
+        "internal",
+        "Daily energy generation failed. Please try again."
+      );
+    }
 
     await dailyRef.set({
       dateKey,

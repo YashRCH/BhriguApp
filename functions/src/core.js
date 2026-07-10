@@ -27,13 +27,13 @@ const BHRIGU_TUNED_MODEL = "endpoints/6058371191452729344";
 const GROQ_PARTNER_MATCH_MODEL = "llama-3.3-70b-versatile";
 const GROQ_BHRIGU_CHAT_MODEL = "llama-3.3-70b-versatile";
 
-const TAROT_READING_CONTENT_VERSION = "tarot_flash_lite_json_v2";
-const GEOMANCY_READING_CONTENT_VERSION = "geomancy_gemini25_lite_v5";
+const TAROT_READING_CONTENT_VERSION = "tarot_flash_lite_json_v3";
+const GEOMANCY_READING_CONTENT_VERSION = "geomancy_gemini25_lite_v6";
 const TAROT_MAX_OUTPUT_TOKENS = 1400;
 const GEOMANCY_MAX_OUTPUT_TOKENS = 1200;
 const MYSTIC_READING_TEMPERATURE = 0.9;
-const TAROT_READING_TEMPERATURE = 0.7;
-const GEOMANCY_READING_TEMPERATURE = 0.7;
+const TAROT_READING_TEMPERATURE = 0.9;
+const GEOMANCY_READING_TEMPERATURE = 0.9;
 // Enable at deploy time only after release/debug App Check tokens are verified.
 const APP_CHECK_ENFORCEMENT_ENABLED =
   String(process.env.APP_CHECK_ENFORCEMENT_ENABLED || "true")
@@ -2164,9 +2164,20 @@ async function retrieveLikedAnswerExamples({ uid, message, limit = 3 }) {
     .map(({ data }, index) => {
       const question = String(data.question || "").trim() || "(not recorded)";
       const answer = String(data.answer || "").trim();
-      return `Example ${index + 1}\nUser asked: ${question}\nAnswer the user loved: ${answer}`;
+      // Excerpt only: feeding full liked answers back into every prompt made
+      // new replies converge on their exact phrasing. A short opening still
+      // conveys tone and length without handing over text to copy.
+      const excerpt = answer.length > 320
+        ? `${answer.slice(0, 320).trim()}...`
+        : answer;
+
+      if (!excerpt) {
+        return "";
+      }
+
+      return `Example ${index + 1}\nUser asked: ${question}\nOpening of an answer the user loved (tone and length sample only): ${excerpt}`;
     })
-    .filter((chunk) => chunk.includes("Answer the user loved:"))
+    .filter((chunk) => chunk.length > 0)
     .join("\n\n");
 }
 

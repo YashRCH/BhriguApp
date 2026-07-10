@@ -150,6 +150,44 @@ const {
   refundMeteredFeatureCharge,
   REVENUECAT_SECRET_API_KEY,
 } = require("../monetization/quota");
+
+// Opening sentences from the seeker's most recent saved readings, fed into the
+// prompt as phrasing the model must not echo. Never throws — uniqueness help
+// must not block reading generation.
+async function readRecentTarotOpeners(uid) {
+  try {
+    const snap = await admin
+      .firestore()
+      .collection("users")
+      .doc(uid)
+      .collection("tarot_readings")
+      .orderBy("createdAt", "desc")
+      .limit(2)
+      .get();
+
+    const openers = [];
+
+    snap.forEach((doc) => {
+      const reading = String(doc.data()?.reading || "");
+
+      reading.split(/\n\n+/).forEach((section) => {
+        const body = section
+          .replace(/^(PAST|PRESENT|FUTURE)[^\n]*\n/i, "")
+          .trim();
+        const sentence = (body.match(/[^.!?]+[.!?]/) || [""])[0].trim();
+
+        if (sentence) {
+          openers.push(sentence);
+        }
+      });
+    });
+
+    return openers.slice(0, 8).join("\n");
+  } catch (error) {
+    console.warn("Tarot recent openers lookup failed:", error.message);
+    return "";
+  }
+}
 exports.generateTarotEmbedding = onCall(
   callableRuntimeOptions({
     secrets: [GEMINI_API_KEY],
@@ -321,9 +359,10 @@ exports.generateTarotReading = onCall(
     let pastKnowledge;
     let presentKnowledge;
     let futureKnowledge;
+    let recentOpeners = "";
 
     try {
-      [pastKnowledge, presentKnowledge, futureKnowledge] = await Promise.all([
+      [pastKnowledge, presentKnowledge, futureKnowledge, recentOpeners] = await Promise.all([
         retrieveTarotKnowledge({
           cardName: pastName,
           keywords: pastKeywords,
@@ -339,6 +378,7 @@ exports.generateTarotReading = onCall(
           keywords: futureKeywords,
           fallback: futureKnowledgeFallback,
         }),
+        readRecentTarotOpeners(decodedToken.uid),
       ]);
     } catch (error) {
       console.error(
@@ -368,10 +408,10 @@ If the enquiry names love, career, money, health, family, timing, choice, or spi
 If the enquiry is empty or generic, give a general reading, but do not invent unrelated dramatic scenarios.
 
 HOW TO READ:
-- You are not explaining cards. You are looking through them. Write as a seer who perceives the seeker's situation: "I see...", "the cards show me...", "there is an energy around you that...".
+- You are not explaining cards. You are looking through them. Write as a seer who perceives the seeker's situation through the cards. Voice that perception in your own words each time; never open two sections, or two readings, with the same seer phrase.
 - Begin from the seeker's energy: somewhere in the reading, name one true-feeling thing you perceive about who they are or what they carry (their patience, their instinct, how much they give, what they have quietly survived). Deliver it as something the cards revealed to you, never as a compliment. It must feel discovered, not given.
-- Each card section is built around one vivid, picturable image tied to this exact enquiry - a place, gesture, object, or moment the seeker can see in their mind - never a textbook card meaning that could fit any question.
-- The FUTURE card must make a real prediction: a committed outcome with a soft timeframe ("before this season turns", "within a few weeks", "sooner than you think") and one distinctive detail. Do not hedge it into meaninglessness.
+- STRICT: each card section must grow out of that card's own symbolism from its card knowledge. Pick one concrete symbol, figure, or scene that belongs to THIS card and translate it into a vivid, picturable moment inside the seeker's exact situation. Never recite a textbook card meaning on its own, and never write a section that could sit under a different card unchanged - if the card were swapped, the section must have to change.
+- The FUTURE card must make a real prediction: a committed outcome with a soft natural timeframe you invent yourself - never a stock phrase - and one distinctive detail. Do not hedge it into meaninglessness.
 - Let each card say what it actually says. One may be pure encouragement, one a quiet warning, one a foreseen event. Never force the same internal shape onto all three sections, and never balance every hope with a caution out of habit.
 - When a card carries a hard truth, tell it - but frame it as a test this seeker in particular has the strength to pass, because of the quality you perceived in their energy.
 - Always leave the seeker with hope. Point to the direction and the opening, never hand over a complete step-by-step solution; the future should feel promising and still unfolding.
@@ -396,7 +436,11 @@ SHAPE:
 
 SEEKER: ${birthData}
 SEEKER_ENQUIRY: ${enquiryText}
-
+${recentOpeners ? `
+RECENT READINGS (already heard by this seeker):
+The seeker has recently heard readings opening with the lines below. Do not reuse their sentence patterns, images, metaphors, or phrases anywhere in this reading:
+${recentOpeners}
+` : ""}
 PAST CARD: ${pastName}
 Past card knowledge: ${pastKnowledge}
 
@@ -562,14 +606,15 @@ Return only valid JSON in this exact structure:
 
 Return only valid JSON in this exact structure:
 {
-  "past": "60 to 130 words, 3 to 6 sentences for the past card. Speak as a seer answering SEEKER_ENQUIRY: what you see that shaped this situation, built around one vivid picturable image. Casual, warm, modern spoken English.",
-  "present": "60 to 130 words, 3 to 6 sentences for the present card. Speak as a seer answering SEEKER_ENQUIRY: the energy around the seeker right now, built around one vivid picturable image. Do not mirror the shape of the past section.",
-  "future": "60 to 130 words, 3 to 6 sentences for the future card. Make a real prediction for SEEKER_ENQUIRY: a committed outcome, a soft timeframe, one distinctive detail, and hope. Never a hedged answer that fits anyone.",
+  "past": "60 to 130 words, 3 to 6 sentences for the past card. Speak as a seer answering SEEKER_ENQUIRY through ${pastName}'s own symbolism: what you see that shaped this situation, built around one concrete image taken from this card. Casual, warm, modern spoken English.",
+  "present": "60 to 130 words, 3 to 6 sentences for the present card. Speak as a seer answering SEEKER_ENQUIRY through ${presentName}'s own symbolism: the energy around the seeker right now, built around one concrete image taken from this card. Do not mirror the shape of the past section.",
+  "future": "60 to 130 words, 3 to 6 sentences for the future card. Make a real prediction for SEEKER_ENQUIRY rooted in ${futureName}'s own symbolism: a committed outcome, an invented natural timeframe, one distinctive detail, and hope. Never a hedged answer that fits anyone.",
   "closing": "25 to 45 words. Give one firm hopeful final answer tying all three cards to SEEKER_ENQUIRY. No question."
 }
 
 Hard constraints:
 - If any section could be reused for a different enquiry, rewrite it to be more specific.
+- If any section could be reused for a different card, rewrite it around this card's own symbolism.
 - Keep the answer inside the user's enquiry domain.
 - Do not write PAST, PRESENT, FUTURE, Conclusion, Final Message, Overall Reading, or Closing Insight inside the JSON values.
 - Plain modern spoken English, no stock tarot filler words, no repeated sentence openers across sections.

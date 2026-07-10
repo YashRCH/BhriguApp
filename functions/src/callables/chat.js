@@ -56,6 +56,7 @@ const {
   cleanMetricKey,
   recordUsageEvent,
   isTimeoutError,
+  isRetryableAiError,
   generateGeminiReadingText,
   generateGroqReadingText,
   generateUserReadingText,
@@ -158,14 +159,38 @@ async function generateBhriguChatText({
   chatPrompt,
   isDeepFollowUp,
 }) {
-  return {
-    text: await generateGeminiReadingText({
+  // Long replies at 4096 max tokens regularly need more than the shared
+  // 25s axios default, which surfaced as "connection lost" on the client.
+  // First attempt gets 45s; one retry on transient AI errors gets 60s so the
+  // worst case still fits inside the 120s function budget.
+  const generate = (timeoutMs) =>
+    generateGeminiReadingText({
       systemInstruction: activeSystemPrompt,
       prompt: chatPrompt,
-      temperature: isDeepFollowUp ? 0.55 : 0.8,
+      temperature: isDeepFollowUp ? 0.7 : 0.8,
       maxTokens: 4096,
       model: BHRIGU_TUNED_MODEL,
-    }),
+      timeoutMs,
+    });
+
+  let text;
+
+  try {
+    text = await generate(45000);
+  } catch (error) {
+    if (!isRetryableAiError(error)) {
+      throw error;
+    }
+
+    console.warn(
+      "Bhrigu chat retrying after transient AI error:",
+      error.response?.status || error.message
+    );
+    text = await generate(60000);
+  }
+
+  return {
+    text,
     provider: "gemini",
     model: BHRIGU_TUNED_MODEL,
     fallback: false,
@@ -365,14 +390,49 @@ Place: ${userData.placeOfBirth || "Unknown"}
     let retrievedKnowledge = "";
     let likedAnswerExamples = "";
 
-    try {
-      currentSky = await getCurrentSkySnapshot(currentMoment);
-    } catch (error) {
-      console.error(
-        "Bhrigu chat current sky error:",
-        error.response?.data || error.message
-      );
-    }
+    // Verify the allowance without charging; the real charge happens only
+    // once a reply is ready, so a failed or undelivered generation never
+    // consumes one of the user's messages. Started here so the RevenueCat
+    // sync and entitlement reads overlap with the retrieval work below;
+    // awaited right before generation. The no-op catch keeps a rejection
+    // from surfacing as an unhandled rejection while the retrievals run.
+    const meteringDryRunPromise = requireMeteredFeature(uid, "chat", {
+      dryRun: true,
+    });
+    meteringDryRunPromise.catch(() => {});
+
+    // These lookups are independent; running them in parallel instead of
+    // serially cuts seconds off every reply. Each keeps its own fallback so
+    // one failing never blocks the chat.
+    [currentSky, retrievedKnowledge, likedAnswerExamples] = await Promise.all([
+      getCurrentSkySnapshot(currentMoment).catch((error) => {
+        console.error(
+          "Bhrigu chat current sky error:",
+          error.response?.data || error.message
+        );
+        return null;
+      }),
+      retrieveBhriguChatKnowledge({
+        message,
+        category: questionCategory,
+      }).catch((error) => {
+        console.error(
+          "Bhrigu chat reference retrieval error:",
+          error.response?.data || error.message
+        );
+        return "";
+      }),
+      retrieveLikedAnswerExamples({
+        uid,
+        message,
+      }).catch((error) => {
+        console.error(
+          "Bhrigu chat liked-answer retrieval error:",
+          error.response?.data || error.message
+        );
+        return "";
+      }),
+    ]);
 
     try {
       const natalTransitChart = selectNatalChartForTransits(userData);
@@ -386,32 +446,6 @@ Place: ${userData.placeOfBirth || "Unknown"}
     } catch (error) {
       console.error("Bhrigu chat transit aspect error:", error.message);
       strongestTransitAspects = [];
-    }
-
-    try {
-      retrievedKnowledge = await retrieveBhriguChatKnowledge({
-        message,
-        category: questionCategory,
-      });
-    } catch (error) {
-      console.error(
-        "Bhrigu chat reference retrieval error:",
-        error.response?.data || error.message
-      );
-      retrievedKnowledge = "";
-    }
-
-    try {
-      likedAnswerExamples = await retrieveLikedAnswerExamples({
-        uid,
-        message,
-      });
-    } catch (error) {
-      console.error(
-        "Bhrigu chat liked-answer retrieval error:",
-        error.response?.data || error.message
-      );
-      likedAnswerExamples = "";
     }
 
     const currentMomentAnchor = `
@@ -493,7 +527,7 @@ Use the saved Cosmic Blueprint and Reference Wisdom mildly (~10% of the answer) 
 ADVICE STYLE (STRICT - NO GENERIC ADVICE):
 Never give vague, generic, or templated advice. The following are banned and must never appear: "do one thing", "focus on one thing", "focus on one project", "take it one step at a time", "take it slow", "trust the process", "communicate openly", "set boundaries", "practice self-care", "journal your feelings", or any suggestion that could apply to literally anyone.
 Every action you suggest must be concrete, specific, sensory, and a little unexpected, and it must connect to BOTH the user's actual chart (a real placement, sign, house, nakshatra, element, ruling planet, or active transit from the provided data) AND the current conversation. Make the astrological "why" the reason for that exact action.
-Pull the action from real everyday life and vary it every single time. Examples of the texture to aim for: grab an iced coffee and people-watch for twenty minutes, take a sunset hike, cook something slow with your hands, repot a plant, take the long walk home, swim, sketch the thing on your mind, call the one person who steadies you. Match the action to the user's elemental and planetary nature and their current mood, and never repeat a suggestion you have already given in this conversation.
+Pull the action from real everyday life and invent it fresh every single time - food, drink, movement, water, making or fixing something, a specific place, a specific person - matched to the user's elemental and planetary nature and their current mood. Never repeat a suggestion you have already given in this conversation, and never fall back to a personal go-to suggestion; if the action would fit most people or most chats, replace it with one that only this chart and this mood would earn.
 Give one clear, doable action the user can actually do today, framed as a real thing to do, not a life philosophy.
 Always leave the user with hope: point to the direction and the opening, never hand over a complete step-by-step solution, and never end on a dead end - even a hard truth closes on something workable.
 
@@ -549,8 +583,8 @@ Follow-up context:
 ${followUpContextText}
 
 Lowest-priority style hint (optional, ignore if it does not fit):
-These are a few past answers this same user rated highly. Use them only as a faint reference for tone and length.
-Never let them override the user's question, the chart, transits, or the supporting reference wisdom above, and never reuse their specifics or mention that past answers exist.
+These are short openings of past answers this same user rated highly. Use them only as a faint reference for tone and length.
+Never reuse their wording, images, suggested actions, or specifics, never continue or complete them, and never mention that past answers exist. They must not override the user's question, the chart, transits, or the supporting reference wisdom above.
 ${likedAnswerContext}
 `;
 
@@ -697,8 +731,11 @@ ${basePrompt}`;
     )}${languageInstruction(aiResponseLanguage)}`;
 
     function buildChatPrompt() {
+      // Follow-ups keep a short history window (instead of none) so the
+      // model can see what it already said and honour the no-repetition
+      // rules; the follow-up source context still dominates the prompt.
       const promptHistory = activeFollowUpContext
-        ? []
+        ? historyWithoutCurrentMessage.slice(-6)
         : historyWithoutCurrentMessage;
       const conversationPrompt = messageListToPrompt([
         ...promptHistory,
@@ -721,10 +758,9 @@ If the user asks for "more", "tell me more", "continue", or similar, expand the 
     let providerUsed = "gemini";
     let modelUsed = BHRIGU_TUNED_MODEL;
     let text = "";
-    // Verify the allowance without charging; the real charge happens only
-    // once a reply is ready, so a failed or undelivered generation never
-    // consumes one of the user's messages.
-    await requireMeteredFeature(uid, "chat", { dryRun: true });
+    // Started in parallel with the retrieval work above; rethrows here if
+    // the user's allowance check failed.
+    await meteringDryRunPromise;
 
     try {
       const baseChatPrompt = buildChatPrompt();
@@ -778,7 +814,9 @@ If the user asks for "more", "tell me more", "continue", or similar, expand the 
         preserveFormatInstruction:
           "Preserve paragraph breaks and plain-text format. Do not add markdown.",
         enquiryContext: `The user's original message was: "${message}". CRITICAL: You must preserve every specific reference, noun, and detail related to this message from the original text.`,
-        maxTokens: 700,
+        // Generation allows up to 4096 tokens; a 700-token rewrite cap was
+        // truncating long Hinglish replies mid-thought.
+        maxTokens: 2048,
       });
     } catch (error) {
       console.error("Bhrigu chat post-processing failed:", error);
