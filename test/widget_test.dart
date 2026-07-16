@@ -724,7 +724,8 @@ void main() {
       expect(state.petProgress, 0);
       expect(state.lastPetDate, isNull);
       expect(state.rewardAvailable, isFalse);
-      expect(state.rewardType, isNull);
+      expect(state.lastReadingType, isNull);
+      expect(state.readingGrantCount, 0);
       expect(state.rewardClaimedCount, 0);
       expect(state.lastRewardClaimDate, isNull);
     });
@@ -735,8 +736,8 @@ void main() {
         'petProgress': 3,
         'lastPetDate': '2023-10-31',
         'rewardAvailable': true,
-        'rewardType': 'geomancy',
-        'rewardReadingGranted': true,
+        'lastReadingType': 'geomancy',
+        'readingGrantCount': '2', // string number
         'rewardClaimedCount': '5', // string number
         'lastRewardClaimDate': '2023-11-04',
         'createdAt': '2023-10-01T12:00:00.000Z',
@@ -748,8 +749,8 @@ void main() {
       expect(state.petProgress, 3);
       expect(state.lastPetDate, '2023-10-31');
       expect(state.rewardAvailable, true);
-      expect(state.rewardType, 'geomancy');
-      expect(state.rewardReadingGranted, isTrue);
+      expect(state.lastReadingType, 'geomancy');
+      expect(state.readingGrantCount, 2); // parsed to int
       expect(state.rewardClaimedCount, 5); // parsed to int
       expect(state.lastRewardClaimDate, '2023-11-04');
       expect(state.createdAt?.year, 2023);
